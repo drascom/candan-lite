@@ -8,6 +8,7 @@ Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain
 Oda: MATE_LIVEKIT_ROOM (candan-lite-dev)
 """
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
@@ -16,7 +17,8 @@ from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice (VoxCPM WS) TTS plugin
 
-load_dotenv(".env.local")
+# worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 STT_HOST = os.environ.get("STT_HOST", "192.168.0.25")
 STT_PORT = int(os.environ.get("STT_PORT", "10300"))

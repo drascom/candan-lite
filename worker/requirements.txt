@@ -1,4 +1,5 @@
 livekit-agents[silero]~=1.0   # LLM = pi CLI (worker/pi_brain.py); openai plugin gerekmez
 python-dotenv
 wyoming            # Whisper STT (wyoming protokolü, .25:10300)
+websockets         # OmniVoice (VoxCPM) TTS WS bridge (.25:8808)
 numpy
