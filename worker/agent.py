@@ -1,7 +1,8 @@
 """candan-lite voice worker — livekit-agents AgentSession.
 
 Ağır adapter.py'ın yerine ince worker: VAD/turn-detect/barge-in framework'ten;
-sadece STT (Whisper wyoming) ve TTS (OmniVoice) custom plugin. LLM = pi.dev (OpenAI /v1).
+sadece STT (Whisper wyoming) ve TTS (OmniVoice) custom plugin.
+Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain-design.md).
 
 Çalıştırma (dev): python agent.py dev
 Oda: MATE_LIVEKIT_ROOM (candan-lite-dev)
@@ -9,8 +10,9 @@ Oda: MATE_LIVEKIT_ROOM (candan-lite-dev)
 import os
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
-from livekit.plugins import openai, silero
+from livekit.plugins import silero
 
+from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT   # TODO: adapter.py ~1399-1543'ten port
 from omnivoice_tts import OmniVoiceTTS       # TODO: voice/tts.py'den port
 
@@ -22,9 +24,8 @@ TTS_HOST = os.environ.get("TTS_HOST", "192.168.0.25")
 TTS_PORT = int(os.environ.get("TTS_PORT", "8808"))
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
-# Beyin: pi.dev agent, OpenAI-uyumlu. Şimdilik local PC; sonra remote (sadece base_url değişir).
-PIDEV_BASE_URL = os.environ.get("PIDEV_BASE_URL", "http://localhost:8100/v1")
-PIDEV_MODEL = os.environ.get("PIDEV_MODEL", "candan")
+# Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
+PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
 
 
 async def entrypoint(ctx: JobContext):
@@ -33,7 +34,7 @@ async def entrypoint(ctx: JobContext):
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
-        llm=openai.LLM(base_url=PIDEV_BASE_URL, model=PIDEV_MODEL, api_key="local"),
+        llm=PiBrain(persona=PI_PERSONA),
         tts=OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT),
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )
