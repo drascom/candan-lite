@@ -13,8 +13,8 @@ from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
 
 from pi_brain import PiBrain                 # warm pi --mode rpc beyni
-from whisper_stt import WhisperWyomingSTT   # TODO: adapter.py ~1399-1543'ten port
-from omnivoice_tts import OmniVoiceTTS       # TODO: voice/tts.py'den port
+from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
+from omnivoice_tts import OmniVoiceTTS       # OmniVoice (VoxCPM WS) TTS plugin
 
 load_dotenv(".env.local")
 
