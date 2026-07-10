@@ -43,6 +43,12 @@ PI_PERSONA_DIR = os.environ.get("PI_PERSONA_DIR", "pi/personas")
 PI_SKILLS_DIR = os.environ.get("PI_SKILLS_DIR", "pi/skills")
 PI_SESSION_DIR = os.environ.get("PI_SESSION_DIR", "sessions")
 PI_AGENTS_MD = os.environ.get("PI_AGENTS_MD", "pi/AGENTS.md")
+# Gecikme ayarı: thinking seviyesi. minimal en hızlı (ölçüldü: off=6.6s, minimal=2.6s,
+# default=3.2s). Boş / "default" → bayrak eklenmez (pi'nın kendi varsayılanı).
+PI_THINKING = os.environ.get("PI_THINKING", "minimal")
+# Tur stall watchdog: son ilerlemeden (text_delta / başlangıç) bu kadar saniye HİÇ
+# olay gelmezse turu temiz kapat (WebSocket 1000 gibi ~33-40s takılmalara karşı).
+PI_TURN_STALL_TIMEOUT = float(os.environ.get("PI_TURN_STALL_TIMEOUT", "12") or 12)
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
 
@@ -75,6 +81,9 @@ def _persona_exists(persona: str) -> bool:
 def _build_pi_args(persona: str, session_id: str) -> list[str]:
     """pi --mode rpc bayrakları (docs/pi-brain-design.md)."""
     args = [PI_BIN, "--mode", "rpc", "--approve", "--model", PI_MODEL]
+    # Gecikme: thinking seviyesi (minimal en hızlı). Boş/"default" → pi varsayılanı.
+    if PI_THINKING and PI_THINKING.lower() != "default":
+        args += ["--thinking", PI_THINKING]
     # Ortak taban + kişilik overlay'i sistem prompt'una ekle.
     agents_md = REPO_ROOT / PI_AGENTS_MD
     if agents_md.is_file():
@@ -325,11 +334,25 @@ if _HAS_LIVEKIT:
                 self._client._turn_q = q
                 aborted = False
                 got_delta = False
+                stalled = False       # watchdog / pi error → turu erken kapat
                 final_msg: Any = None  # son assistant mesajı (fallback/hata için)
                 try:
                     await self._client.send({"type": "prompt", "message": text})
+                    # Watchdog: her ilerlemede (text_delta / herhangi olay) sıfırlanan
+                    # inaktivite sayacı. PI_TURN_STALL_TIMEOUT boyunca HİÇ olay gelmezse
+                    # (WebSocket 1000 gibi ~33-40s takılma) turu temiz kapat.
                     while True:
-                        obj = await q.get()
+                        try:
+                            obj = await asyncio.wait_for(
+                                q.get(), timeout=PI_TURN_STALL_TIMEOUT
+                            )
+                        except asyncio.TimeoutError:
+                            logger.warning(
+                                "pi tur stall: %.0fs ilerleme yok → tur kapatılıyor "
+                                "(got_delta=%s)", PI_TURN_STALL_TIMEOUT, got_delta,
+                            )
+                            stalled = True
+                            break
                         if obj is None:  # süreç öldü
                             break
                         etype = obj.get("type")
@@ -349,6 +372,10 @@ if _HAS_LIVEKIT:
                                         "pi assistant error: %s",
                                         msg.get("errorMessage") or "(bilinmiyor)",
                                     )
+                                    # WebSocket 1000 vb. → agent_settled'ı bekleme
+                                    # (33s takılabilir); turu hemen kapat/fallback ver.
+                                    stalled = True
+                                    break
                         elif etype == "agent_settled":
                             break
                     # Fallback: hiç delta gelmediyse ama tam-content varsa onu stream et.
@@ -356,11 +383,22 @@ if _HAS_LIVEKIT:
                         full = _assistant_msg_text(final_msg)
                         if full:
                             _emit(full)
+                        elif stalled:
+                            # Hiç metin yok + stall/error → kullanıcı sessiz kalmasın.
+                            if final_msg is not None and final_msg.get("stopReason") == "error":
+                                logger.warning(
+                                    "pi boş yanıt (error): %s",
+                                    final_msg.get("errorMessage") or "(bilinmiyor)",
+                                )
+                            _emit("Bir saniye, tekrar dener misin?")
                         elif final_msg is not None and final_msg.get("stopReason") == "error":
                             logger.warning(
                                 "pi boş yanıt (error): %s",
                                 final_msg.get("errorMessage") or "(bilinmiyor)",
                             )
+                    # Stall'da pi hâlâ arka planda çalışıyor olabilir → abort ile durdur.
+                    if stalled:
+                        self._client._write({"type": "abort"})
                 except asyncio.CancelledError:
                     # Barge-in / interrupt: pi'ya abort gönder.
                     aborted = True
