@@ -23,11 +23,11 @@ function playChime(kind: 'wake' | 'sleep') {
     osc.frequency.setValueAtTime(f0, now);
     osc.frequency.exponentialRampToValueAtTime(f1, now + 0.18);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    gain.gain.exponentialRampToValueAtTime(1.0, now + 0.02); // %100 ses
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
     osc.connect(gain).connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.24);
+    osc.stop(now + 0.37);
     osc.onended = () => ctx.close();
   } catch {
     // sessizce yut (autoplay engeli vb.)
