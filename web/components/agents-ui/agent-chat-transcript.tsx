@@ -1,8 +1,12 @@
 'use client';
 
-import { type ComponentProps } from 'react';
+import { type ComponentProps, useRef } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { type AgentState, type ReceivedMessage } from '@livekit/components-react';
+import {
+  type AgentState,
+  type ReceivedMessage,
+  useVoiceAssistant,
+} from '@livekit/components-react';
 import { AgentChatIndicator } from '@/components/agents-ui/agent-chat-indicator';
 import {
   Conversation,
@@ -51,10 +55,23 @@ export function AgentChatTranscript({
   className,
   ...props
 }: AgentChatTranscriptProps) {
+  // Uyurken (candan.awake === "false") gelen KULLANICI mesajlarını gizle.
+  // Agent mesajları asla gizlenmez. Bir kez gizlenen id kalıcı gizli kalır (interim→final tutarlı).
+  const { agentAttributes } = useVoiceAssistant();
+  const awake = agentAttributes?.['candan.awake'];
+  const hiddenIdsRef = useRef<Set<string>>(new Set());
+
+  const visibleMessages = messages.filter((m) => {
+    const isUser = m.from?.isLocal === true;
+    if (!isUser) return true; // agent mesajı: her zaman görünür
+    if (awake === 'false') hiddenIdsRef.current.add(m.id);
+    return !hiddenIdsRef.current.has(m.id);
+  });
+
   return (
     <Conversation className={className} {...props}>
       <ConversationContent>
-        {messages.map((receivedMessage) => {
+        {visibleMessages.map((receivedMessage) => {
           const { id, timestamp, from, message } = receivedMessage;
           const locale = navigator?.language ?? 'en-US';
           const messageOrigin = from?.isLocal ? 'user' : 'assistant';
