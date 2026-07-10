@@ -34,6 +34,7 @@
 - **SIRADAKI ADIM — kullanıcı kendi sesiyle çalıştırsın:**
   `cd /Users/drascom/work/candan-lite/worker && .venv/bin/python /private/tmp/claude-501/-Users-drascom-work-candan-lite/1a2a38c8-7ee1-44d3-8585-79fe4db4f8cf/scratchpad/kws/live_mic_kws.py`
   (level metre + kontrol kelimeleri: önce **"forever"** de → tetiklerse pipeline sağlam; sonra "Hey Jackie"/"Jackie". Gerekirse `--threshold 0.10 --score 4.0 --device 3`.)
+  - ⚠️ **ÖN KOŞUL — macOS mikrofon izni:** ilk denemede `level: 0.000` çıktı (hem kullanıcı terminali hem Claude süreci RMS≈0 = sessizlik). Sorun KWS değil, **terminal uygulamasına mikrofon izni verilmemiş**. Fix: macOS Ayarlar→Gizlilik→Mikrofon→terminal uygulamasını (Terminal/iTerm/VSCode) AÇ → terminali kapat-aç → tekrar dene. `level:` konuşunca dolmalı; DOLMADAN KWS testi anlamsız. (Tarayıcı mikrofonu ayrı izinle zaten çalışıyor.)
   NOT: scratchpad session'a özel — yeni session'da scratchpad yolu değişebilir; araç `scratchpad/kws/` altında, gerekirse yeniden üret. KWS modeli: `sherpa-onnx-kws-zipformer-gigaspeech-3.3M`.
 - **Karar:** Jackie gerçek sesle tutarlı yakalanırsa → KWS'i `wake_stt` yerine/yanına on-device wake olarak entegre et, wake word="Jackie". Tutmazsa Whisper-"candan"da kal.
 
