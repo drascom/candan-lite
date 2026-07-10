@@ -21,6 +21,14 @@ Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev 
 3. **worker/** skeleton: `agent.py` (AgentSession + `WhisperWyomingSTT`/`OmniVoiceTTS` custom plugin **iskele**, henüz port edilmedi), `requirements.txt`, `.env.example`.
 4. `README.md` + bu `HANDOFF.md`.
 
+## 🎉 FAZ 2 ÇALIŞIYOR (2026-07-10): sesli uçtan-uca
+web → STT (Whisper wyoming) → pi beyni (Candan, warm rpc) → TTS (OmniVoice) → ses. Test edildi, normal hız.
+- **Repo:** github.com/drascom/candan-lite (public, main). web/ absorbe (fork silindi).
+- **Çalıştırma:** worker `cd worker && .venv/bin/python agent.py dev`; web `cd web && pnpm dev` (:3000).
+- **OmniVoice gerçek çıktı = 24kHz** (audio_start bildiriyor; referans "48kHz" YANLIŞti → 2× hız bug'ıydı, düzeltildi).
+- **GOTCHA — worker restart:** worker'ı yeniden başlatınca mevcut odaya OTOMATİK dispatch OLMAZ (sadece yeni odaya). Tarayıcı sekmesini TAM KAPAT → tekrar bağlan (oda sıfırdan oluşsun).
+- Not: cloud turn-detector 401 → yerel mini modele düşüyor (zararsız; Faz 3'te düzeltilir).
+
 ## KARAR GÜNCELLEME (2026-07-10): beyin = pi CLI, warm RPC
 `PIDEV_BASE_URL` + `openai.LLM(base_url=…)` planı **İPTAL**. Beyin `pi` CLI (Codex sub),
 worker onu **kalıcı `--mode rpc` subprocess** olarak sürer. Detay: `docs/pi-brain-design.md`.
