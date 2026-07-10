@@ -42,6 +42,7 @@ async def entrypoint(ctx: JobContext):
     sp = build_speaker_id()
     speaker_state: SpeakerState | None = None
     tap: SpeakerTap | None = None
+    store: SpeakerStore | None = None
     if sp is not None:
         try:
             store = SpeakerStore()
@@ -53,11 +54,19 @@ async def entrypoint(ctx: JobContext):
             logging.getLogger("worker.agent").warning("speaker-ID kurulamadı: %r", e)
             speaker_state = None
             tap = None
+            store = None
 
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
-        llm=PiBrain(persona=PI_PERSONA, speaker_state=speaker_state),
+        # Faz 3.1: sesli oto-enrollment — bilinmeyen ses gelince PiBrain isim sorar,
+        # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
+        llm=PiBrain(
+            persona=PI_PERSONA,
+            speaker_state=speaker_state,
+            speaker_id=sp if speaker_state is not None else None,
+            speaker_store=store if speaker_state is not None else None,
+        ),
         tts=OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT),
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )

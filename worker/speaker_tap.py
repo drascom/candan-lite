@@ -29,6 +29,9 @@ class SpeakerState:
     def __init__(self) -> None:
         self.current: str | None = None
         self.score: float = 0.0
+        # Faz 3.1: son hesaplanan HAM embedding (normalize edilmemiş). Sesli
+        # oto-enrollment onaylanınca bu ses örneği kişiye yazılır.
+        self.last_embedding = None  # np.ndarray | None
 
 
 class SpeakerTap:
@@ -82,6 +85,8 @@ class SpeakerTap:
                     emb = await asyncio.to_thread(
                         self._sp.embed_samples, samples, TAP_RATE
                     )
+                    # Enrollment için son ham embedding'i sakla (kayan pencere).
+                    self._state.last_embedding = emb
                     name, score = self._sp.identify(emb)
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)

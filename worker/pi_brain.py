@@ -19,9 +19,16 @@ import json
 import logging
 import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+
+from name_parser import (
+    parse_spoken_name,
+    is_affirmative_reply,
+    _is_decline_enroll,
+)
 
 logger = logging.getLogger("pi_brain")
 
@@ -247,7 +254,6 @@ if _HAS_LIVEKIT:
             if not text:
                 return
             turn_id = uuid.uuid4().hex
-            q: asyncio.Queue = asyncio.Queue()
 
             def _emit(content: str) -> None:
                 self._event_ch.send_nowait(
@@ -256,6 +262,19 @@ if _HAS_LIVEKIT:
                         delta=llm.ChoiceDelta(role="assistant", content=content),
                     )
                 )
+
+            # Faz 3.1: sesli oto-enrollment. Bilinmeyen ses / akış ortası →
+            # scripted TR satır döndür ve pi'ya GİTME (token harcanmaz). Kapalı /
+            # tanınan / akışa girmeyen → None döner, normal pi akışı sürer.
+            scripted = await self._brain._enrollment_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+            # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
+            # ismiyle-selam direktifi ekle (pi doğal selamlasın).
+            text = self._brain._maybe_greet(text)
+
+            q: asyncio.Queue = asyncio.Queue()
 
             async with self._client._turn_lock:
                 self._client._turn_q = q
@@ -316,6 +335,8 @@ if _HAS_LIVEKIT:
             persona: str = PI_DEFAULT_PERSONA,
             session_id: Optional[str] = None,
             speaker_state: Any = None,
+            speaker_id: Any = None,
+            speaker_store: Any = None,
         ):
             super().__init__()
             self._default_persona = persona
@@ -326,6 +347,122 @@ if _HAS_LIVEKIT:
             self._speaker_state = speaker_state
             self._client = PiRpcClient(self._persona, self._session_id)
             self._swap_lock = asyncio.Lock()
+            # Faz 3.1: sesli oto-enrollment bağımlılıkları. Üçü de varsa etkin;
+            # yoksa (SPEAKER_ID_ENABLED kapalı vb.) enrollment TAMAMEN devre dışı.
+            self._speaker_id = speaker_id
+            self._speaker_store = speaker_store
+            self._enroll_ok = bool(speaker_state and speaker_id and speaker_store)
+            # Enrollment state machine (bağlantı ömrü boyunca yaşar).
+            self._enroll_stage: Optional[str] = None      # None | "ask_name" | "confirm"
+            self._enroll_name: Optional[str] = None
+            self._enroll_emb: Any = None                  # tetikleyen sözün embed'i
+            self._enroll_name_emb: Any = None             # ismi söylerkenki embed
+            self._enroll_retried = False                  # isim bir kez tekrar soruldu mu
+            self._onboarding_asked = False                # bu bağlantıda soruldu mu
+            self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
+            self._enroll_lock = asyncio.Lock()
+
+        # ── Faz 3.1: sesli oto-enrollment state machine ──────────────────────
+        def _reset_enroll(self) -> None:
+            self._enroll_stage = None
+            self._enroll_name = None
+            self._enroll_emb = None
+            self._enroll_name_emb = None
+            self._enroll_retried = False
+
+        async def _enrollment_line(self, text: str) -> Optional[str]:
+            """Enrollment kararı. Scripted TR satır döndürürse pi ATLANIR; None →
+            normal pi akışı. Kapalıysa hep None (Faz 2 davranışı)."""
+            if not self._enroll_ok:
+                return None
+            async with self._enroll_lock:
+                if self._enroll_stage is not None:
+                    return await self._continue_enrollment(text)
+                # Tetik: bilinmeyen ses (current None) + birikmiş embedding +
+                # bu bağlantıda henüz sorulmadı.
+                current = getattr(self._speaker_state, "current", None)
+                emb = getattr(self._speaker_state, "last_embedding", None)
+                if current is None and emb is not None and not self._onboarding_asked:
+                    self._onboarding_asked = True
+                    self._enroll_stage = "ask_name"
+                    self._enroll_emb = emb
+                    logger.info("enrollment: bilinmeyen ses → isim soruluyor")
+                    return "Seni tanıyamadım, adını söyler misin?"
+                return None
+
+        async def _continue_enrollment(self, text: str) -> Optional[str]:
+            """ask_name → confirm → finish akışı. _enroll_lock altında çağrılır."""
+            if self._enroll_stage == "confirm":
+                if is_affirmative_reply(text):
+                    return await self._finish_enrollment()
+                self._reset_enroll()
+                logger.info("enrollment: onaylanmadı (%r) → iptal", text[:40])
+                return "Tamam, kaydetmedim."
+            # ask_name aşaması
+            if _is_decline_enroll(text):
+                self._reset_enroll()
+                logger.info("enrollment: reddedildi (%r) → sessiz guest", text[:40])
+                return "Peki, gerek yok."
+            name = parse_spoken_name(text)
+            if not name:
+                if not self._enroll_retried:
+                    self._enroll_retried = True
+                    return "Adını anlayamadım, tekrar söyler misin?"
+                # İkinci kez de anlaşılmadı → vazgeç, sözü normal akışa bırak.
+                self._reset_enroll()
+                logger.info("enrollment: isim anlaşılamadı (2. kez) → guest")
+                return None
+            # En güncel ham embedding'i (ismi söylerkenki) örnek olarak sakla.
+            self._enroll_name = name
+            self._enroll_name_emb = getattr(self._speaker_state, "last_embedding", None)
+            self._enroll_stage = "confirm"
+            return f"Seni {name} olarak kaydedeyim mi?"
+
+        async def _finish_enrollment(self) -> str:
+            """Onay alındı → kişi oluştur + ses örneklerini yaz + reload + swap."""
+            from speaker_id import emb_to_bytes
+
+            name = self._enroll_name or ""
+            try:
+                rec = await self._speaker_store.create_speaker(name)
+                sid = rec["id"]
+                mid, dim = self._speaker_id.model_id, self._speaker_id.dim
+                for emb in (self._enroll_emb, self._enroll_name_emb):
+                    if emb is not None:
+                        await self._speaker_store.add_speaker_sample(
+                            sid, emb_to_bytes(emb), dim, mid, source="voice-enroll"
+                        )
+                # Yeni kişi hemen tanınsın: DB'den yeniden yükle.
+                self._speaker_id.reload(await self._speaker_store.all_speaker_embeddings())
+                # Bu bağlantıda konuşmacı artık bu kişi (sonraki tur persona swap eder).
+                self._speaker_state.current = name
+                self._greeted.add(name)  # kimliği onayladık → tekrar selam gerekmez
+                logger.info("enrollment: %r kaydedildi (id=%s)", name, sid)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("enrollment başarısız (%s)", e)
+                self._reset_enroll()
+                return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
+            self._reset_enroll()
+            return f"Memnun oldum {name}!"
+
+        def _maybe_greet(self, text: str) -> str:
+            """Tanınan kişinin bu bağlantıdaki İLK turunda pi'ya ismiyle-selam
+            direktifi ekle. Kapalı / bilinmeyen / zaten selamlandı → değişmez."""
+            if not self._speaker_state:
+                return text
+            name = getattr(self._speaker_state, "current", None)
+            if not name or name in self._greeted:
+                return text
+            self._greeted.add(name)
+            h = time.localtime().tm_hour
+            part = ("sabah" if 5 <= h < 12 else "öğleden sonra" if 12 <= h < 18
+                    else "akşam" if 18 <= h < 22 else "gece")
+            note = (
+                f"(Sistem notu: {name} az önce bağlandı (~{h:02d}:00, {part}); bu, bu "
+                f"oturumdaki ilk mesajı. Yanıtlamadan önce ona ismiyle KISA ve doğal bir "
+                f"selam ver, sonra mesajını yanıtla.)"
+            )
+            return note + "\n\n" + text
 
         def _target(self) -> tuple[str, str]:
             """Güncel konuşmacıya göre (persona, session_id). Tanınan isim →
