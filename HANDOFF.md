@@ -21,6 +21,15 @@ Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev 
 3. **worker/** skeleton: `agent.py` (AgentSession + `WhisperWyomingSTT`/`OmniVoiceTTS` custom plugin **iskele**, henüz port edilmedi), `requirements.txt`, `.env.example`.
 4. `README.md` + bu `HANDOFF.md`.
 
+## 🎉 HAFIZA FAZ B ÇALIŞIYOR — Pİ-NATIVE (2026-07-10)
+**KARAR: kendi memory sistemimiz Pi-native; Hermes YOK.** `pi-hermes-memory` extension'ı KALDIRILDI (`pi remove`) — Hermes-türeviydi + bizim sistemle paralel koşup karışıklık yapıyordu.
+- **Kendi lokal extension'ımız:** `pi/extensions/mem/index.ts` — `memory_add` + `memory_search` custom tool'ları (pi `registerTool` API). Worker pi'yı `-e pi/extensions/mem/index.ts` ile **sadece kendi süreçlerinde** yükler (global DEĞİL; senin kişisel pi'na dokunmaz).
+- **Kullanıcı-başı:** `MEM_USER` env → `memory/users/<user>/` + rol (adult/child/guest, `policy.json`). Depolama = repo'daki markdown dosyalar (otoriter) + `node:sqlite` FTS5 (`memory/.index/mem.db`, Türkçe diacritics-duyarsız). `memory/` gitignored + nested audit-git.
+- **Session-finalize:** `ctx.add_shutdown_callback` → `PiBrain.finalize()` → pi oturum kapanınca 3-5 kalıcı not çıkarır (30sn best-effort). Canlı test: köpek isimleri kendiliğinden kaydedildi.
+- **Canlı doğrulandı:** memory_add(private+family), memory_search (FTS getirme), correction/update, izolasyon, finalize. Hepsi sesli oturumda.
+- **AÇIK KONU (D fazı):** pi rpc'de ara sıra `WebSocket closed 1000` + tek turda ~40sn gecikme. Ses için yüksek — kararlılık/gecikme incelenecek.
+- Eski plan dokümanları (`docs/hafiza-v2-plan.md`, `hafiza-implementasyon-rehberi.md`) Hermes-çerçeveliydi; artık geçersiz/tarihsel — gerçek = bu bölüm + `pi/extensions/mem/`.
+
 ## 🎉 FAZ 3 + HAFIZA-A ÇALIŞIYOR (2026-07-10)
 - **Speaker-ID (campplus, sherpa-onnx):** oto-enroll konuşarak (bilinmeyen ses → "adını söyler misin?" → onay → kaydet). Tanıma tutarlı.
 - **KRİTİK DERS — enroll = recognize AYNI ses yolu:** CLI `--record` (Mac mic, ham) ile enroll edilince tanıma skorları düşük/oynak (0.1-0.6) çünkü oda sesi tarayıcı-WebRTC işlemeli. **Oda sesinden oto-enroll** (SpeakerState.last_embedding) → skorlar 0.45-0.67, tutarlı. Enrollment'ı HEP oda sesinden yap.
