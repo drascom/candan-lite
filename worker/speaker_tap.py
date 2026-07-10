@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
+import os
 
 from livekit import rtc
 
@@ -23,15 +25,55 @@ TAP_RATE = 16000  # sherpa 16k dışını içeride resample eder; 16k besliyoruz
 TAP_CHANNELS = 1
 
 
-class SpeakerState:
-    """Paylaşılan güncel-konuşmacı durumu. `current` = tanınan isim veya None."""
+def _f(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, "") or default)
+    except (TypeError, ValueError):
+        return default
 
-    def __init__(self) -> None:
+
+def _i(name: str, default: int) -> int:
+    try:
+        return int(float(os.getenv(name, "") or default))
+    except (TypeError, ValueError):
+        return default
+
+
+class SpeakerState:
+    """Paylaşılan güncel-konuşmacı durumu. `current` = tanınan isim veya None.
+
+    Yapışkan (hysteresis): güvenle tanınan kişi, aradaki güvensiz pencerelerde
+    HEMEN düşmez; ancak art arda `sticky_misses` kadar güvensiz pencere gelince
+    unknown'a iner. Konuşmacı yalnızca güvenli FARKLI bir kişi tanınınca değişir.
+    """
+
+    def __init__(self, sticky_misses: int = 5) -> None:
         self.current: str | None = None
         self.score: float = 0.0
         # Faz 3.1: son hesaplanan HAM embedding (normalize edilmemiş). Sesli
         # oto-enrollment onaylanınca bu ses örneği kişiye yazılır.
         self.last_embedding = None  # np.ndarray | None
+        self.sticky_misses = max(1, int(sticky_misses))
+        self._misses = 0  # art arda güvensiz (identify=None) pencere sayacı
+
+    def observe(self, name: str | None, score: float) -> bool:
+        """Yapışkan güncelleme. `name` = identify sonucu (None = güvensiz pencere,
+        yalnızca KONUŞMA içeren pencereler için çağrılmalı — sessizlik değil).
+        Döner: `current` değişti mi (bool)."""
+        prev = self.current
+        self.score = score
+        if name is not None:
+            # Güvenli tanıma: aynı kişi → koru; None/farklı kişi → o kişiye geç.
+            self._misses = 0
+            if name != self.current:
+                self.current = name
+        else:
+            # Güvensiz pencere: sabra bağla, hemen sıfırlama.
+            self._misses += 1
+            if self.current is not None and self._misses >= self.sticky_misses:
+                self.current = None
+                self._misses = 0
+        return self.current != prev
 
 
 class SpeakerTap:
@@ -42,6 +84,9 @@ class SpeakerTap:
         self._state = state
         self._min_seconds = max(0.5, min_seconds)
         self._tasks: dict[str, asyncio.Task] = {}
+        # Konuşma-kapısı: normalize [-1,1] RMS eşiği. Bunun altındaki (sessizlik/
+        # kelime-arası) pencereler identify EDİLMEZ; current DEĞİŞMEZ.
+        self._vad_rms = _f("SPEAKER_VAD_RMS", 0.01)
 
     def attach(self, room: rtc.Room) -> None:
         """Track subscribe olaylarını dinle; mevcut abonelikleri de yakala."""
@@ -82,19 +127,29 @@ class SpeakerTap:
                 buf = bytearray()  # kayan pencere: her ~min_seconds bir örnek
                 try:
                     samples = pcm_to_f32(chunk, width=2, channels=TAP_CHANNELS)
+                    # Konuşma-kapısı: düşük-enerji (sessizlik) pencerelerini ATLA.
+                    # identify çağırma, current'ı değiştirme → sessizlik "unknown"
+                    # üretmez, yapışkan state bozulmaz.
+                    rms = float(math.sqrt(float((samples * samples).mean()))) if samples.size else 0.0
+                    if rms < self._vad_rms:
+                        log.debug("speaker-tap: sessiz pencere atlandı (rms=%.4f)", rms)
+                        continue
                     emb = await asyncio.to_thread(
                         self._sp.embed_samples, samples, TAP_RATE
                     )
-                    # Enrollment için son ham embedding'i sakla (kayan pencere).
+                    # Enrollment için son ham embedding'i sakla (yalnızca KONUŞMA
+                    # penceresi → sessizlik yanlış-pozitif enroll tetiklemez).
                     self._state.last_embedding = emb
                     name, score = self._sp.identify(emb)
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)
                     continue
-                if name != self._state.current:
-                    log.info("speaker-tap: konuşmacı → %s (skor=%.3f)", name or "unknown", score)
-                self._state.current = name
-                self._state.score = score
+                # Yapışkan güncelleme: anlık unknown current'ı hemen düşürmez.
+                if self._state.observe(name, score):
+                    log.info(
+                        "speaker-tap: konuşmacı → %s (skor=%.3f)",
+                        self._state.current or "unknown", score,
+                    )
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001

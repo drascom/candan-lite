@@ -31,6 +31,8 @@ LANG = os.environ.get("MATE_LANGUAGE", "tr")
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
 PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
 SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.0") or 1.0)
+# Yapışkanlık: art arda kaç güvensiz pencereden sonra current unknown'a düşsün.
+SPEAKER_STICKY_MISSES = int(float(os.environ.get("SPEAKER_STICKY_MISSES", "5") or 5))
 
 
 async def entrypoint(ctx: JobContext):
@@ -47,7 +49,7 @@ async def entrypoint(ctx: JobContext):
         try:
             store = SpeakerStore()
             sp.reload(await store.all_speaker_embeddings())  # enrolled kişileri yükle
-            speaker_state = SpeakerState()
+            speaker_state = SpeakerState(sticky_misses=SPEAKER_STICKY_MISSES)
             tap = SpeakerTap(sp, speaker_state, min_seconds=SPEAKER_MIN_S)
         except Exception as e:  # noqa: BLE001 — speaker-ID hiç kurulamazsa Faz 2'ye düş
             import logging
