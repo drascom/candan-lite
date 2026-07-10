@@ -21,6 +21,14 @@ Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev 
 3. **worker/** skeleton: `agent.py` (AgentSession + `WhisperWyomingSTT`/`OmniVoiceTTS` custom plugin **iskele**, henüz port edilmedi), `requirements.txt`, `.env.example`.
 4. `README.md` + bu `HANDOFF.md`.
 
+## 🎉 FAZ 3 + HAFIZA-A ÇALIŞIYOR (2026-07-10)
+- **Speaker-ID (campplus, sherpa-onnx):** oto-enroll konuşarak (bilinmeyen ses → "adını söyler misin?" → onay → kaydet). Tanıma tutarlı.
+- **KRİTİK DERS — enroll = recognize AYNI ses yolu:** CLI `--record` (Mac mic, ham) ile enroll edilince tanıma skorları düşük/oynak (0.1-0.6) çünkü oda sesi tarayıcı-WebRTC işlemeli. **Oda sesinden oto-enroll** (SpeakerState.last_embedding) → skorlar 0.45-0.67, tutarlı. Enrollment'ı HEP oda sesinden yap.
+- **Sticky speaker-ID:** `SPEAKER_VAD_RMS`(0.01) sessizlik-kapısı + `SPEAKER_STICKY_MISSES`(5) → kısa sessizlik/dip'lerde konuşmacı korunur, pi swap thrash yok.
+- **Hafıza Faz A:** boot enjeksiyonu (persona+profile+family, role-gated) + `MEM_USER` env + memory-skill v0. Test edildi: özel not→`notes/`, aile→`family.md`(açık istekle), profil kendini zenginleştirdi, izolasyon OK. `memory/` gitignored (public repo'ya girmez) + nested audit-git.
+- **Kullanıcı:** `baba` (adult, policy.json). persona `pi/personas/baba.md`. Model pin `gpt-5.6-terra`.
+- **SIRADAKİ:** Hafıza Faz B (`tools/mem` CLI + SQLite FTS5 arama + session-finalize + git-audit). Detay: `docs/hafiza-implementasyon-rehberi.md`.
+
 ## 🎉 FAZ 2 ÇALIŞIYOR (2026-07-10): sesli uçtan-uca
 web → STT (Whisper wyoming) → pi beyni (Candan, warm rpc) → TTS (OmniVoice) → ses. Test edildi, normal hız.
 - **Repo:** github.com/drascom/candan-lite (public, main). web/ absorbe (fork silindi).
