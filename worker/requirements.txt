@@ -5,4 +5,4 @@ websockets         # OmniVoice (VoxCPM) TTS WS bridge (.25:8808)
 numpy
 sherpa-onnx        # Faz 3: CAM++ speaker embedding (speaker-ID)
 soundfile          # enroll.py — wav oku
-# sounddevice      # opsiyonel: enroll.py --record (mikrofon) için
+sounddevice        # enroll.py --record (mikrofondan kayıt)
