@@ -135,22 +135,43 @@ class WakeGate:
             return True
         return False
 
+    def wake_now(self, now: Optional[float] = None) -> bool:
+        """Erken uyandır (transcript anında, PiBrain turundan ÖNCE). awake=True yap +
+        on_change(True) tetikle (çan). Zaten uyanıksa TEKRAR tetikleme (çift çan yok).
+        last_activity'i sıfırla. Idempotent; yeni uyandıysa True döner. Kapalı → no-op."""
+        if not self.enabled:
+            return False
+        now = time.monotonic() if now is None else now
+        was = self.awake
+        self._set_awake(True)   # değiştiyse on_change(True) → çan (idempotent)
+        self.last_activity = now
+        return not was
+
     def decide(self, text: str, now: Optional[float] = None) -> tuple[str, Optional[str]]:
-        """('process', metin) | ('scripted', satır) | ('silent', None)."""
+        """('process', metin) | ('scripted', satır) | ('silent', None).
+
+        "candan" TEK BAŞINA (uyurken ya da uyanıkken) → 'silent': uyan (çan) ama
+        pi'ya GİTME, sözlü yanıt YOK. Wake + kalan metin → uyan + 'process' (kalan).
+        Uyurken + wake yok → 'silent'."""
         if not self.enabled:
             return ("process", text)
         now = time.monotonic() if now is None else now
         self.expire(now)
+        has_wake = _has_wake(text, self.wake_norm)
         if self.awake:
             self.last_activity = now
+            if has_wake:
+                rem = _strip_wake(text, self.wake_norm)
+                # sadece "candan" (kalan boş) → çan zaten çaldı, pi'ya gitme.
+                return ("process", rem) if rem else ("silent", None)
             return ("process", text)
-        if _has_wake(text, self.wake_norm):
-            self._set_awake(True)
+        if has_wake:
+            self._set_awake(True)   # uyan → on_change(True) → çan
             self.last_activity = now
             rem = _strip_wake(text, self.wake_norm)
             if rem:
-                return ("process", rem)
-            return ("scripted", self.greeting)
+                return ("process", rem)   # "candan hava nasıl" → kalanı işle (geri uyumlu)
+            return ("silent", None)        # sadece wake → SADECE çan, sözlü yanıt yok
         return ("silent", None)
 
 
@@ -570,6 +591,16 @@ if _HAS_LIVEKIT:
             """Gate kararı + arka plan uyku zamanlayıcısını (ilk çağrıda) başlat."""
             self._ensure_wake_timer()
             return self._wake.decide(text)
+
+        def wake_now(self, text: str = "") -> bool:
+            """Erken uyandırma kancası (agent user_input_transcribed'den). enabled +
+            transcript'te wake word varsa PiBrain turu işlenmeden ÖNCE uyan → on_change
+            (candan.awake=true) → çan HEMEN. Idempotent (zaten uyanıksa çift çan yok).
+            Wake yok / kapalı → no-op. Yeni uyandıysa True. `_has_wake` yeniden kullanılır."""
+            if not self._wake.enabled or not _has_wake(text, self._wake.wake_norm):
+                return False
+            self._ensure_wake_timer()
+            return self._wake.wake_now()
 
         def _ensure_wake_timer(self) -> None:
             if self._wake.enabled and self._wake_task is None:

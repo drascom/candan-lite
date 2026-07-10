@@ -112,6 +112,19 @@ async def entrypoint(ctx: JobContext):
         # Geçişleri web'e bağla; başlangıç: UYKUDA → attribute "false" + transcript kapalı.
         brain.set_wake_change(_apply_wake_state)
         _apply_wake_state(False)
+
+        # Çanı ERKEN çal: transcript kesinleşir kesinleşmez (PiBrain turu işlenmeden ÖNCE)
+        # wake word varsa brain.wake_now() → on_change → candan.awake="true" → çan.
+        # Böylece çan ~0.3-0.5s daha erken çalar. Idempotent; "candan" tek başınaysa
+        # PiStream tarafı zaten SILENT döner (sözlü yanıt yok).
+        @session.on("user_input_transcribed")
+        def _on_transcript(ev) -> None:
+            if not getattr(ev, "is_final", False):
+                return
+            try:
+                brain.wake_now(getattr(ev, "transcript", "") or "")
+            except Exception:  # noqa: BLE001 — sinyal hatası akışı bozmasın
+                pass
     else:
         # Gate yok: hep uyanık → attribute "true" + transcript açık (eski davranış) +
         # katılınca kısaca selamla.
