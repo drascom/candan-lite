@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
-import unicodedata
 from typing import Callable, Optional
 
 from livekit import rtc
 
 from whisper_stt import _WhisperSession  # wyoming transcribe roundtrip'i yeniden kullan
+# Wake eşleştirme TEK yerde (pi_brain) — kopya sapmasın. Fuzzy/izole tolerans dahil.
+from pi_brain import wake_match, _wake_norm, _wake_variants
 
 log = logging.getLogger("worker.wake_stt")
 
@@ -30,20 +30,6 @@ TAP_RATE = 16000  # wyoming whisper 16k s16le ister; AudioStream doğrudan 16k v
 TAP_CHANNELS = 1
 STT_WIDTH = 2  # s16le
 MAX_SEG_SECONDS = 10.0  # tek segment için üst sınır (bellek/latency koruması)
-
-
-# --- wake eşleştirme: pi_brain._has_wake ile birebir aynı mantık (aksan/case/kelime-sınırı) ---
-def _wake_norm(s: str) -> str:
-    s = unicodedata.normalize("NFKD", s or "")
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return s.casefold()
-
-
-def _has_wake(text: str, wake_norm: str) -> bool:
-    return any(
-        _wake_norm(tok) == wake_norm
-        for tok in re.findall(r"\w+", text or "", re.UNICODE)
-    )
 
 
 class WakeSTT:
@@ -74,6 +60,7 @@ class WakeSTT:
         self._port = stt_port
         self._lang = language
         self._wake_norm = _wake_norm(wake_word)
+        self._wake_variants = _wake_variants(wake_word)
         self._window = max(0.5, float(window))
         self._on_wake = on_wake
         self._active = active
@@ -132,7 +119,7 @@ class WakeSTT:
                     log.debug("wake_stt: whisper erişilemiyor: %s", e)
                     await sess.abort()
                     return
-                if text and _has_wake(text, self._wake_norm):
+                if text and wake_match(text, self._wake_norm, self._wake_variants)[0]:
                     log.info("wake_stt: WAKE tespit → %r", text)
                     try:
                         self._on_wake(text)

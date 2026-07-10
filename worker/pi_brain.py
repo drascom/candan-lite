@@ -68,6 +68,18 @@ def _envflag(name: str, default: bool) -> bool:
 WAKE_ENABLED = _envflag("WAKE_ENABLED", True)
 WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 WAKE_WINDOW_SECONDS = float(os.environ.get("WAKE_WINDOW_SECONDS", "15") or 15)
+# Fuzzy/fonetik wake toleransı: izole "candan"ın tutarlı yanlış-transkripsiyonları
+# (Whisper'ın kısa-izole-kelime zaafı: "John Don", "Kandan", "Can dan"...). Sadece
+# İZOLE-KISA metne uygulanır (cümle içinde DEĞİL → yanlış-pozitif olmasın). Varyant
+# kümesi virgülle; default liste gözlenen yanlış çevirileri kapsar.
+WAKE_VARIANTS = os.environ.get(
+    "WAKE_VARIANTS", "candan,kandan,canden,candon,johndon,johndonne,jondon,candam"
+)
+# İzole-wake denemesi eşiği: en çok bu kadar kelime VE bu kadar (boşluksuz) karakter.
+_WAKE_FUZZY_MAX_WORDS = 2
+_WAKE_FUZZY_MAX_LEN = 12
+# Bir varyanta izin verilen en büyük Levenshtein mesafesi (0 = sadece tam varyant).
+_WAKE_FUZZY_DIST = 1
 
 
 def _wake_norm(s: str) -> str:
@@ -94,6 +106,65 @@ def _strip_wake(text: str, wake_norm: str) -> str:
     return re.sub(r"\s+", " ", "".join(out)).strip(" ,.!?;:-\n\t")
 
 
+def _wake_squash(s: str) -> str:
+    """Fuzzy karşılaştırma için: normalize (diakritik/case) + TÜM boşluk/noktalamayı
+    at. 'Can dan.'→'candan', 'John Don'→'johndon', 'CANDAN'→'candan'."""
+    return re.sub(r"[^\w]", "", _wake_norm(s), flags=re.UNICODE)
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Küçük saf-Python Levenshtein mesafesi (kısa wake string'leri için)."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _wake_variants(word: str = WAKE_WORD, raw: str = WAKE_VARIANTS) -> frozenset:
+    """Fuzzy varyant kümesi (squash edilmiş): wake word + WAKE_VARIANTS listesi."""
+    out = {_wake_squash(word)}
+    for v in (raw or "").split(","):
+        v = _wake_squash(v)
+        if v:
+            out.add(v)
+    return frozenset(out)
+
+
+def wake_match(text: str, wake_norm: Optional[str] = None,
+               variants: Optional[frozenset] = None) -> tuple[bool, str]:
+    """MERKEZİ wake eşleştirme (pi_brain + wake_stt bunu paylaşır → kopya sapmaz).
+
+    Döner: (eşleşti?, kalan_metin).
+      1. Gerçek "candan" kelimesi (izole ya da cümle içinde, kelime-sınırı/aksan/case
+         duyarsız) → exact eşleşme; kalan `_strip_wake` ile ayıklanır. MEVCUT DAVRANIŞ
+         KORUNUR ("candan hava nasıl" → strip "hava nasıl"; sadece "candan" → "").
+      2. Exact yoksa ve metin İZOLE-KISA ise (≤2 kelime VE ≤~12 karakter) → boşluksuz
+         normalize edilmiş metin fuzzy varyant kümesine yakınsa (tam eşit veya
+         Levenshtein ≤ _WAKE_FUZZY_DIST) → wake (kalan boş). Bu, izole "candan"ın
+         yanlış-transkripsiyonlarını ("John Don", "Kandan", "Can dan") yakalar.
+      3. UZUN cümlede fuzzy UYGULANMAZ → cümlede "kandan"/"john don" wake TETİKLEMEZ."""
+    wake_norm = _wake_norm(WAKE_WORD) if wake_norm is None else wake_norm
+    if _has_wake(text, wake_norm):
+        return True, _strip_wake(text, wake_norm)
+    squashed = _wake_squash(text)
+    words = re.findall(r"\w+", text or "", re.UNICODE)
+    if squashed and len(words) <= _WAKE_FUZZY_MAX_WORDS and len(squashed) <= _WAKE_FUZZY_MAX_LEN:
+        vs = _wake_variants() if variants is None else variants
+        for v in vs:
+            if squashed == v or _levenshtein(squashed, v) <= _WAKE_FUZZY_DIST:
+                return True, ""
+    return False, text
+
+
 class WakeGate:
     """Konuşma-penceresi kapısı (saf-Python, livekit'siz test edilebilir).
 
@@ -107,6 +178,7 @@ class WakeGate:
                  on_change: Optional[Callable[[bool], None]] = None):
         self.enabled = enabled
         self.wake_norm = _wake_norm(word)
+        self.wake_variants = _wake_variants(word)
         self.window = window
         self.greeting = greeting
         self.awake = False
@@ -157,18 +229,16 @@ class WakeGate:
             return ("process", text)
         now = time.monotonic() if now is None else now
         self.expire(now)
-        has_wake = _has_wake(text, self.wake_norm)
+        has_wake, rem = wake_match(text, self.wake_norm, self.wake_variants)
         if self.awake:
             self.last_activity = now
             if has_wake:
-                rem = _strip_wake(text, self.wake_norm)
                 # sadece "candan" (kalan boş) → çan zaten çaldı, pi'ya gitme.
                 return ("process", rem) if rem else ("silent", None)
             return ("process", text)
         if has_wake:
             self._set_awake(True)   # uyan → on_change(True) → çan
             self.last_activity = now
-            rem = _strip_wake(text, self.wake_norm)
             if rem:
                 return ("process", rem)   # "candan hava nasıl" → kalanı işle (geri uyumlu)
             return ("silent", None)        # sadece wake → SADECE çan, sözlü yanıt yok
@@ -596,8 +666,10 @@ if _HAS_LIVEKIT:
             """Erken uyandırma kancası (agent user_input_transcribed'den). enabled +
             transcript'te wake word varsa PiBrain turu işlenmeden ÖNCE uyan → on_change
             (candan.awake=true) → çan HEMEN. Idempotent (zaten uyanıksa çift çan yok).
-            Wake yok / kapalı → no-op. Yeni uyandıysa True. `_has_wake` yeniden kullanılır."""
-            if not self._wake.enabled or not _has_wake(text, self._wake.wake_norm):
+            Wake yok / kapalı → no-op. Yeni uyandıysa True. `wake_match` yeniden kullanılır
+            (izole yanlış-transkripsiyonlarda da erken çan)."""
+            matched, _rem = wake_match(text, self._wake.wake_norm, self._wake.wake_variants)
+            if not self._wake.enabled or not matched:
                 return False
             self._ensure_wake_timer()
             return self._wake.wake_now()
@@ -881,8 +953,41 @@ async def _prompt_test(text: str) -> int:
         await client.stop()
 
 
+def _wake_test() -> int:
+    """wake_match birim testi (token harcamaz). İzole/cümle × pozitif/negatif."""
+    wn = _wake_norm(WAKE_WORD)
+    vs = _wake_variants()
+    # (metin, beklenen_wake, beklenen_kalan|None=umursama)
+    cases = [
+        # İZOLE pozitif (yanlış-transkripsiyonlar dahil)
+        ("candan", True, ""), ("Candan.", True, ""), ("Can dan.", True, ""),
+        ("John Don.", True, ""), ("John Donne.", True, ""), ("Kandan.", True, ""),
+        ("CANDAN", True, ""),
+        # İZOLE negatif
+        ("merhaba", False, None), ("nasılsın", False, None), ("teşekkürler", False, None),
+        # CÜMLE pozitif (gerçek candan → strip korunur)
+        ("candan şu an saat kaç", True, "şu an saat kaç"),
+        ("Candan hava nasıl", True, "hava nasıl"),
+        # CÜMLE negatif (fuzzy cümlede UYGULANMAZ)
+        ("kandan geldi haber", False, None), ("aradan zaman geçti", False, None),
+        ("bir john don filmi", False, None),
+    ]
+    print(f"[wake] WAKE_WORD={WAKE_WORD!r} variants={sorted(vs)}")
+    print(f"{'text':<26} {'wake':<6} {'strip':<18} result")
+    ok = True
+    for text, exp_wake, exp_rem in cases:
+        got_wake, got_rem = wake_match(text, wn, vs)
+        good = (got_wake == exp_wake) and (exp_rem is None or got_rem == exp_rem)
+        ok = ok and good
+        print(f"{text!r:<26} {str(got_wake):<6} {got_rem!r:<18} {'PASS' if good else 'FAIL'}")
+    print(f"[wake] RESULT: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "wake":
+        raise SystemExit(_wake_test())
     if cmd == "smoke":
         raise SystemExit(asyncio.run(_smoke()))
     if cmd == "prompt":
