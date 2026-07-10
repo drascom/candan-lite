@@ -15,7 +15,7 @@ from livekit.plugins import silero
 
 from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
-from omnivoice_tts import OmniVoiceTTS       # OmniVoice (VoxCPM WS) TTS plugin
+from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")

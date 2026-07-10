@@ -1,10 +1,11 @@
-"""omnivoice_tts — livekit-agents TTS plugin over OmniVoice (VoxCPM WS bridge).
+"""omnivoice_tts — livekit-agents TTS plugin over OmniVoice WS.
 
-voice/tts.py `_vox_stream` + OmniVoice etiket mantığının (adapter.py ~207-221)
-portu. OmniVoice WS Bridge v0: `ws://TTS_HOST:TTS_PORT/ws`
+OmniVoice WS: `ws://TTS_HOST:TTS_PORT/ws`
   gönder: {"type":"speak","id":...,"text":...,"voice":...}
-  al:     binary = pcm f32le chunk;  JSON audio_start{sample_rate,channels} /
-          audio_end / error{message}
+  al:     JSON audio_start{sample_rate,channels,format} (ÖNCE gelir) →
+          binary pcm f32le chunk'lar → JSON audio_end / error{message}
+
+Ölçülen çıktı: pcm_f32le, 24 kHz, mono (audio_start bildiriyor).
 
 Etiketler: LLM metne [laughter]/[sigh]/… gömer; OmniVoice bunları seslendirir.
 Bu yüzden metin OmniVoice'e HAM (etiketli) gider — strip yalnızca gösterim/
@@ -37,7 +38,8 @@ _OMNI_TAG_RE = re.compile(
     re.IGNORECASE,
 )
 
-DEFAULT_SAMPLE_RATE = 48000
+# OmniVoice gerçek çıktı hızı (audio_start ile ölçüldü). 48000 dersek 2× hızlı çalar.
+DEFAULT_SAMPLE_RATE = 24000
 NUM_CHANNELS = 1
 
 
@@ -49,7 +51,7 @@ def _strip_omni_tags(text: str) -> str:
 
 
 def _f32le_to_s16le(payload: bytes) -> bytes:
-    """VoxCPM f32le PCM → s16le (voice/tts.py to_s16le portu)."""
+    """OmniVoice f32le PCM → s16le."""
     floats = array("f")
     floats.frombytes(payload[: len(payload) - len(payload) % 4])
     return array(
@@ -58,7 +60,7 @@ def _f32le_to_s16le(payload: bytes) -> bytes:
 
 
 class OmniVoiceTTS(tts.TTS):
-    """OmniVoice (VoxCPM WS) TTS plugin. openai/cartesia TTS yerine geçer."""
+    """OmniVoice WS TTS plugin. openai/cartesia TTS yerine geçer."""
 
     def __init__(
         self,
