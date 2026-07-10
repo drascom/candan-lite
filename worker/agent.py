@@ -7,6 +7,8 @@ Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain
 Çalıştırma (dev): python agent.py dev
 Oda: MATE_LIVEKIT_ROOM (candan-lite-dev)
 """
+import asyncio
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -92,9 +94,32 @@ async def entrypoint(ctx: JobContext):
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
         tap.attach(ctx.room)
-    # Wake gate açıkken agent UYUR başlar → otomatik selamlama YOK (istenmeden
-    # konuşmasın). Kapalıyken eski davranış: katılınca kısaca selamla.
-    if not WAKE_ENABLED:
+
+    # Wake durumunu web'e sinyalle: local participant attribute `candan.awake` +
+    # transcript kapısı (uyurken oda'ya transcript YAYINLANMASIN, uyanınca açılsın).
+    def _apply_wake_state(awake: bool) -> None:
+        """Uyku/uyanık durumunu uygula: attribute yayını + transcript aç/kapa.
+        Sync bağlamdan (WakeGate geçişi / connect) güvenli çağrılır."""
+        val = "true" if awake else "false"
+        try:
+            session.output.set_transcription_enabled(awake)
+        except Exception:  # noqa: BLE001 — sinyal hatası ana akışı bozmasın
+            logging.getLogger("worker.agent").warning(
+                "transcription toggle hata", exc_info=True)
+        try:
+            asyncio.create_task(
+                ctx.room.local_participant.set_attributes({"candan.awake": val}))
+        except RuntimeError:  # çalışan loop yok → atla
+            pass
+
+    if WAKE_ENABLED:
+        # Geçişleri web'e bağla; başlangıç: UYKUDA → attribute "false" + transcript kapalı.
+        brain.set_wake_change(_apply_wake_state)
+        _apply_wake_state(False)
+    else:
+        # Gate yok: hep uyanık → attribute "true" + transcript açık (eski davranış) +
+        # katılınca kısaca selamla.
+        _apply_wake_state(True)
         await session.generate_reply(instructions="Kullanıcıyı kısaca selamla.")
 
 

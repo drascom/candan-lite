@@ -24,7 +24,7 @@ import time
 import unicodedata
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from name_parser import (
     parse_spoken_name,
@@ -103,19 +103,35 @@ class WakeGate:
     sonra tekrar uyur. enabled=False → hep 'process' (gate yok)."""
 
     def __init__(self, enabled: bool = WAKE_ENABLED, word: str = WAKE_WORD,
-                 window: float = WAKE_WINDOW_SECONDS, greeting: str = "Efendim?"):
+                 window: float = WAKE_WINDOW_SECONDS, greeting: str = "Efendim?",
+                 on_change: Optional[Callable[[bool], None]] = None):
         self.enabled = enabled
         self.wake_norm = _wake_norm(word)
         self.window = window
         self.greeting = greeting
         self.awake = False
         self.last_activity = 0.0
+        # Uyku↔uyanık GEÇİŞİNDE çağrılır (sync). Web'e attribute yayını + transcript
+        # kapısı buraya bağlanır. None → geçiş sinyali yok (mevcut davranış).
+        self.on_change = on_change
+
+    def _set_awake(self, value: bool) -> None:
+        """awake'i değiştir; DEĞİŞTİYSE on_change(value) tetikle (best-effort)."""
+        if value == self.awake:
+            return
+        self.awake = value
+        cb = self.on_change
+        if cb is not None:
+            try:
+                cb(value)
+            except Exception:  # noqa: BLE001 — sinyal hatası akışı bozmasın
+                logger.warning("wake on_change hata", exc_info=True)
 
     def expire(self, now: Optional[float] = None) -> bool:
         """Pencere dolduysa uyut. Yeni uyuduysa True döner."""
         now = time.monotonic() if now is None else now
         if self.awake and (now - self.last_activity) >= self.window:
-            self.awake = False
+            self._set_awake(False)
             return True
         return False
 
@@ -129,7 +145,7 @@ class WakeGate:
             self.last_activity = now
             return ("process", text)
         if _has_wake(text, self.wake_norm):
-            self.awake = True
+            self._set_awake(True)
             self.last_activity = now
             rem = _strip_wake(text, self.wake_norm)
             if rem:
@@ -545,6 +561,11 @@ if _HAS_LIVEKIT:
             self._wake_task: Optional[asyncio.Task] = None
 
         # ── Wake word gate (konuşma penceresi) ───────────────────────────────
+        def set_wake_change(self, cb: Optional[Callable[[bool], None]]) -> None:
+            """Uyku↔uyanık geçişinde çağrılacak callback'i bağla (entrypoint kullanır).
+            cb(True)=uyandı, cb(False)=uyudu. Yalnızca wake açıkken anlamlı."""
+            self._wake.on_change = cb
+
         def _wake_decide(self, text: str) -> tuple[str, Optional[str]]:
             """Gate kararı + arka plan uyku zamanlayıcısını (ilk çağrıda) başlat."""
             self._ensure_wake_timer()
