@@ -1,0 +1,29 @@
+# secrets / env
+.env
+.env.*
+!.env.example
+!.env.production.example
+web/.env.local
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# node
+node_modules/
+.next/
+out/
+build/
+dist/
+.pnpm-store/
+
+# pi sessions (per-user memory, local)
+sessions/
+
+# os / editor
+.DS_Store
+*.log
+.vscode/
+.idea/

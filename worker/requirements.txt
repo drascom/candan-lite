@@ -1,0 +1,4 @@
+livekit-agents[silero,openai]~=1.0
+python-dotenv
+wyoming            # Whisper STT (wyoming protokolü, .25:10300)
+numpy
