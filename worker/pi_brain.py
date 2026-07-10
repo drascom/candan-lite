@@ -18,8 +18,10 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 import time
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -51,6 +53,89 @@ PI_THINKING = os.environ.get("PI_THINKING", "minimal")
 PI_TURN_STALL_TIMEOUT = float(os.environ.get("PI_TURN_STALL_TIMEOUT", "12") or 12)
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
+
+
+def _envflag(name: str, default: bool) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Wake word ("konuşma penceresi") — sistem sürekli açık; agent normalde uyur,
+# WAKE_WORD duyunca uyanır, WAKE_WINDOW_SECONDS sessizlikten sonra tekrar uyur.
+# WAKE_ENABLED=false → gate yok (her tur işlenir, mevcut davranış).
+WAKE_ENABLED = _envflag("WAKE_ENABLED", True)
+WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
+WAKE_WINDOW_SECONDS = float(os.environ.get("WAKE_WINDOW_SECONDS", "15") or 15)
+
+
+def _wake_norm(s: str) -> str:
+    """Aksan/büyük-küçük duyarsız normalize: NFKD ile diakritikleri ayıkla + casefold.
+    'Candan'/'CANDAN'/'çandan' → 'candan'."""
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.casefold()
+
+
+def _has_wake(text: str, wake_norm: str) -> bool:
+    """Metinde wake word var mı — kelime-sınırı, aksan/case duyarsız."""
+    return any(_wake_norm(tok) == wake_norm for tok in re.findall(r"\w+", text or "", re.UNICODE))
+
+
+def _strip_wake(text: str, wake_norm: str) -> str:
+    """Wake word token'larını metinden ayıkla; kalan metni temizle (kelime-sınırı)."""
+    out = []
+    for tok in re.findall(r"\w+|\W+", text or "", re.UNICODE):
+        if re.fullmatch(r"\w+", tok, re.UNICODE) and _wake_norm(tok) == wake_norm:
+            continue
+        out.append(tok)
+    # Baştaki/sondaki noktalama+boşluğu kırp, iç boşlukları sadeleştir.
+    return re.sub(r"\s+", " ", "".join(out)).strip(" ,.!?;:-\n\t")
+
+
+class WakeGate:
+    """Konuşma-penceresi kapısı (saf-Python, livekit'siz test edilebilir).
+
+    Uyurken: wake word yoksa 'silent' (pi'ya gitme, ChatChunk yok). Wake word
+    varsa uyan, kalan metin varsa 'process', yoksa 'scripted' (kısa karşılık).
+    Uyanıkken: 'process' (pencere sıfırlanır). WAKE_WINDOW_SECONDS sessizlikten
+    sonra tekrar uyur. enabled=False → hep 'process' (gate yok)."""
+
+    def __init__(self, enabled: bool = WAKE_ENABLED, word: str = WAKE_WORD,
+                 window: float = WAKE_WINDOW_SECONDS, greeting: str = "Efendim?"):
+        self.enabled = enabled
+        self.wake_norm = _wake_norm(word)
+        self.window = window
+        self.greeting = greeting
+        self.awake = False
+        self.last_activity = 0.0
+
+    def expire(self, now: Optional[float] = None) -> bool:
+        """Pencere dolduysa uyut. Yeni uyuduysa True döner."""
+        now = time.monotonic() if now is None else now
+        if self.awake and (now - self.last_activity) >= self.window:
+            self.awake = False
+            return True
+        return False
+
+    def decide(self, text: str, now: Optional[float] = None) -> tuple[str, Optional[str]]:
+        """('process', metin) | ('scripted', satır) | ('silent', None)."""
+        if not self.enabled:
+            return ("process", text)
+        now = time.monotonic() if now is None else now
+        self.expire(now)
+        if self.awake:
+            self.last_activity = now
+            return ("process", text)
+        if _has_wake(text, self.wake_norm):
+            self.awake = True
+            self.last_activity = now
+            rem = _strip_wake(text, self.wake_norm)
+            if rem:
+                return ("process", rem)
+            return ("scripted", self.greeting)
+        return ("silent", None)
 
 
 def _role(user: str) -> str:
@@ -317,6 +402,17 @@ if _HAS_LIVEKIT:
                     )
                 )
 
+            # Wake gate (DIŞ kapı). Konuşmacı çözümünden SONRA, enrollment/pi'dan
+            # ÖNCE. Uyurken + wake yok → sessiz (pi'ya GİTME, token yok). Wake ile
+            # uyanınca enrollment/normal akış devam eder. Kapalıysa gate yok.
+            action, payload = self._brain._wake_decide(text)
+            if action == "silent":
+                return
+            if action == "scripted":
+                _emit(payload)
+                return
+            text = payload  # 'process' → wake ayıklanmış / uyanık metin
+
             # Faz 3.1: sesli oto-enrollment. Bilinmeyen ses / akış ortası →
             # scripted TR satır döndür ve pi'ya GİTME (token harcanmaz). Kapalı /
             # tanınan / akışa girmeyen → None döner, normal pi akışı sürer.
@@ -444,6 +540,32 @@ if _HAS_LIVEKIT:
             self._onboarding_asked = False                # bu bağlantıda soruldu mu
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
+            # Wake word gate (konuşma penceresi). Kapalıysa gate yok (mevcut davranış).
+            self._wake = WakeGate()
+            self._wake_task: Optional[asyncio.Task] = None
+
+        # ── Wake word gate (konuşma penceresi) ───────────────────────────────
+        def _wake_decide(self, text: str) -> tuple[str, Optional[str]]:
+            """Gate kararı + arka plan uyku zamanlayıcısını (ilk çağrıda) başlat."""
+            self._ensure_wake_timer()
+            return self._wake.decide(text)
+
+        def _ensure_wake_timer(self) -> None:
+            if self._wake.enabled and self._wake_task is None:
+                try:
+                    self._wake_task = asyncio.create_task(self._wake_sleep_loop())
+                except RuntimeError:  # loop yok (test) → zamanlayıcısız çalış
+                    pass
+
+        async def _wake_sleep_loop(self) -> None:
+            """Son etkileşimden WAKE_WINDOW_SECONDS geçince awake=False (uyu)."""
+            try:
+                while True:
+                    await asyncio.sleep(1.0)
+                    if self._wake.expire():
+                        logger.info("wake: %.0fs sessizlik → uyku", self._wake.window)
+            except asyncio.CancelledError:
+                pass
 
         # ── Faz 3.1: sesli oto-enrollment state machine ──────────────────────
         def _reset_enroll(self) -> None:
@@ -635,6 +757,9 @@ if _HAS_LIVEKIT:
             )
 
         async def aclose(self) -> None:
+            if self._wake_task is not None:
+                self._wake_task.cancel()
+                self._wake_task = None
             await self._client.stop()
 
 

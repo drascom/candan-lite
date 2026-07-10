@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
 
-from pi_brain import PiBrain                 # warm pi --mode rpc beyni
+from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
@@ -92,7 +92,10 @@ async def entrypoint(ctx: JobContext):
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
         tap.attach(ctx.room)
-    await session.generate_reply(instructions="Kullanıcıyı kısaca selamla.")
+    # Wake gate açıkken agent UYUR başlar → otomatik selamlama YOK (istenmeden
+    # konuşmasın). Kapalıyken eski davranış: katılınca kısaca selamla.
+    if not WAKE_ENABLED:
+        await session.generate_reply(instructions="Kullanıcıyı kısaca selamla.")
 
 
 if __name__ == "__main__":
