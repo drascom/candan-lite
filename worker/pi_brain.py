@@ -43,6 +43,23 @@ PI_PERSONA_DIR = os.environ.get("PI_PERSONA_DIR", "pi/personas")
 PI_SKILLS_DIR = os.environ.get("PI_SKILLS_DIR", "pi/skills")
 PI_SESSION_DIR = os.environ.get("PI_SESSION_DIR", "sessions")
 PI_AGENTS_MD = os.environ.get("PI_AGENTS_MD", "pi/AGENTS.md")
+# Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
+MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
+
+
+def _role(user: str) -> str:
+    """memory/policy.json'dan rol; dosya/policy yoksa veya okunamıyorsa 'guest'."""
+    try:
+        pol = json.loads((REPO_ROOT / MEMORY_DIR / "policy.json").read_text())
+    except Exception:
+        return "guest"
+    return pol.get(user, "guest") if isinstance(pol, dict) else "guest"
+
+
+def _mem_user(user: str) -> str:
+    """Hafıza kimliği (MEM_USER): tanınan slug ANCAK role != guest ise; yoksa ''.
+    Guest/unknown → '' (hafıza yok). candan (default persona, policy'de yok) da ''."""
+    return user if (user and _role(user) != "guest") else ""
 
 
 def _slug(name: str) -> str:
@@ -65,6 +82,25 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     persona_file = REPO_ROOT / PI_PERSONA_DIR / f"{persona}.md"
     if persona_file.is_file():
         args += ["--append-system-prompt", str(persona_file)]
+    # Hafıza çekirdeği (küçük, boot'ta yüklü). Kullanıcı kimliği = session_id slug'ı
+    # (tanınan kişi). Guest/unknown → mem_user boş → hiçbir şey eklenmez (Faz 2 aynen).
+    mem_user = _mem_user(session_id)
+    if mem_user:
+        mem = REPO_ROOT / MEMORY_DIR
+        profile = mem / "users" / mem_user / "profile.md"
+        if profile.is_file():
+            args += ["--append-system-prompt", str(profile)]
+        family = mem / "family.md"
+        if family.is_file():  # role != guest zaten garanti (mem_user dolu)
+            args += ["--append-system-prompt", str(family)]
+        # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
+        args += [
+            "--append-system-prompt",
+            (f"Aktif kullanıcı: {mem_user}. "
+             f"Hafıza yolun: {MEMORY_DIR}/users/{mem_user}/ "
+             f"(notlar: notes/, profil: profile.md). "
+             f"Ortak aile hafızası: {MEMORY_DIR}/family.md."),
+        ]
     skills = REPO_ROOT / PI_SKILLS_DIR
     if skills.exists():
         args += ["--skill", str(skills)]
@@ -81,6 +117,8 @@ class PiRpcClient:
 
     def __init__(self, persona: str, session_id: str):
         self._args = _build_pi_args(persona, session_id)
+        # Alt-sürece geçecek hafıza kimliği (guest → ""). memory-skill $MEM_USER'ı okur.
+        self._mem_user = _mem_user(session_id)
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._pending: dict[str, asyncio.Future] = {}
@@ -99,6 +137,7 @@ class PiRpcClient:
             self._proc = await asyncio.create_subprocess_exec(
                 *self._args,
                 cwd=str(REPO_ROOT),
+                env={**os.environ, "MEM_USER": self._mem_user},
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,

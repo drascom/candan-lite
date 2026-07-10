@@ -29,7 +29,8 @@ worker/data/
 
 # HAFIZA — kişisel/aile verisi PUBLIC repo'ya ASLA girmez.
 # Audit için memory/ içinde ayrı, push edilmeyen nested git var.
-memory/
+# Kök-çapalı: yalnız üst-düzey memory/ (pi/skills/memory/ gibi kod dizinlerini değil).
+/memory/
 
 # os / editor
 .DS_Store
