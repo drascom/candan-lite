@@ -183,7 +183,7 @@ export function AgentSessionView_01({
   const { state: agentState } = useAgent();
 
   const controls: AgentControlBarControls = {
-    leave: true,
+    leave: false, // End Call yok — sürekli-açık, dönülecek sayfa yok
     microphone: true,
     chat: supportsChatInput,
     camera: supportsVideoInput,
