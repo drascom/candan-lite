@@ -9,6 +9,7 @@ import {
   type AgentControlBarControls,
 } from '@/components/agents-ui/agent-control-bar';
 import { Shimmer } from '@/components/ai-elements/shimmer';
+import { DebugStatus } from '@/components/app/debug-status';
 import { cn } from '@/lib/shadcn/utils';
 import { TileLayout } from './tile-view';
 
@@ -269,6 +270,8 @@ export function AgentSessionView_01({
           />
         </div>
       </motion.div>
+      {/* Alt debug durum satırı (Türkçe akış göstergesi) */}
+      <DebugStatus />
     </section>
   );
 }

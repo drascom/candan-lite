@@ -1,13 +1,12 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useTheme } from 'next-themes';
 import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
 import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
-import { WelcomeView } from '@/components/app/welcome-view';
 
-const MotionWelcomeView = motion.create(WelcomeView);
 const MotionSessionView = motion.create(AgentSessionView_01);
 
 const VIEW_MOTION_PROPS = {
@@ -33,22 +32,21 @@ interface ViewControllerProps {
 }
 
 export function ViewController({ appConfig }: ViewControllerProps) {
-  const { isConnected, start } = useSessionContext();
+  const { start } = useSessionContext();
   const { resolvedTheme } = useTheme();
+  const startedRef = useRef(false);
+
+  // Auto-connect: WelcomeView'i atla, mount'ta doğrudan bağlan (sürekli-açık).
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    start().catch((err) => console.error('auto-connect failed', err));
+  }, [start]);
 
   return (
     <AnimatePresence mode="wait">
-      {/* Welcome view */}
-      {!isConnected && (
-        <MotionWelcomeView
-          key="welcome"
-          {...VIEW_MOTION_PROPS}
-          startButtonText={appConfig.startButtonText}
-          onStartCall={start}
-        />
-      )}
-      {/* Session view */}
-      {isConnected && (
+      {/* Session view (auto-connect: doğrudan gösterilir) */}
+      {
         <MotionSessionView
           key="session-view"
           {...VIEW_MOTION_PROPS}
@@ -71,7 +69,7 @@ export function ViewController({ appConfig }: ViewControllerProps) {
           audioVisualizerWaveLineWidth={appConfig.audioVisualizerWaveLineWidth}
           className="fixed inset-0"
         />
-      )}
+      }
     </AnimatePresence>
   );
 }
