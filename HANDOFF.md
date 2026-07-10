@@ -30,10 +30,12 @@ worker onu **kalıcı `--mode rpc` subprocess** olarak sürer. Detay: `docs/pi-b
 - Referans client: `~/work/candan assistant/mate-mac/` (macOS).
 
 ## SIRADAKİ (revize öncelik)
-1. **`pi/` local scaffold** — AGENTS.md, personas/candan.md, skills/, settings.json.
-2. **`worker/pi_brain.py`** — livekit-agents LLM node, warm `pi --mode rpc` wrapper
-   (spawn@session-start, prompt→stream, abort@barge-in, follow_up@proactive). Önce tek persona, metinle.
-3. **Faz 2 test:** metinle uçtan uca (web chat → worker → pi rpc → cevap).
+1. ✅ **`pi/` local scaffold** — AGENTS.md, personas/candan.md, skills/, settings.json.
+2. ✅ **`worker/pi_brain.py`** — warm `pi --mode rpc` LLM adaptörü. Protokol runtime doğrulandı:
+   `message_update.assistantMessageEvent.text_delta` stream; `agent_settled` tur bitişi; abort@barge-in.
+   ⚠️ **Model:** global varsayılan `gpt-5.6-luna` Codex'te BOZUK ("Model not found"). Pin: `PI_MODEL=openai-codex/gpt-5.6-terra` (worker/.env). Alternatif: gpt-5.4/5.5/5.6-sol.
+   Test: `python worker/pi_brain.py smoke` (get_state) ve `... prompt "merhaba"` (metin) → PASS.
+3. **Faz 2 test:** metinle uçtan uca (web chat → worker → pi rpc → cevap) — worker'ı gerçek LiveKit odasında çalıştır (livekit-agents kurulumu + `python agent.py dev`). Bu RUNTIME testi KULLANICI yapar.
 4. **STT/TTS port:**
    - `worker/whisper_stt.py` ← `../candan assistant/hermes-livekit/adapter.py` ~**1399-1543**.
    - `worker/omnivoice_tts.py` ← `hermes-livekit/voice/tts.py` + OmniVoice etiket (adapter ~207-221).
