@@ -20,6 +20,7 @@ from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plug
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
+from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -35,6 +36,14 @@ PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
 SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.0") or 1.0)
 # Yapışkanlık: art arda kaç güvensiz pencereden sonra current unknown'a düşsün.
 SPEAKER_STICKY_MISSES = int(float(os.environ.get("SPEAKER_STICKY_MISSES", "5") or 5))
+
+# Paralel erken-wake dinleyici (opsiyonel, additive). Kapalıyken davranış AYNI.
+def _envflag(name: str, default: bool = False) -> bool:
+    return (os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on"))
+
+WAKE_STT_ENABLED = _envflag("WAKE_STT_ENABLED", False)
+WAKE_STT_WINDOW = float(os.environ.get("WAKE_STT_WINDOW", "1.5") or 1.5)
+WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 
 
 async def entrypoint(ctx: JobContext):
@@ -94,6 +103,26 @@ async def entrypoint(ctx: JobContext):
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
         tap.attach(ctx.room)
+
+    # Paralel erken-wake dinleyici (opsiyonel, default KAPALI). Açıksa mic track'e
+    # ayrı bir VAD+Whisper penceresi bağlar; "candan" duyulunca brain.wake_now() →
+    # çan HEMEN çalar (ana STT tüm cümleyi beklemeden). Ana wake/iki-adım akışını
+    # BOZMAZ (wake_now idempotent). Verimlilik: sadece UYURKEN transcribe eder.
+    wake_stt: WakeSTT | None = None
+    if WAKE_STT_ENABLED:
+        wake_stt = WakeSTT(
+            vad=silero.VAD.load(),  # ana session'dan ayrı, bağımsız stream
+            stt_host=STT_HOST,
+            stt_port=STT_PORT,
+            language=LANG,
+            wake_word=WAKE_WORD,
+            window=WAKE_STT_WINDOW,
+            on_wake=lambda text: brain.wake_now(text),  # idempotent → çift çan yok
+            # Sadece uyurken çalış: uyanıkken ana STT yeterli, çift-transcribe azalır.
+            active=lambda: not getattr(getattr(brain, "_wake", None), "awake", True),
+        )
+        wake_stt.attach(ctx.room)
+        ctx.add_shutdown_callback(wake_stt.aclose)
 
     # Wake durumunu web'e sinyalle: local participant attribute `candan.awake`.
     # NOT: transcript'i worker'da toggle ETME — session.output.set_transcription_enabled
