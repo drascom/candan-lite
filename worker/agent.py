@@ -95,17 +95,13 @@ async def entrypoint(ctx: JobContext):
     if tap is not None:
         tap.attach(ctx.room)
 
-    # Wake durumunu web'e sinyalle: local participant attribute `candan.awake` +
-    # transcript kapısı (uyurken oda'ya transcript YAYINLANMASIN, uyanınca açılsın).
+    # Wake durumunu web'e sinyalle: local participant attribute `candan.awake`.
+    # NOT: transcript'i worker'da toggle ETME — session.output.set_transcription_enabled
+    # TranscriptSynchronizer'ı detach edip agent metnini bozuyor. Uyurken kullanıcı
+    # metnini gizleme WEB tarafında `candan.awake` ile yapılır.
     def _apply_wake_state(awake: bool) -> None:
-        """Uyku/uyanık durumunu uygula: attribute yayını + transcript aç/kapa.
-        Sync bağlamdan (WakeGate geçişi / connect) güvenli çağrılır."""
+        """Uyku/uyanık durumunu web'e yayınla (attribute). Sync bağlamdan güvenli."""
         val = "true" if awake else "false"
-        try:
-            session.output.set_transcription_enabled(awake)
-        except Exception:  # noqa: BLE001 — sinyal hatası ana akışı bozmasın
-            logging.getLogger("worker.agent").warning(
-                "transcription toggle hata", exc_info=True)
         try:
             asyncio.create_task(
                 ctx.room.local_participant.set_attributes({"candan.awake": val}))
