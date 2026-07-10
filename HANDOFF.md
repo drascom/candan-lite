@@ -1,5 +1,45 @@
 # candan-lite — HANDOFF (2026-07-10)
 
+> ⚠️ **AŞAĞIDAKİ BÖLÜM GÜNCELDİR — önce bunu oku.** Altındaki eski bölümler tarihsel
+> (özellikle "Beyin = OpenAI-uyumlu /v1 + PIDEV_BASE_URL" İPTAL — pivot edildi).
+
+## 🟢 GÜNCEL DURUM (2026-07-10 session sonu) — hepsi çalışıyor, main'de push'lu
+
+**Repo:** github.com/drascom/candan-lite (PUBLIC). `web/` absorbe edildi. `memory/` gitignored (kişisel veri public'e girmez) + içinde nested audit-git.
+
+**Mimari (kilitli):**
+- **Beyin = `pi` CLI**, warm `--mode rpc` alt-süreci (HTTP /v1 DEĞİL). Codex subscription. Model pin: `PI_MODEL=openai-codex/gpt-5.6-terra` (global `gpt-5.6-luna` bozuk). thinking=minimal. `worker/pi_brain.py`. Detay: `docs/pi-brain-design.md`.
+- **Ses:** livekit-agents `AgentSession` — web → Whisper STT (wyoming .25:10300) → pi beyni → OmniVoice TTS (.25:8808, **24kHz**) → ses + barge-in.
+- **Speaker-ID:** campplus (sherpa-onnx), konuşarak oto-enroll (bilinmeyen ses→"adını söyler misin?"→onay→kaydet). **Enrollment ODA sesinden olmalı** (CLI mic yolu tanımayla uyuşmaz). Sticky (`SPEAKER_VAD_RMS`/`SPEAKER_STICKY_MISSES`). Kullanıcı=slug → persona `pi/personas/<user>.md` + session `<user>` + `MEM_USER`.
+- **Hafıza = PI-NATIVE (Hermes YOK):** `pi-hermes-memory` extension KALDIRILDI (`pi remove`). Kendi **lokal** extension'ımız `pi/extensions/mem/index.ts` (`memory_add`/`memory_search`, node:sqlite FTS5, per-user `memory/users/<user>/`, rol=policy.json). Worker `-e` ile SADECE kendi pi'sine yükler. Boot: profile.md+family.md enjeksiyon. Session-finalize (kapanışta 3-5 kalıcı not). Detay: `docs/hafiza-v2-plan.md` (⚠️ Hermes-çerçeveli, tarihsel) yerine gerçek = `pi/extensions/mem/`.
+
+**Wake word tasarımı (worker-tarafı):**
+- Wake word **"candan"**, akış: **tek başına "candan" → çan → sonra soru** (iki-adım). Konuşma penceresi 15s sessizlikte uyur. Uyurken sessiz (token yok). `WakeGate` PiBrain'de; `wake_match()` merkezi (izole/cümle ayrımlı **fuzzy** — izole yanlış-çevirileri "John Don/Can dan/Kandan" yakalar, cümlede sadece gerçek "candan").
+- **Wake durumu web'e:** `candan.awake` participant attribute. Web: uyurken kullanıcı transcript'ini GİZLER + uyan/uyu **çanı** (Web Audio, %100). Transcript'i worker'da toggle ETME (TranscriptSynchronizer bozuluyor — web'de gizle).
+- **Anlık wake:** `WAKE_STT` (VAD + kısa-pencere Whisper, ~200ms, SADECE uyurken) — erken çan. `wake_now()` idempotent.
+- **Env (worker/.env):** `WAKE_ENABLED=true WAKE_WORD=candan WAKE_WINDOW_SECONDS=15 WAKE_VARIANTS=candan,kandan,... WAKE_STT_ENABLED=true WAKE_STT_WINDOW=1.5`.
+
+**Web UI:** dark mode, LiveKit branding YOK, **auto-connect** (başlat/bitir butonu YOK), alt **debug durum satırı** (😴Uykuda/👂Dinliyorum/🧠Düşünüyorum/🗣️Konuşuyorum), waveform. **Kamera + ekran-paylaşımı butonları KALDI** (ileride görüntü/ekran-desteği — KULLANICI istedi, KALDIRMA).
+
+**.25 GPU:** Qwen fallback (vllm.service) **durduruldu+disable+silindi** (14.6GB GPU + 9GB disk açıldı). Whisper+OmniVoice sağlam.
+
+## Çalıştırma
+- Worker (Mac): `cd worker && .venv/bin/python agent.py dev` (venv kurulu; sherpa-onnx/soundfile/sounddevice/websockets dahil).
+- Web: `cd web && pnpm dev` → localhost:3000.
+- Worker RESTART sonrası: tarayıcı sekmesini TAM KAPAT → yeniden bağlan (mevcut odaya oto-dispatch olmaz).
+
+## 🔬 AÇIK İŞ: anlık wake için KWS "Jackie" (yeni session'da devam)
+- **Türkçe "candan" onnx-KWS ile yakalanMIYOR** (GigaSpeech İngilizce akustik model). Whisper-"candan" (WAKE_STT) çalışıyor ama izole-candan Whisper'da zayıf → fuzzy ile telafi.
+- **Fikir:** wake word'ü İngilizce **"Jackie"/"Hey Jackie"** yap → İngilizce KWS on-device anlık yakalar (Whisper'sız). Encode HAZIR, KWS mekanizması KANITLI (referans "forever" wav tetikliyor). Ama **OmniVoice sentetik İngilizcesi GigaSpeech'e uymuyor** → offline test geçersiz. **Karar GERÇEK insan sesiyle canlı testte verilecek.**
+- **SIRADAKI ADIM — kullanıcı kendi sesiyle çalıştırsın:**
+  `cd /Users/drascom/work/candan-lite/worker && .venv/bin/python /private/tmp/claude-501/-Users-drascom-work-candan-lite/1a2a38c8-7ee1-44d3-8585-79fe4db4f8cf/scratchpad/kws/live_mic_kws.py`
+  (level metre + kontrol kelimeleri: önce **"forever"** de → tetiklerse pipeline sağlam; sonra "Hey Jackie"/"Jackie". Gerekirse `--threshold 0.10 --score 4.0 --device 3`.)
+  NOT: scratchpad session'a özel — yeni session'da scratchpad yolu değişebilir; araç `scratchpad/kws/` altında, gerekirse yeniden üret. KWS modeli: `sherpa-onnx-kws-zipformer-gigaspeech-3.3M`.
+- **Karar:** Jackie gerçek sesle tutarlı yakalanırsa → KWS'i `wake_stt` yerine/yanına on-device wake olarak entegre et, wake word="Jackie". Tutmazsa Whisper-"candan"da kal.
+
+## Memory (index): delegation=Agent tool; kaldırmadan-önce-sor. Kişisel hafıza dosyaları `memory/` (gitignored, local).
+
+---
 Yeni session bununla devam eder. Özet: ağır **Hermes+plugin** yığını donduruldu;
 Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev agent**
 (OpenAI-uyumlu `/chat`), ses = **livekit-agents** üstünde ince worker.
