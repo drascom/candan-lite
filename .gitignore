@@ -27,6 +27,10 @@ worker/models/
 worker/data/
 *.onnx
 
+# HAFIZA — kişisel/aile verisi PUBLIC repo'ya ASLA girmez.
+# Audit için memory/ içinde ayrı, push edilmeyen nested git var.
+memory/
+
 # os / editor
 .DS_Store
 *.log
