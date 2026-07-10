@@ -12,19 +12,22 @@ Boot'ta aktif kullanıcı ve hafıza yolu sana açıkça verildi; o yolu kullan.
 `$MEM_USER` boşsa (guest) hafıza YOK — yazma, arama, dosya açma.
 
 ## Yazma
-- VARSAYILAN: özel. `memory/users/$MEM_USER/notes/YYYY-AA.md` dosyasına
-  `- [YYYY-MM-DD] <tek satırlık gerçek>` formatında APPEND et.
-- `memory/family.md`e YALNIZCA kullanıcı açıkça isterse ("aileye not et",
-  "herkes bilsin") yaz. Emin değilsen SOR. Kendi kararınla asla özel bilgiyi
-  ortak hafızaya taşıma.
-- Profil değişikliği (kalıcı tercih/gerçek): `memory/users/$MEM_USER/profile.md`
-  içindeki ilgili satırı güncelle; dosyayı 2 KB altında tut.
-- Başka kullanıcının dizinine ASLA yazma, dosyalarını OKUMA.
+Yazma için `memory_add` tool'unu kullan (elle grep/append/dosya-yazma YOK).
+- VARSAYILAN: özel. `memory_add({ text: "<tek satırlık gerçek>" })` → kullanıcının
+  kendi notlarına (private) yazar.
+- Aile ortak hafızası: YALNIZCA kullanıcı açıkça isterse ("aileye not et",
+  "herkes bilsin") `memory_add({ text, scope: "family" })`. Emin değilsen SOR.
+  Kendi kararınla asla özel bilgiyi ortak hafızaya taşıma.
+- Proje notu (yalnız yetişkin): `memory_add({ text, scope: "project:<ad>" })`.
+- Başka kullanıcının hafızasına yazamazsın; tool zaten kimliğine göre yazar.
 
 ## Arama
+Arama için `memory_search` tool'unu kullan.
 - Boot'ta yüklü olan (profil + aile) yetmezse:
-  `grep -ri "<anahtar>" memory/users/$MEM_USER/ memory/family.md memory/projects/`
-- Kısa cevap ver; dosya içeriğini olduğu gibi okuma, sesli yanıt için özetle.
+  `memory_search({ query: "<anahtar>", limit: 5 })`. Yalnız senin erişebildiğin
+  kapsamı (kendi private + family + [yetişkinsen] projeler) döner; Türkçe
+  diakritik-duyarsız (çocuk↔cocuk). Başka kullanıcının notu çıkmaz.
+- Kısa cevap ver; sonucu olduğu gibi okuma, sesli yanıt için özetle.
 
-<!-- Faz B'de grep/append satırları `tools/mem` komutlarıyla değişecek;
-     politika (default-private, sorma kuralı, izolasyon) aynen kalır. -->
+Politika (default-private, aile-yalnız-açık-istekte, izolasyon) tool'larda
+zorlanır; bu kurallara uy. `$MEM_USER` boşsa (guest) tool'lar "hafıza yok" döner.

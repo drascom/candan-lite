@@ -58,17 +58,29 @@ async def entrypoint(ctx: JobContext):
             tap = None
             store = None
 
+    # Beyin (warm pi). Hafıza Faz B: oturum kapanışında finalize() ile kalıcı
+    # maddeleri kaydettir (best-effort, kapanışı bloklamaz).
+    brain = PiBrain(
+        persona=PI_PERSONA,
+        speaker_state=speaker_state,
+        speaker_id=sp if speaker_state is not None else None,
+        speaker_store=store if speaker_state is not None else None,
+    )
+
+    async def _finalize_memory() -> None:
+        try:
+            await brain.finalize()
+        except Exception:  # noqa: BLE001 — kapanış hiçbir koşulda bloklanmaz
+            pass
+
+    ctx.add_shutdown_callback(_finalize_memory)
+
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
         # Faz 3.1: sesli oto-enrollment — bilinmeyen ses gelince PiBrain isim sorar,
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
-        llm=PiBrain(
-            persona=PI_PERSONA,
-            speaker_state=speaker_state,
-            speaker_id=sp if speaker_state is not None else None,
-            speaker_store=store if speaker_state is not None else None,
-        ),
+        llm=brain,
         tts=OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT),
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )

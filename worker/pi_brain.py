@@ -104,6 +104,12 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     skills = REPO_ROOT / PI_SKILLS_DIR
     if skills.exists():
         args += ["--skill", str(skills)]
+    # Hafıza Faz B: LOKAL pi memory extension (memory_add / memory_search tool'ları).
+    # Sadece worker'ın pi'sinde yüklenir (global DEĞİL). Guest'te de yüklenebilir —
+    # tool'lar MEM_USER boşsa kendini reddeder. Dosya yoksa graceful (Faz A davranışı).
+    mem_ext = REPO_ROOT / "pi" / "extensions" / "mem" / "index.ts"
+    if mem_ext.is_file():
+        args += ["-e", str(mem_ext)]
     args += ["--session-dir", PI_SESSION_DIR, "--session-id", session_id]
     return args
 
@@ -539,6 +545,39 @@ if _HAS_LIVEKIT:
         async def start(self) -> None:
             """Pre-warm: participant katılınca çağrılabilir (isteğe bağlı)."""
             await self._client.start()
+
+        async def finalize(self) -> None:
+            """Oturum kapanışı: pi'yı öldürmeden ÖNCE tek best-effort tur — kalıcı
+            maddeler varsa memory_add ile kaydettir. 30 sn timeout; kapanışı ASLA
+            bloklamaz, hata yutulur. Guest / süreç ölü / hafıza yok → hiçbir şey yapma."""
+            client = self._client
+            if client is None or not client.started or not client._mem_user:
+                return
+            prompt = (
+                "Oturum bitiyor. Bu konuşmadan hatırlanmaya değer kalıcı 3-5 madde "
+                "varsa memory_add ile kaydet; yoksa sadece 'yok' de. Sesli yanıt verme."
+            )
+            q: asyncio.Queue = asyncio.Queue()
+            try:
+                async with client._turn_lock:
+                    client._turn_q = q
+                    try:
+                        await client.send({"type": "prompt", "message": prompt})
+
+                        async def _drain() -> None:
+                            while True:
+                                obj = await q.get()
+                                if obj is None or obj.get("type") == "agent_settled":
+                                    break
+
+                        await asyncio.wait_for(_drain(), timeout=30.0)
+                    except Exception as e:  # noqa: BLE001 — kapanış bloklanmaz
+                        logger.info("finalize atlandı/timeout: %r", e)
+                        client._write({"type": "abort"})
+                    finally:
+                        client._turn_q = None
+            except Exception:  # noqa: BLE001
+                pass
 
         def chat(
             self,
