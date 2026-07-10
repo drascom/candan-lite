@@ -38,6 +38,16 @@ PI_SESSION_DIR = os.environ.get("PI_SESSION_DIR", "sessions")
 PI_AGENTS_MD = os.environ.get("PI_AGENTS_MD", "pi/AGENTS.md")
 
 
+def _slug(name: str) -> str:
+    """İsmi dosya/oturum-güvenli slug'a çevir (persona dosyası + session-id için)."""
+    s = "".join(c if (c.isalnum() or c in "-_") else "-" for c in (name or "").strip().lower())
+    return "-".join(p for p in s.split("-") if p) or ""
+
+
+def _persona_exists(persona: str) -> bool:
+    return (REPO_ROOT / PI_PERSONA_DIR / f"{persona}.md").is_file()
+
+
 def _build_pi_args(persona: str, session_id: str) -> list[str]:
     """pi --mode rpc bayrakları (docs/pi-brain-design.md)."""
     args = [PI_BIN, "--mode", "rpc", "--approve", "--model", PI_MODEL]
@@ -226,9 +236,12 @@ if _HAS_LIVEKIT:
             super().__init__(
                 pi_llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options
             )
-            self._client = pi_llm._client
+            self._brain = pi_llm
+            self._client = pi_llm._client  # _run başında güncel speaker'a göre çözülür
 
         async def _run(self) -> None:
+            # Tur başında güncel konuşmacıyı çöz; kişi değiştiyse warm süreci swap et.
+            self._client = await self._brain._current_client()
             await self._client.start()
             text = _last_user_text(self._chat_ctx)
             if not text:
@@ -302,11 +315,50 @@ if _HAS_LIVEKIT:
             *,
             persona: str = PI_DEFAULT_PERSONA,
             session_id: Optional[str] = None,
+            speaker_state: Any = None,
         ):
             super().__init__()
+            self._default_persona = persona
             self._persona = persona
             self._session_id = session_id or persona
-            self._client = PiRpcClient(persona, self._session_id)
+            # speaker_state: `.current` alanı olan paylaşılan durum (None = kapalı).
+            # Kapalıyken davranış Faz 2 ile AYNI: tek persona, tek warm süreç.
+            self._speaker_state = speaker_state
+            self._client = PiRpcClient(self._persona, self._session_id)
+            self._swap_lock = asyncio.Lock()
+
+        def _target(self) -> tuple[str, str]:
+            """Güncel konuşmacıya göre (persona, session_id). Tanınan isim →
+            persona `<isim>.md` (yoksa default) + kişiye-özel session `<isim>`.
+            Unknown/kapalı → default persona + default session."""
+            name = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            slug = _slug(name) if name else ""
+            if not slug:
+                return self._default_persona, self._default_persona
+            persona = slug if _persona_exists(slug) else self._default_persona
+            return persona, slug  # session hep kişiye özel (memory ayrışsın)
+
+        async def _current_client(self) -> "PiRpcClient":
+            """Turluk çözüm: konuşmacı değiştiyse warm pi sürecini swap et; aynıysa
+            mevcut warm süreci koru (her tur spawn etme)."""
+            if self._speaker_state is None:
+                return self._client
+            persona, session_id = self._target()
+            if persona == self._persona and session_id == self._session_id:
+                return self._client  # aynı kişi sürüyor → warm kalsın
+            async with self._swap_lock:
+                if persona == self._persona and session_id == self._session_id:
+                    return self._client
+                logger.info(
+                    "pi swap: %s/%s → %s/%s (konuşmacı değişti)",
+                    self._persona, self._session_id, persona, session_id,
+                )
+                old = self._client
+                self._persona, self._session_id = persona, session_id
+                self._client = PiRpcClient(persona, session_id)
+                await self._client.start()
+                await old.stop()
+                return self._client
 
         async def start(self) -> None:
             """Pre-warm: participant katılınca çağrılabilir (isteğe bağlı)."""

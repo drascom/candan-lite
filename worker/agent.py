@@ -16,6 +16,8 @@ from livekit.plugins import silero
 from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
+from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
+from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -28,15 +30,34 @@ LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
 PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
+SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.0") or 1.0)
 
 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
 
+    # --- Faz 3: speaker-ID (opsiyonel, additive) ---
+    # SPEAKER_ID_ENABLED kapalı / model yok / sherpa-onnx yok ise sp=None kalır ve
+    # davranış Faz 2 ile AYNI olur (tek persona candan, tek warm süreç).
+    sp = build_speaker_id()
+    speaker_state: SpeakerState | None = None
+    tap: SpeakerTap | None = None
+    if sp is not None:
+        try:
+            store = SpeakerStore()
+            sp.reload(await store.all_speaker_embeddings())  # enrolled kişileri yükle
+            speaker_state = SpeakerState()
+            tap = SpeakerTap(sp, speaker_state, min_seconds=SPEAKER_MIN_S)
+        except Exception as e:  # noqa: BLE001 — speaker-ID hiç kurulamazsa Faz 2'ye düş
+            import logging
+            logging.getLogger("worker.agent").warning("speaker-ID kurulamadı: %r", e)
+            speaker_state = None
+            tap = None
+
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
-        llm=PiBrain(persona=PI_PERSONA),
+        llm=PiBrain(persona=PI_PERSONA, speaker_state=speaker_state),
         tts=OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT),
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )
@@ -45,6 +66,9 @@ async def entrypoint(ctx: JobContext):
         agent=Agent(instructions="Sen Candan'sın. Türkçe, kısa ve yardımcı konuş."),
         room=ctx.room,
     )
+    # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
+    if tap is not None:
+        tap.attach(ctx.room)
     await session.generate_reply(instructions="Kullanıcıyı kısaca selamla.")
 
 

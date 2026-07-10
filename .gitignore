@@ -22,6 +22,11 @@ dist/
 # pi sessions (per-user memory, local)
 sessions/
 
+# speaker-ID: model (28MB) + enrolled DB — git'e girmez
+worker/models/
+worker/data/
+*.onnx
+
 # os / editor
 .DS_Store
 *.log
