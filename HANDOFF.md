@@ -62,6 +62,54 @@ bağlanmalı → konuşup doğrulayacak: turlar hızlandı mı, 40sn takılma te
 takılmaları azalttığı DOĞRUDAN kanıtlanmadı; kanıtlanan şey onlara yol açan tool bacaklarının
 sıfırlandığı.
 
+## 🧹 TAM SIFIRLAMA (2026-07-12 gece) — temiz sayfadan test
+
+Kullanıcı isteğiyle HER ŞEY silindi (yedek: scratchpad `FULL-RESET-BACKUP-231914/`):
+`worker/data/speakers.db` (ses kayıtları), `sessions/*.jsonl` (12 dosya), `memory/users/*`
+(profil dahil), FTS index. `family.md` iskelete döndü. **`policy.json` = `{}`**.
+Sebep: bench worker'ları gerçek hafızayı test notlarıyla kirletmişti ("Bench testi yapıldı" ×3 vb.);
+kullanıcı temiz sayfadan yeniden test etmek istedi.
+
+**İlk konuşmada beklenen akış:** tanımıyor → "adını söyler misin?" → isim → **policy BOŞ olduğu için
+`adult`** (ev sahibi) → hafıza açık.
+
+## 🧠 HAFIZA DÜZELTMELERİ (2026-07-12, `5d40a8e`)
+
+**Sorun 1 — çift kayıt:** "ailece yemek yiyeceğiz, not al" → Candan **private'a** yazdı. Kullanıcı
+"aile notuna yazmadın" deyince family'ye de yazdı **ama private'daki yanlış kaydı silmedi** → not
+İKİ YERDE kaldı. Ayrıca aynı not defalarca ekleniyordu (dedup yoktu).
+
+**Fix:** `memory_add`'e opsiyonel `replaces` alanı (yeni tool AÇILMADI):
+- açık düzeltme → eski kayıt silinir, yenisi hedefe yazılır
+- **örtük taşıma** → aynı not başka kapsamdaysa KOPYALANMAZ, **TAŞINIR**
+- dedup: `dkey()` normalizasyonu (diakritik strip + lowercase + `ı`/`i` katlaması + alfanumerik dışı
+  sadeleştirme). LLM/embedding YOK. Aynı kapsamda varsa "Zaten kayıtlı" döner.
+- `SKILL.md`: **ailevi içerikte SESSİZCE private'a yazma → SOR** ("aile notuna mı, sana özel mi?")
+  + düzeltmede yeni kayıt ekleme, taşı.
+
+**Sorun 2 — enroll policy'ye YAZMIYORDU (kritik):** oto-enroll kişiyi `speakers.db`'ye kaydediyor ama
+`policy.json`'a eklemiyordu → **yeni tanışılan herkes `guest` → hafıza YAZAMIYOR**. Bugünkü
+"not alamıyorum" hatasının asıl mekanizması buydu.
+
+**Fix:** `_policy_set()` (flock + tempfile + `os.replace`, atomik). Kural (kullanıcı kararı):
+**policy BOŞSA ilk tanışan → `adult`** (ev sahibi); doluysa **sonrakiler → `guest`**
+(hafıza YOK, aile hafızası görünmez — kullanıcı bunu bilerek seçti: misafir mahremiyeti + aile gizliliği).
+Benzerlik kapısı mevcut kişiye merge ettiğinde policy'ye yeni girdi AÇILMAZ.
+**Rol yükseltme ("X'i yetişkin yap") TOOL DEĞİL, worker'da scripted komut** — yetki LLM'in eline
+verilmez (prompt-injection ile atlatılamaz). Aktör = **speaker-ID ile çözülen konuşmacı** (iddiası
+değil); guest reddedilir, istek pi'ya bile gitmez. Test: guest'in 3 denemesi de REDDEDİLDİ, policy sabit.
+
+Roller (mem/index.ts `canSee`): `adult` = private+family+project · `child` = private+family ·
+**`guest` = HİÇ hafıza yok**.
+
+## 🔌 KARAR: paket/extension KURMA YOK (şimdilik)
+Kullanıcı: sistem ileride **kendi kendine** extension/tool/skill kurabilsin (Hermes gibi) — o yüzden
+şimdi elle kurmayalım. `web_search` lokal extension işi **İPTAL** (allowlist'teki `web_search` ölü
+isim olarak duruyor, zararsız; kurulunca canlanır).
+⚠️ Orkestratörün şartı: self-install olacaksa **insan onaylı** olmalı (Candan "şu paketi kurmam
+lazım" TEKLİF etsin, kullanıcı ONAYLASIN). Otomatik kurulum = tedarik zinciri riski; bugün pi'nin
+kendi built-in tool'larının 40sn gecikme + oto-onaylı `bash`/`edit` güvenlik açığı yarattığını ölçtük.
+
 ## ✅ CANLI TEST GEÇTİ (2026-07-12) — fix'ler doğrulandı
 
 | | Fix öncesi | Fix sonrası (canlı) |
