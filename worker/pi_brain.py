@@ -62,6 +62,28 @@ def _envflag(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
+# Tool politikası (gecikme + güvenlik). pi bir KODLAMA ajanı: read/bash/edit/write/
+# grep/find/ls built-in'leri açık ve oto-onaylı (--approve). Sesli asistanda bunların
+# neredeyse tamamı gereksiz; her tool çağrısı fazladan bir model isteği bacağı =
+# TTFT'yi katlıyor + ara sıra 30-100s takılma. Ayrıca asistanın repo'da oto-onaylı
+# bash/edit çalıştırması GÜVENLİK riski (ölçümde bash ile dosyaya gerçekten yazdı).
+#
+# ÖLÇÜLDÜ (bench, tool_execution_start olayları sayılarak):
+#   - `-nbt` TEK BAŞINA YETMİYOR: built-in'ler (read/find/ls) YİNE çağrıldı.
+#   - Built-in'leri gerçekten kesen şey ALLOWLIST (`-t`). Allowlist ile: built-in
+#     çağrısı SIFIR, memory_add/memory_search + web_search çalışmaya devam ediyor.
+# Bu yüzden DEFAULT = allowlist (+ `-nbt` savunma katmanı olarak).
+#
+#   PI_TOOLS_ALLOWLIST (DEFAULT dolu) → `-t a,b,c`: built-in/extension/custom genelinde
+#     allowlist; listede olmayan HİÇBİR tool çağrılamaz. Boşaltmak (="") → allowlist yok.
+#   PI_NO_BUILTIN_TOOLS=true (DEFAULT) → `-nbt`: ek savunma katmanı (tek başına yetersiz).
+# İkisini de kapatmak → pi'nın kendi varsayılanı (eski davranış; geri dönüş kolay).
+PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
+PI_TOOLS_ALLOWLIST = os.environ.get(
+    "PI_TOOLS_ALLOWLIST", "memory_add,memory_search,web_search"
+)
+
+
 # Wake word ("konuşma penceresi") — sistem sürekli açık; agent normalde uyur,
 # WAKE_WORD duyunca uyanır, WAKE_WINDOW_SECONDS sessizlikten sonra tekrar uyur.
 # WAKE_ENABLED=false → gate yok (her tur işlenir, mevcut davranış).
@@ -276,6 +298,14 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     # Gecikme: thinking seviyesi (minimal en hızlı). Boş/"default" → pi varsayılanı.
     if PI_THINKING and PI_THINKING.lower() != "default":
         args += ["--thinking", PI_THINKING]
+    # Tool politikası: built-in'leri (read/edit/bash/grep/web_search…) kapat; lokal mem
+    # extension'ı (memory_add/memory_search) yaşasın. İsteğe bağlı allowlist ile tek tek
+    # tool geri açılabilir (ör. web_search).
+    if PI_NO_BUILTIN_TOOLS:
+        args += ["--no-builtin-tools"]
+    allowlist = ",".join(t.strip() for t in PI_TOOLS_ALLOWLIST.split(",") if t.strip())
+    if allowlist:
+        args += ["--tools", allowlist]
     # Ortak taban + kişilik overlay'i sistem prompt'una ekle.
     agents_md = REPO_ROOT / PI_AGENTS_MD
     if agents_md.is_file():
