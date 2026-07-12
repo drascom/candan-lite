@@ -153,6 +153,10 @@ class SpeakerID:
     def id_for(self, name: str | None) -> int | None:
         return self._name_to_id.get(name) if name else None
 
+    def names(self) -> list[str]:
+        """Kayıtlı kişi isimleri (rol komutunda ismi eşlemek için)."""
+        return list(self._names)
+
     def reload(self, speakers: list[dict]) -> None:
         """DB'deki kişileri belleğe al: örnek embedding'leri normalize et, ortala,
         normalize et = centroid. model_id/dim uyuşmayanı atla (tutarlılık kilidi)."""

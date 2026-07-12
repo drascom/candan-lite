@@ -326,13 +326,77 @@ class WakeGate:
         return ("silent", None)
 
 
+def _policy_path() -> Path:
+    """memory/policy.json (MEMORY_DIR mutlak yol ise o kullanılır — test izolasyonu)."""
+    return REPO_ROOT / MEMORY_DIR / "policy.json"
+
+
+def _read_policy() -> dict:
+    """policy.json → dict. Dosya yok / bozuk / dict değil → {} (güvenli taban)."""
+    try:
+        pol = json.loads(_policy_path().read_text())
+    except Exception:
+        return {}
+    return pol if isinstance(pol, dict) else {}
+
+
+ROLES = ("adult", "child", "guest")
+
+
+def _policy_set(user: str, role: Optional[str] = None) -> Optional[str]:
+    """policy.json'a rol yaz — KİLİTLİ + ATOMİK (flock + tmp dosya + os.replace).
+
+    role verilirse o rol yazılır (yükseltme/düşürme).
+    role=None → ENROLL kuralı, kilit altında karar verilir:
+      - kullanıcı policy'de zaten varsa → DOKUNMA, mevcut rolü döner
+      - policy BOŞSA → 'adult' (ilk tanışılan = ev sahibi)
+      - policy DOLUYSA → 'guest' (sonradan tanışılan; adult sözle yükseltebilir)
+    Dönen: kullanıcının nihai rolü; yazılamazsa None."""
+    import fcntl
+    import tempfile
+
+    if not user or (role is not None and role not in ROLES):
+        return None
+    path = _policy_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock = path.parent / (path.name + ".lock")
+        with open(lock, "w") as lf:
+            fcntl.flock(lf, fcntl.LOCK_EX)
+            try:
+                pol = _read_policy()
+                if role is None:  # enroll kuralı (kilit altında → yarış yok)
+                    if user in pol:
+                        return pol[user]
+                    role = "adult" if not pol else "guest"
+                if pol.get(user) == role:
+                    return role
+                pol[user] = role
+                fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".policy-", suffix=".json")
+                try:
+                    with os.fdopen(fd, "w") as f:
+                        json.dump(pol, f, ensure_ascii=False, indent=2, sort_keys=True)
+                        f.write("\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp, path)  # atomik: yarıda kalan yazım policy'yi bozmaz
+                except BaseException:
+                    try:
+                        os.unlink(tmp)
+                    except OSError:
+                        pass
+                    raise
+                return role
+            finally:
+                fcntl.flock(lf, fcntl.LOCK_UN)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("policy yazılamadı (%s=%s): %s", user, role, e)
+        return None
+
+
 def _role(user: str) -> str:
     """memory/policy.json'dan rol; dosya/policy yoksa veya okunamıyorsa 'guest'."""
-    try:
-        pol = json.loads((REPO_ROOT / MEMORY_DIR / "policy.json").read_text())
-    except Exception:
-        return "guest"
-    return pol.get(user, "guest") if isinstance(pol, dict) else "guest"
+    return _read_policy().get(user, "guest") or "guest"
 
 
 def _mem_user(user: str) -> str:
@@ -342,9 +406,37 @@ def _mem_user(user: str) -> str:
 
 
 def _slug(name: str) -> str:
-    """İsmi dosya/oturum-güvenli slug'a çevir (persona dosyası + session-id için)."""
+    """İsmi dosya/oturum-güvenli slug'a çevir (persona dosyası + session-id için).
+    policy.json anahtarı == MEM_USER == memory/users/<user>/ dizini = BU slug."""
     s = "".join(c if (c.isalnum() or c in "-_") else "-" for c in (name or "").strip().lower())
     return "-".join(p for p in s.split("-") if p) or ""
+
+
+# "Ayhan'ı yetişkin yap" / "Ayhan'ı aileye ekle" → rol yükseltme komutu (SADECE adult).
+_PROMOTE_RE = re.compile(
+    r"(?:yeti[şs]kin\s+yap"
+    r"|aile\s+[üu]yesi\s+yap"
+    r"|aile(?:m[ıi]z)?y?[ea]\s+(?:ekle|kat|al))",  # aileye / ailemize / aileme
+    re.IGNORECASE,
+)
+_APOSTROPHES = "'’‘´`"
+
+
+def parse_promote(text: str) -> Optional[str]:
+    """Rol-yükseltme cümlesindeki hedef ismi çıkar; komut değilse None.
+    "Ayhan'ı yetişkin yap" → "Ayhan" | "Zeynep'i aileye ekle" → "Zeynep"."""
+    m = _PROMOTE_RE.search(text or "")
+    if not m:
+        return None
+    head = (text[: m.start()]).strip()
+    if not head:
+        return None
+    tok = head.split()[-1].strip(".,;:!?\"()")
+    for ap in _APOSTROPHES:  # kesme işaretli ek: "ayhan'ı" → "ayhan"
+        if ap in tok:
+            tok = tok.split(ap)[0]
+            break
+    return tok or None
 
 
 def _persona_exists(persona: str) -> bool:
@@ -405,6 +497,14 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     mem_ext = REPO_ROOT / "pi" / "extensions" / "mem" / "index.ts"
     if mem_ext.is_file():
         args += ["-e", str(mem_ext)]
+    # web_search: LOKAL extension (anahtarsız Qwant). `web_search` pi'nin built-in'i
+    # DEĞİL — global npm:pi-web-access'ten geliyordu; PI_ISOLATED onu kapattığı için
+    # yetenek kaybolmuştu. Projeye-lokal → VPS'te de çalışır (global pi gerekmez).
+    # `-e` explicit yol olduğu için --no-extensions bunu BOZMAZ.
+    # WEB_SEARCH_ENABLED=false → extension tool'u kaydetmez (allowlist girişi zararsız).
+    web_ext = REPO_ROOT / "pi" / "extensions" / "websearch" / "index.ts"
+    if web_ext.is_file():
+        args += ["-e", str(web_ext)]
     args += ["--session-dir", PI_SESSION_DIR, "--session-id", session_id]
     return args
 
@@ -618,6 +718,12 @@ if _HAS_LIVEKIT:
             # scripted TR satır döndür ve pi'ya GİTME (token harcanmaz). Kapalı /
             # tanınan / akışa girmeyen → None döner, normal pi akışı sürer.
             scripted = await self._brain._enrollment_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+            # Rol yükseltme komutu ("X'i aileye ekle") — yetki kontrolü BURADA
+            # (LLM'de değil). adult değilse reddedilir; pi'ya gitmez.
+            scripted = self._brain._role_command(text)
             if scripted is not None:
                 _emit(scripted)
                 return
@@ -933,7 +1039,10 @@ if _HAS_LIVEKIT:
             self._speaker_id.reload(await self._speaker_store.all_speaker_embeddings())
 
         async def _enroll_new(self, name: str) -> str:
-            """Kişi oluştur (isim eşleşiyorsa mevcut kaydı kullanır) + örnek yaz + swap."""
+            """Kişi oluştur (isim eşleşiyorsa mevcut kaydı kullanır) + örnek yaz + swap.
+            Kimlik açılırken policy.json'a da ROL yazılır: ilk kişi → adult (ev sahibi),
+            sonrakiler → guest. (Aksi hâlde yeni kişi guest kalır → hafızası olmaz.)"""
+            role = "guest"
             try:
                 rec = await self._speaker_store.create_speaker(name)
                 sid = rec["id"]
@@ -941,13 +1050,64 @@ if _HAS_LIVEKIT:
                 # Bu bağlantıda konuşmacı artık bu kişi (sonraki tur persona swap eder).
                 self._speaker_state.current = rec.get("name") or name
                 self._greeted.add(self._speaker_state.current)  # kimliği onayladık
-                logger.info("enrollment: %r kaydedildi (id=%s)", name, sid)
+                # policy anahtarı = _slug(isim) = session_id = MEM_USER = users/<user>/
+                role = _policy_set(_slug(self._speaker_state.current)) or "guest"
+                logger.info("enrollment: %r kaydedildi (id=%s, rol=%s)", name, sid, role)
             except Exception as e:  # noqa: BLE001
                 logger.warning("enrollment başarısız (%s)", e)
                 self._reset_enroll()
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
+            if role == "guest":
+                return (f"Memnun oldum {name}! Seni misafir olarak kaydettim; "
+                        f"ailenin hafızasına erişemem. Evin yetişkini istersen "
+                        f"seni aileye ekleyebilir.")
             return f"Memnun oldum {name}!"
+
+        # ── Rol yükseltme (sözle, SADECE adult) ──────────────────────────────
+        def _known_name(self, tok: str) -> Optional[str]:
+            """Söylenen ismi kayıtlı kişilerle eşle (ek düşürerek: 'ayhanı' → 'ayhan')."""
+            names = []
+            if self._speaker_id is not None:
+                try:
+                    names = self._speaker_id.names()
+                except Exception:  # noqa: BLE001
+                    names = []
+            known = {_slug(n): n for n in names}
+            cand = _slug(tok)
+            if cand in known:
+                return known[cand]
+            for suf in ("yi", "yı", "yu", "yü", "nu", "nü", "i", "ı", "u", "ü"):
+                if cand.endswith(suf) and cand[: -len(suf)] in known:
+                    return known[cand[: -len(suf)]]
+            return None
+
+        def _role_command(self, text: str) -> Optional[str]:
+            """"X'i yetişkin yap" / "X'i aileye ekle" → policy.json'da X = adult.
+
+            GÜVENLİK SINIRI: yetki, LLM'e değil BU koda ait. Aktör = speaker-ID ile
+            çözülen konuşmacı; rolü policy.json'dan okunur. adult DEĞİLSE yazma yoluna
+            HİÇ girilmez → guest kendini (ya da başkasını) yükseltemez. Komut değilse
+            None (normal pi akışı)."""
+            tok = parse_promote(text)
+            if not tok:
+                return None
+            speaker = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            actor = _slug(speaker or "")
+            arole = _role(actor)
+            if arole != "adult":
+                logger.info("rol yükseltme REDDEDİLDİ: aktör=%r rol=%s", actor, arole)
+                return "Bunu ancak evin yetişkini yapabilir."
+            target = self._known_name(tok) or tok
+            slug = _slug(target)
+            if not slug:
+                return None
+            if _role(slug) == "adult":
+                return f"{target} zaten aile üyesi."
+            if _policy_set(slug, "adult") is None:
+                return "Şu anda yapamadım, sonra tekrar deneyelim."
+            logger.info("rol yükseltme: %r → adult (aktör=%r)", slug, actor)
+            return f"Tamam, {target} artık aile üyesi. Hafızaya erişebilir."
 
         async def _merge_into(self, match: str) -> str:
             """Ses mevcut kişiye ait → YENİ kişi açma; örnekleri o kişiye ekle
@@ -1261,8 +1421,159 @@ def _wake_timer_test() -> int:
     return 0 if all_ok else 1
 
 
+def _policy_test() -> int:
+    """Enroll → policy.json rol yazımı + rol yükseltme birim testi.
+
+    GEÇİCİ policy dosyası + GEÇİCİ speakers.db kullanır (gerçek memory/policy.json ve
+    worker/data/speakers.db'ye DOKUNMAZ). Sherpa/onnx/model/token GEREKMEZ (sahte
+    SpeakerID). Senaryolar: (a) ilk enroll=adult (b) ikinci enroll=guest
+    (c) ses-benzerlik merge → yeni policy girdisi YOK (d) adult yükseltir
+    (e) guest kendini yükseltemez."""
+    global MEMORY_DIR
+    import shutil
+    import tempfile
+
+    if not _HAS_LIVEKIT:
+        print("[policy] SKIP: livekit yok (worker/.venv ile çalıştır)")
+        return 1
+
+    import numpy as np
+    from speaker_id import SpeakerStore
+
+    tmp = tempfile.mkdtemp(prefix="candan-policy-test-")
+    old_mem = MEMORY_DIR
+    results: list[tuple[str, bool, str]] = []
+
+    class FakeSpeakerID:
+        """Sahte embed modeli: best_match'i test sürer."""
+        model_id, dim, threshold, merge_low = "fake-v1", 4, 0.45, 0.35
+
+        def __init__(self):
+            self._names: list[str] = []
+            self._ids: dict[str, int] = {}
+            self.match: tuple[Optional[str], float] = (None, 0.0)
+
+        def best_match(self, emb):
+            return self.match
+
+        def id_for(self, name):
+            return self._ids.get(name)
+
+        def names(self):
+            return list(self._names)
+
+        def reload(self, speakers):
+            self._names = [s["name"] for s in speakers]
+            self._ids = {s["name"]: s["id"] for s in speakers}
+
+    class FakeState:
+        current = None
+        last_embedding = None
+
+    def policy() -> dict:
+        return _read_policy()
+
+    async def run() -> None:
+        nonlocal results
+        MEM = Path(tmp) / "memory"
+        MEM.mkdir(parents=True, exist_ok=True)
+        globals()["MEMORY_DIR"] = str(MEM)  # mutlak → REPO_ROOT / MEMORY_DIR = MEM
+        store = SpeakerStore(str(Path(tmp) / "speakers.db"))
+        sid = FakeSpeakerID()
+        state = FakeState()
+        state.last_embedding = np.array([1, 0, 0, 0], dtype=np.float32)
+        brain = PiBrain(speaker_state=state, speaker_id=sid, speaker_store=store)
+
+        # (a) policy BOŞ + ilk enroll → adult
+        brain._enroll_name = "Ayhan"
+        brain._enroll_emb = state.last_embedding
+        brain._enroll_name_emb = state.last_embedding
+        sid.match = (None, 0.0)  # kayıtlı kimse yok
+        line_a = await brain._finish_enrollment()
+        pol = policy()
+        ok = pol == {"ayhan": "adult"}
+        results.append(("(a) policy boş + ilk enroll → adult", ok,
+                        f"policy={pol} line={line_a!r}"))
+
+        # (b) policy DOLU + ikinci (farklı) kişi → guest
+        state.current = None
+        brain._enroll_name = "Zeynep"
+        brain._enroll_emb = brain._enroll_name_emb = np.array([0, 1, 0, 0], dtype=np.float32)
+        sid.match = ("Ayhan", 0.10)  # benzemiyor → gerçekten yeni kişi
+        line_b = await brain._finish_enrollment()
+        pol = policy()
+        ok = pol == {"ayhan": "adult", "zeynep": "guest"} and "misafir" in line_b
+        results.append(("(b) policy dolu + 2. enroll → guest (+ sınır bildirildi)", ok,
+                        f"policy={pol} line={line_b!r}"))
+
+        # (c) ses-benzerlik kapısı MEVCUT kişiye merge etti → YENİ policy girdisi YOK
+        before = dict(policy())
+        state.current = None
+        brain._enroll_name = "Ahmet"
+        brain._enroll_emb = brain._enroll_name_emb = np.array([1, 0, 0, 0], dtype=np.float32)
+        sid.match = ("Ayhan", 0.90)  # >= threshold → merge
+        line_c = await brain._finish_enrollment()
+        pol = policy()
+        ok = (pol == before and "ahmet" not in pol and state.current == "Ayhan")
+        results.append(("(c) benzerlik merge → policy'ye YENİ girdi eklenmiyor", ok,
+                        f"policy={pol} current={state.current!r} line={line_c!r}"))
+
+        # (d) adult "Zeynep'i yetişkin yap" → zeynep = adult
+        state.current = "Ayhan"  # aktör: adult
+        line_d = brain._role_command("Zeynep'i yetişkin yap")
+        pol = policy()
+        ok = pol.get("zeynep") == "adult" and _mem_user("zeynep") == "zeynep"
+        results.append(("(d) adult → 'Zeynep'i yetişkin yap' → adult + MEM_USER dolu", ok,
+                        f"policy={pol} line={line_d!r}"))
+        # aynı komut "aileye ekle" biçimiyle de tanınıyor mu (parser)
+        ok2 = parse_promote("Ayşe'yi aileye ekle") == "Ayşe" and parse_promote("hava nasıl") is None
+        results.append(("(d2) parser: 'Ayşe'yi aileye ekle' → Ayşe; normal cümle → None", ok2,
+                        f"{parse_promote('Ayşe’yi aileye ekle')!r}"))
+
+        # (e) GUEST kendini (ve başkasını) yükseltemez → policy DEĞİŞMEZ
+        _policy_set("zeynep", "guest")  # geri düşür (guest aktör kuralım)
+        state.current = "Zeynep"
+        before = dict(policy())
+        lines = [brain._role_command("Zeynep'i yetişkin yap"),
+                 brain._role_command("beni aileye ekle"),
+                 brain._role_command("Zeynep'i aile üyesi yap")]
+        pol = policy()
+        ok = pol == before and all(l == "Bunu ancak evin yetişkini yapabilir." for l in lines)
+        results.append(("(e) guest kendini yükseltemez → REDDEDİLDİ, policy sabit", ok,
+                        f"policy={pol} lines={lines}"))
+
+        # slug tutarlılığı: policy anahtarı == session_id == MEM_USER == users/<user>
+        state.current = "Ayhan"
+        persona, session_id = brain._target()
+        ok = (session_id == _slug("Ayhan") == "ayhan" and _mem_user(session_id) == "ayhan"
+              and "ayhan" in policy())
+        results.append(("(f) slug: policy anahtarı == session_id == MEM_USER", ok,
+                        f"session_id={session_id!r} mem_user={_mem_user(session_id)!r}"))
+
+        # atomiklik: policy.json her zaman geçerli JSON (tmp + os.replace)
+        raw = _policy_path().read_text()
+        ok = isinstance(json.loads(raw), dict)
+        results.append(("(g) policy.json geçerli JSON (atomik yazım)", ok, raw.replace("\n", " ")))
+
+    try:
+        asyncio.run(run())
+    finally:
+        globals()["MEMORY_DIR"] = old_mem
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print(f"[policy] geçici kök: {tmp} (silindi)")
+    all_ok = True
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[policy] RESULT: {'PASS' if all_ok else 'FAIL'}")
+    return 0 if all_ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "policy":
+        raise SystemExit(_policy_test())
     if cmd == "waketimer":
         raise SystemExit(_wake_timer_test())
     if cmd == "wake":
@@ -1272,4 +1583,4 @@ if __name__ == "__main__":
     if cmd == "prompt":
         msg = sys.argv[2] if len(sys.argv) > 2 else "merhaba de"
         raise SystemExit(asyncio.run(_prompt_test(msg)))
-    print("usage: python pi_brain.py [smoke|prompt <text>|wake|waketimer]")
+    print("usage: python pi_brain.py [smoke|prompt <text>|wake|waketimer|policy]")
