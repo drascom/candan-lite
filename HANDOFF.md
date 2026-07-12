@@ -62,6 +62,32 @@ bağlanmalı → konuşup doğrulayacak: turlar hızlandı mı, 40sn takılma te
 takılmaları azalttığı DOĞRUDAN kanıtlanmadı; kanıtlanan şey onlara yol açan tool bacaklarının
 sıfırlandığı.
 
+## 🔌 BAĞLANTI YARIŞI ÇÖZÜLDÜ (2026-07-12, `da05992`) — explicit dispatch
+
+**Sorun:** "bazen bağlanıyor, bazen bağlanmıyor / agent odaya giremiyor" — **sessiz** başarısızlık,
+worker logda sapasağlam "registered worker" yazıyor, hata YOK, sadece iş gelmiyor.
+
+**Kök sebep:** worker `agent_name`'siz kaydoluyordu → LiveKit **otomatik dispatch** modu.
+Otomatik dispatch **SADECE oda OLUŞTURULURKEN** çalışır. Oda adı SABİT (`candan-lite-dev`) olduğu için:
+- tarayıcı **açıkken** worker restart edilirse → oda LiveKit'te HÂLÂ YAŞIYOR → dispatch anı geçmiş →
+  yeni worker odaya **GİREMEZ**.
+- tarayıcı kapanıp oda ölürse → yeniden bağlanınca oda sıfırdan doğar → dispatch tetiklenir → çalışır.
+Yarışı belirleyen tek şey: "restart anında oda ayakta mıydı".
+(HANDOFF'taki eski "worker restart sonrası sekmeyi TAM KAPAT" gotcha'sının gerçek sebebi buydu.)
+
+**Fix:** `WorkerOptions(agent_name="candan")` (`LIVEKIT_AGENT_NAME`) + web token route'unda
+**server-side zorlanan** `RoomAgentDispatch({agentName})` (client göndersin göndermesin).
+KANIT: JWT decode → `grant.roomConfig.agents[0].agentName = "candan"`.
+Artık oda ister yeni ister eski olsun her bağlantı agent'ı açıkça çağırıyor; **restart sırası önemsiz**.
+
+⚠️ **DİKKAT:** `agent_name` verildiği için **otomatik dispatch KAPANDI**. Web token'ı dispatch
+istemezse agent odaya **HİÇ** girmez (yine sessizce). İki taraf da default `"candan"`a düşüyor —
+**isimler ikiz kalmalı**, biri değişirse diğeri de değişmeli.
+
+**Not — `wake_stt: WAKE tespit → ' Dondon.'`:** fuzzy wake toleransı gevşek, alakasız kelimeler
+uyandırabiliyor. **Kullanıcı kararı: ŞİMDİLİK ÖNEMSİZ** — mobil versiyonda **yerleşik (cihaz)
+speech recognition** kullanılacak, wake tespiti cihaza geçecek. Fuzzy eşiğini kurcalamaya gerek yok.
+
 ## 🧹 TAM SIFIRLAMA (2026-07-12 gece) — temiz sayfadan test
 
 Kullanıcı isteğiyle HER ŞEY silindi (yedek: scratchpad `FULL-RESET-BACKUP-231914/`):
