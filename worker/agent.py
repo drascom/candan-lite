@@ -82,7 +82,6 @@ async def entrypoint(ctx: JobContext):
             speaker_state = SpeakerState(sticky_misses=SPEAKER_STICKY_MISSES)
             tap = SpeakerTap(sp, speaker_state, min_seconds=SPEAKER_MIN_S, store=store)
         except Exception as e:  # noqa: BLE001 — speaker-ID hiç kurulamazsa Faz 2'ye düş
-            import logging
             logging.getLogger("worker.agent").warning("speaker-ID kurulamadı: %r", e)
             speaker_state = None
             tap = None
