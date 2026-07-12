@@ -83,6 +83,27 @@ PI_TOOLS_ALLOWLIST = os.environ.get(
     "PI_TOOLS_ALLOWLIST", "memory_add,memory_search,web_search"
 )
 
+# İZOLASYON (PI_ISOLATED, DEFAULT açık). Worker'ın pi süreci, kullanıcının GLOBAL pi
+# kurulumundan (~/.pi/agent/: settings.json extensions+packages, skills/, prompts,
+# themes, mcp.json) HİÇBİR ŞEY miras ALMAZ. Global kurulum DEĞİŞMEZ — sadece bu süreç
+# izole başlar (kullanıcının kendi `pi`'ı aynen çalışır).
+#
+# ÖLÇÜLDÜ (izolasyon yokken worker pi'sinde yüklenen global şeyler, startup event'leri):
+#   filechanges, memory.ts (global hafıza ext'i!), zz-read-only-mode, context.ts,
+#   custom-header, md-link, ask-user-question, web-fetch/google-image-search/…,
+#   npm paketleri (pi-web-access, @smoose/pi-beautify, pi-mcp-adapter) ve
+#   pi-mcp-adapter üzerinden mcp.json → "MCP: 0/1 servers" (ha-builtin MCP sunucusu).
+#
+# Bayraklar (pi --help ile doğrulandı; hepsi "keşfi kapat", explicit yolları BOZMAZ):
+#   -ne  --no-extensions       → sadece `-e` ile verilen ext'ler yüklenir (LOKAL mem yaşar)
+#   -ns  --no-skills           → sadece `--skill` ile verilen skill'ler (LOKAL memory yaşar)
+#   -np  --no-prompt-templates → global prompt template/komut keşfi kapalı
+#   --no-themes                → global tema keşfi kapalı
+#   -nc  --no-context-files    → global/ata AGENTS.md+CLAUDE.md keşfi kapalı
+#                                (bizim pi/AGENTS.md zaten --append-system-prompt ile giriyor)
+# PI_ISOLATED=false → eski davranış (global her şey tekrar sızar).
+PI_ISOLATED = _envflag("PI_ISOLATED", True)
+
 
 # Wake word ("konuşma penceresi") — sistem sürekli açık; agent normalde uyur,
 # WAKE_WORD duyunca uyanır, WAKE_WINDOW_SECONDS sessizlikten sonra tekrar uyur.
@@ -295,6 +316,11 @@ def _persona_exists(persona: str) -> bool:
 def _build_pi_args(persona: str, session_id: str) -> list[str]:
     """pi --mode rpc bayrakları (docs/pi-brain-design.md)."""
     args = [PI_BIN, "--mode", "rpc", "--approve", "--model", PI_MODEL]
+    # İzolasyon: global (~/.pi/agent) extension/skill/prompt/theme/context keşfini kapat.
+    # Aşağıdaki explicit `-e` / `--skill` / `--append-system-prompt` yolları etkilenmez.
+    if PI_ISOLATED:
+        args += ["--no-extensions", "--no-skills", "--no-prompt-templates",
+                 "--no-themes", "--no-context-files"]
     # Gecikme: thinking seviyesi (minimal en hızlı). Boş/"default" → pi varsayılanı.
     if PI_THINKING and PI_THINKING.lower() != "default":
         args += ["--thinking", PI_THINKING]
