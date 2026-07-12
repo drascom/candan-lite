@@ -67,6 +67,9 @@ class WakeSTT:
         self._on_wake = on_wake
         self._active = active
         self._tasks: dict[str, asyncio.Task] = {}
+        # asyncio task'lara sadece ZAYIF referans tutar → tutmazsak GC, transcribe'ı
+        # iş bitmeden toplayabilir ve wake word SESSİZCE kaçar. Güçlü referans havuzu.
+        self._pending: set[asyncio.Task] = set()
 
     # --- speaker_tap.py ile aynı bağlanma deseni ---
     def attach(self, room: rtc.Room) -> None:
@@ -86,6 +89,12 @@ class WakeSTT:
         if key in self._tasks and not self._tasks[key].done():
             return
         self._tasks[key] = asyncio.create_task(self._run_track(track, key))
+
+    def _spawn_bg(self, coro) -> None:
+        """Fire-and-forget task — GC toplamasın diye bitene kadar referansı tut."""
+        t = asyncio.create_task(coro)
+        self._pending.add(t)
+        t.add_done_callback(self._pending.discard)
 
     def _is_active(self) -> bool:
         if self._active is None:
@@ -142,7 +151,7 @@ class WakeSTT:
                     elif name == "END_OF_SPEECH":
                         state["speaking"] = False
                         if seg:  # segment sonu: tüm (kısa) segmenti son bir kez dene
-                            asyncio.create_task(transcribe(bytes(seg)))
+                            self._spawn_bg(transcribe(bytes(seg)))
                         seg.clear()
             except asyncio.CancelledError:
                 raise
@@ -164,7 +173,7 @@ class WakeSTT:
                 # bitmeden 'candan'ı yakala). Her katta bir kez (next_win artar).
                 if len(seg) >= win_bytes * state["next_win"]:
                     state["next_win"] += 1
-                    asyncio.create_task(transcribe(bytes(seg)))
+                    self._spawn_bg(transcribe(bytes(seg)))
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -181,3 +190,6 @@ class WakeSTT:
         for t in self._tasks.values():
             t.cancel()
         self._tasks.clear()
+        for t in list(self._pending):   # uçuşta kalan transcribe'lar da dursun
+            t.cancel()
+        self._pending.clear()

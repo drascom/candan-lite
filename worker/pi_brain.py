@@ -1553,7 +1553,8 @@ def _policy_test() -> int:
     SpeakerID). Senaryolar: (a) ilk enroll=adult (b) ikinci enroll=guest
     (c) ses-benzerlik merge → yeni policy girdisi YOK (d) adult yükseltir
     (e) guest kendini yükseltemez."""
-    global MEMORY_DIR
+    global MEMORY_DIR  # noqa: PLW0602 — atama globals()[..] ile yapılıyor; bu satır
+    # gereksiz DEĞİL: ileride düz `MEMORY_DIR = x` yazılırsa yerelleşmesini önler.
     import shutil
     import tempfile
 
@@ -1706,7 +1707,8 @@ def _proactive_test() -> int:
       (f) UYKUDAYKEN → seslenme YAPILIYOR (uyku susturmuyor)
       (g) profile 2 KB'ı aşınca → konsolidasyon tetikleniyor (kayıpsızlık: events.ts (9))
     """
-    global MEMORY_DIR
+    global MEMORY_DIR  # noqa: PLW0602 — atama globals()[..] ile yapılıyor; bu satır
+    # gereksiz DEĞİL: ileride düz `MEMORY_DIR = x` yazılırsa yerelleşmesini önler.
     import shutil
     import subprocess
     import tempfile
@@ -1928,7 +1930,8 @@ async def _reminder_e2e() -> int:
     """UÇTAN UCA (GERÇEK pi turu, token harcar): "10 dakika sonra ... hatırlat" →
     reminder_add FIRE ediyor mu, due_at DOĞRU mu? GEÇİCİ memory kökü kullanır —
     gerçek memory/ KİRLENMEZ."""
-    global MEMORY_DIR
+    global MEMORY_DIR  # noqa: PLW0602 — atama globals()[..] ile yapılıyor; bu satır
+    # gereksiz DEĞİL: ileride düz `MEMORY_DIR = x` yazılırsa yerelleşmesini önler.
     import shutil
     import tempfile
 

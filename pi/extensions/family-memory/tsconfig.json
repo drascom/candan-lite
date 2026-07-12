@@ -1,0 +1,28 @@
+{
+  // Strict tip kontrolü — events.ts (zaman/TZ aritmetiği + node:sqlite).
+  // Koşmak için: ./check.sh  (veya web/node_modules/.bin/tsc -p bu-dosya)
+  //
+  // NEDEN sadece events.ts?
+  //   events.ts bağımsızdır (yalnız node:fs/node:path/node:sqlite) ve strict altında
+  //   TERTEMİZ → gerçek bir kapı olarak iş görür. Riskli mantık (due_at hesabı,
+  //   yerel saat, gece yarısı devri, SQLite şeması) burada yaşıyor.
+  //
+  //   index.ts KAPIDA DEĞİL: pi SDK'sının `AgentToolResult<T>` tipi `details`i ZORUNLU
+  //   tutuyor, extension ise bazı dallarda `details` döndürmüyor (6 x TS2322). Runtime'da
+  //   zararsız (details yalnız log/UI için) ve extension canlıda çalışıyor → tip borcu,
+  //   bomba değil. Düzeltmek çalışan SDK glue'suna dokunmak demek; bilinçli olarak
+  //   ERTELENDİ. index.ts'i elle görmek için: tsc --noEmit index.ts (SDK paths ile).
+  //
+  // @types/node web/ altından ödünç alınır — pi/ için YENİ bağımlılık kurulmadı.
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../../../web/node_modules/@types"]
+  },
+  "include": ["events.ts"]
+}

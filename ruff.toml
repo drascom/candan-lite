@@ -1,0 +1,50 @@
+# Statik analiz — "logging bombası" ve akrabalarını yakalamak için.
+#
+# NEDEN: worker/agent.py:255 canlıda patladı (UnboundLocalError: 'logging').
+# Sebep: entrypoint() içinde gereksiz bir `import logging` → Python `logging`'i TÜM
+# fonksiyonda YEREL saydı → fonksiyonun başındaki kullanım patladı. Satır AYLARDIR
+# oradaydı ve zararsızdı; yeni kod eklenince bomba oldu.
+# Testler yakalayamazdı: entrypoint() sadece gerçek LiveKit job'ında çalışır.
+#
+# Bu tam olarak ruff'ın F823'ü (`local variable referenced before assignment`).
+# Aşağıdaki `F` ailesi o bombayı ve kardeşlerini kapıda tutar.
+#
+# Koşmak için:  ./check.sh      (veya: worker/.venv/bin/ruff check .)
+
+target-version = "py312"
+line-length = 120
+extend-exclude = [".venv", "web", "node_modules", "__pycache__"]
+
+[lint]
+select = [
+    "F",      # pyflakes — ASIL KORUMA. Ailenin tamamı açık, hiçbiri ignore DEĞİL:
+              #   F823 referenced-before-assignment  ← BU tam olarak logging bombası
+              #   F811 redefinition, F821 undefined-name,
+              #   F841 unused-variable, F401 unused-import
+    "E9",     # syntax / IO hataları
+    "E7",     # pycodestyle — anlamlı olanlar (== None, bare except, lambda ataması...)
+    "W",      # pycodestyle warnings
+    "B",      # bugbear — B006 mutable default, B008, B023 closure/döngü değişkeni tuzağı
+    "PLE",    # pylint errors
+    "PLW",    # pylint warnings — shadowing / redefined aileleri
+    "SIM",    # sadeleştirme
+    "RUF",    # ruff'a özel — RUF006 (kaybolan asyncio task'ı) GERÇEK bug yakaladı
+]
+
+ignore = [
+    # ── Türkçe metin gürültüsü (1.197 bulgu) — kod değil, yorum/string içeriği ──
+    "RUF001", "RUF002", "RUF003",  # "ambiguous unicode" — Türkçe ı/ş/ğ/İ normal
+
+    # ── Kozmetik / bilinçli tercih. Bomba avıyla ilgisi yok; açık kalırlarsa
+    #    gürültü olur ve gerçek bulgu içlerinde kaybolur. ────────────────────────
+    "E501",    # satır uzunluğu
+    "SIM105",  # try/except/pass → contextlib.suppress (15 yer, bilinçli)
+    "RUF100",  # `# noqa: BLE001` yorumları belge amaçlı; BLE seçili değil
+    "PLW0108", # gereksiz lambda (1 yer)
+    "PLW2901", # döngü değişkeninin üzerine yazma — `v = _wake_squash(v)` bilinçli idiom
+    "PLW1510", # subprocess.run(check=...) — dönüş kodu zaten elle kontrol ediliyor
+    "E741",    # `l` değişken adı (2 yer, test kodu)
+    "B905",    # zip(strict=) (1 yer, dev aracı)
+    "RUF010",  # explicit conversion flag
+    "RUF059",  # kullanılmayan unpack (tuple açarken)
+]

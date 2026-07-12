@@ -385,7 +385,7 @@ def diagnose(model_dir: Path, keywords_file: Path, audio: np.ndarray, sr: int,
               "-> sample rate hatasi.")
     else:
         best = sorted((c for c, n in gain_hits.items() if n), key=lambda c: -gain_hits[c])
-        print(f"[grid]  tetikleyen gain'ler (kac hucrede): "
+        print("[grid]  tetikleyen gain'ler (kac hucrede): "
               + ", ".join(f"{t}={gain_hits[t]}" for t in best))
         if gain_hits.get("1x", 0) == 0 and any(gain_hits[t] for t in
                                                ("2x", "4x", "8x", "pknorm", "dc+pk")):
@@ -598,8 +598,8 @@ def device_native_sr(device) -> int:
           f"{info['default_samplerate']:.0f} Hz")
     print(f"[mic]   KWS'in bekledigi                    : {SAMPLE_RATE} Hz")
     if int(info["default_samplerate"]) != SAMPLE_RATE:
-        print(f"[mic]   -> 16 kHz istendiginde CoreAudio resample yapiyor. "
-              f"PASS B bunu BYPASS eder.")
+        print("[mic]   -> 16 kHz istendiginde CoreAudio resample yapiyor. "
+              "PASS B bunu BYPASS eder.")
     return int(info["default_samplerate"])
 
 

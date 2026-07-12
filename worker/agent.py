@@ -146,14 +146,21 @@ async def entrypoint(ctx: JobContext):
     # NOT: transcript'i worker'da toggle ETME — session.output.set_transcription_enabled
     # TranscriptSynchronizer'ı detach edip agent metnini bozuyor. Uyurken kullanıcı
     # metnini gizleme WEB tarafında `candan.awake` ile yapılır.
+    # asyncio, task'lara sadece ZAYIF referans tutar: create_task'ın dönüşünü
+    # tutmazsak GC task'ı iş bitmeden toplayabilir → attribute sessizce gitmez
+    # (çan çalmaz). Güçlü referansı burada tutup bitince bırakıyoruz.
+    bg_tasks: set[asyncio.Task] = set()
+
     def _apply_wake_state(awake: bool) -> None:
         """Uyku/uyanık durumunu web'e yayınla (attribute). Sync bağlamdan güvenli."""
         val = "true" if awake else "false"
         try:
-            asyncio.create_task(
+            t = asyncio.create_task(
                 ctx.room.local_participant.set_attributes({"candan.awake": val}))
         except RuntimeError:  # çalışan loop yok → atla
-            pass
+            return
+        bg_tasks.add(t)
+        t.add_done_callback(bg_tasks.discard)
 
     if WAKE_ENABLED:
         # Geçişleri web'e bağla; başlangıç: UYKUDA → attribute "false" + transcript kapalı.
@@ -249,8 +256,12 @@ async def entrypoint(ctx: JobContext):
             except asyncio.TimeoutError:
                 return False
 
-    store = EventStore()
-    deliverer = Deliverer(store, _LiveKitIO())
+    # NOT: adı `store` DEĞİL — yukarıdaki `store` SpeakerStore'dur (satır 77). Aynı
+    # fonksiyonda tek adı iki farklı tipe bağlamak, `logging` tuzağının kardeşidir:
+    # bugün zararsız (SpeakerStore kullanımları bu satırın üstünde bitiyor), yarın
+    # araya kod girince sessizce yanlış nesneye gider.
+    event_store = EventStore()
+    deliverer = Deliverer(event_store, _LiveKitIO())
     log = logging.getLogger("worker.proactive")
 
     async def _heartbeat() -> None:
@@ -273,7 +284,7 @@ async def entrypoint(ctx: JobContext):
 
     async def _stop_hb() -> None:
         hb.cancel()
-        store.close()
+        event_store.close()
 
     ctx.add_shutdown_callback(_stop_hb)
 
