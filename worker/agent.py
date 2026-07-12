@@ -156,11 +156,35 @@ async def entrypoint(ctx: JobContext):
         # PiStream tarafı zaten SILENT döner (sözlü yanıt yok).
         @session.on("user_input_transcribed")
         def _on_transcript(ev) -> None:
+            # Her transcript (partial dahil) = kullanıcı konuşuyor → uyku sayacını
+            # tazele. Uzun sözde pencere DOLMASIN (uyandırmaz, sadece sayacı iter).
+            try:
+                brain.wake_touch()
+            except Exception:  # noqa: BLE001
+                pass
             if not getattr(ev, "is_final", False):
                 return
             try:
                 brain.wake_now(getattr(ev, "transcript", "") or "")
             except Exception:  # noqa: BLE001 — sinyal hatası akışı bozmasın
+                pass
+
+        # Uyku sayacı KULLANICININ SON KONUŞMASINDAN sonra başlamalı: kullanıcı
+        # konuşurken (VAD) ve asistan cevap verirken (thinking/speaking) sayaç DURUR;
+        # ikisinden hangisi SONRA biterse WAKE_WINDOW_SECONDS oradan sayılır.
+        @session.on("user_state_changed")
+        def _on_user_state(ev) -> None:
+            try:
+                brain.wake_user_speaking(getattr(ev, "new_state", "") == "speaking")
+            except Exception:  # noqa: BLE001
+                pass
+
+        @session.on("agent_state_changed")
+        def _on_agent_state(ev) -> None:
+            try:
+                brain.wake_agent_busy(
+                    getattr(ev, "new_state", "") in ("thinking", "speaking"))
+            except Exception:  # noqa: BLE001
                 pass
     else:
         # Gate yok: hep uyanık → attribute "true" + transcript açık (eski davranış) +

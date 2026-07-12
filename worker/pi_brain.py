@@ -216,7 +216,13 @@ class WakeGate:
     Uyurken: wake word yoksa 'silent' (pi'ya gitme, ChatChunk yok). Wake word
     varsa uyan, kalan metin varsa 'process', yoksa 'scripted' (kısa karşılık).
     Uyanıkken: 'process' (pencere sıfırlanır). WAKE_WINDOW_SECONDS sessizlikten
-    sonra tekrar uyur. enabled=False → hep 'process' (gate yok)."""
+    sonra tekrar uyur. enabled=False → hep 'process' (gate yok).
+
+    Uyku sayacı (last_activity) — "SON konuşmadan sonra" saymalı:
+      - kullanıcı konuşurken (VAD 'speaking' / STT partial) ve asistan cevap
+        verirken (thinking/speaking) sayaç DURUR (busy) → o sırada ASLA uyunmaz;
+      - ikisinden hangisi SONRA biterse sayaç ORADAN başlar (set_* → touch).
+    Böylece uzun kullanıcı sözü / uzun asistan cevabı sırasında pencere dolmaz."""
 
     def __init__(self, enabled: bool = WAKE_ENABLED, word: str = WAKE_WORD,
                  window: float = WAKE_WINDOW_SECONDS, greeting: str = "Efendim?",
@@ -228,9 +234,33 @@ class WakeGate:
         self.greeting = greeting
         self.awake = False
         self.last_activity = 0.0
+        # Sayaç duraklatma bayrakları (agent.py: user_state_changed/agent_state_changed).
+        self.user_speaking = False   # kullanıcı şu an konuşuyor (VAD)
+        self.agent_busy = False      # asistan düşünüyor/konuşuyor (cevap sürüyor)
         # Uyku↔uyanık GEÇİŞİNDE çağrılır (sync). Web'e attribute yayını + transcript
         # kapısı buraya bağlanır. None → geçiş sinyali yok (mevcut davranış).
         self.on_change = on_change
+
+    # ── uyku sayacı: aktivite kancaları ──────────────────────────────────
+    def busy(self) -> bool:
+        """Sayaç DURSUN mu? (kullanıcı konuşuyor ya da asistan cevap veriyor)"""
+        return self.user_speaking or self.agent_busy
+
+    def touch(self, now: Optional[float] = None) -> None:
+        """Aktivite gördük → uyku sayacını sıfırla. UYANDIRMAZ (awake'e dokunmaz);
+        uyurken çağrılması zararsızdır."""
+        self.last_activity = time.monotonic() if now is None else now
+
+    def set_user_speaking(self, speaking: bool, now: Optional[float] = None) -> None:
+        """VAD: kullanıcı konuşmaya başladı/bitti. Bittiğinde sayaç TAM bu andan başlar."""
+        self.user_speaking = bool(speaking)
+        self.touch(now)
+
+    def set_agent_busy(self, busy: bool, now: Optional[float] = None) -> None:
+        """Asistan cevabı başladı (thinking/speaking) / bitti. Bittiğinde sayaç bu andan
+        başlar (kullanıcı cevabı bekleniyor olabilir)."""
+        self.agent_busy = bool(busy)
+        self.touch(now)
 
     def _set_awake(self, value: bool) -> None:
         """awake'i değiştir; DEĞİŞTİYSE on_change(value) tetikle (best-effort)."""
@@ -245,8 +275,14 @@ class WakeGate:
                 logger.warning("wake on_change hata", exc_info=True)
 
     def expire(self, now: Optional[float] = None) -> bool:
-        """Pencere dolduysa uyut. Yeni uyuduysa True döner."""
+        """Pencere dolduysa uyut. Yeni uyuduysa True döner.
+
+        Konuşma sürerken (kullanıcı ya da asistan) sayaç DURUR: uykuya geçilmez ve
+        last_activity kayar → konuşma bitince 15sn TAM o andan itibaren sayılır."""
         now = time.monotonic() if now is None else now
+        if self.busy():
+            self.last_activity = now
+            return False
         if self.awake and (now - self.last_activity) >= self.window:
             self._set_awake(False)
             return True
@@ -735,6 +771,24 @@ if _HAS_LIVEKIT:
             self._ensure_wake_timer()
             return self._wake.wake_now()
 
+        def wake_touch(self) -> None:
+            """Kullanıcı aktivitesi (STT partial/final) → uyku sayacını tazele.
+            Uyandırmaz; sadece 'son konuşma anı'nı ileri taşır."""
+            if self._wake.enabled:
+                self._wake.touch()
+
+        def wake_user_speaking(self, speaking: bool) -> None:
+            """VAD kancası (agent.py user_state_changed). Kullanıcı konuşurken sayaç
+            durur; bitince 15sn TAM o andan başlar."""
+            if self._wake.enabled:
+                self._wake.set_user_speaking(speaking)
+
+        def wake_agent_busy(self, busy: bool) -> None:
+            """Asistan cevabı kancası (agent.py agent_state_changed: thinking/speaking).
+            Cevap sürerken uyunmaz; cevap bitince sayaç yeniden başlar."""
+            if self._wake.enabled:
+                self._wake.set_agent_busy(busy)
+
         def _ensure_wake_timer(self) -> None:
             if self._wake.enabled and self._wake_task is None:
                 try:
@@ -1124,8 +1178,93 @@ def _wake_test() -> int:
     return 0 if ok else 1
 
 
+def _wake_timer_test() -> int:
+    """Uyku sayacı birim testi — SAHTE SAAT (livekit/ses/token YOK).
+
+    Kural: 15sn'lik uyku penceresi KULLANICININ SON konuşmasından (ya da asistanın
+    cevabı daha sonra bittiyse ondan) itibaren sayılır; konuşma sürerken uyunmaz."""
+    W = 15.0
+    results: list[tuple[str, bool, str]] = []
+
+    def gate() -> WakeGate:
+        g = WakeGate(enabled=True, word="candan", window=W)
+        g.wake_now(now=0.0)          # wake word ile uyandı (t=0)
+        return g
+
+    def tick(g: WakeGate, t0: float, t1: float) -> Optional[float]:
+        """t0→t1 arası 0.5sn adımlarla uyku döngüsünü simüle et; uyuduğu anı döner."""
+        t = t0
+        while t <= t1 + 1e-9:
+            if g.expire(now=t):
+                return t
+            t += 0.5
+        return None
+
+    # (a) uyanık + kullanıcı 20sn boyunca ARALIKLI konuşuyor → UYKUYA GEÇMEMELİ
+    g = gate()
+    slept_at = None
+    t = 0.0
+    for start in (1.0, 8.0, 15.0):          # 3 söz; her biri 4sn sürsün
+        slept_at = slept_at or tick(g, t, start)
+        g.set_user_speaking(True, now=start)          # VAD: konuşma başladı
+        slept_at = slept_at or tick(g, start, start + 4.0)   # konuşurken sayaç durur
+        g.set_user_speaking(False, now=start + 4.0)   # VAD: konuşma bitti
+        t = start + 4.0
+    slept_at = slept_at or tick(g, t, 20.0)  # t=19 → son sözden 1sn sonra
+    ok = (slept_at is None) and g.awake
+    results.append(("(a) 20sn aralıklı konuşma → uyanık kalır", ok,
+                    f"slept_at={slept_at} awake={g.awake}"))
+
+    # (b) kullanıcı konuşmayı bitirdi (t=10) → TAM 10+15=25'te uyu, ÖNCE DEĞİL
+    g = gate()
+    g.set_user_speaking(True, now=5.0)
+    tick(g, 5.0, 10.0)
+    g.set_user_speaking(False, now=10.0)    # SON konuşma anı
+    early = tick(g, 10.0, 24.5)             # 24.5'e kadar UYUMAMALI
+    slept_at = tick(g, 25.0, 30.0)
+    ok = (early is None) and (slept_at == 25.0)
+    results.append(("(b) son sözden 15sn sonra uyur (önce değil)", ok,
+                    f"early={early} slept_at={slept_at} (beklenen 25.0)"))
+
+    # (c) asistan UZUN cevap (t=2→30, 28sn) → cevap sırasında uyumaz; sayaç cevabın
+    #     bitişinden başlar → 30+15=45'te uyur.
+    g = gate()
+    g.set_agent_busy(True, now=2.0)         # thinking/speaking
+    during = tick(g, 2.0, 30.0)             # 28sn cevap → uyku YOK
+    g.set_agent_busy(False, now=30.0)       # cevap bitti → sayaç burada başlar
+    early = tick(g, 30.0, 44.5)
+    slept_at = tick(g, 45.0, 50.0)
+    ok = (during is None) and (early is None) and (slept_at == 45.0)
+    results.append(("(c) uzun asistan cevabı → cevap bitince sayaç başlar", ok,
+                    f"during={during} early={early} slept_at={slept_at} (beklenen 45.0)"))
+
+    # (d) wake word → uyanma ve uyuduktan sonra tekrar uyanma hâlâ çalışıyor
+    g = WakeGate(enabled=True, word="candan", window=W)
+    a1, _ = g.decide("candan", now=0.0)          # sadece wake → silent + uyan
+    awake1 = g.awake
+    a2, p2 = g.decide("hava nasıl", now=3.0)     # uyanıkken normal söz → process
+    slept_at = tick(g, 3.0, 25.0)                # 3+15=18'de uyu
+    a3, _ = g.decide("merhaba", now=26.0)        # uykuda + wake yok → silent
+    a4, p4 = g.decide("candan saat kaç", now=27.0)   # wake + kalan → process
+    ok = (a1 == "silent" and awake1 and a2 == "process" and p2 == "hava nasıl"
+          and slept_at == 18.0 and a3 == "silent" and a4 == "process"
+          and p4 == "saat kaç" and g.awake)
+    results.append(("(d) wake word uyandırma + fuzzy/strip korunuyor", ok,
+                    f"{a1}/{a2}/{a3}/{a4} slept_at={slept_at}"))
+
+    print(f"[waketimer] WAKE_WINDOW_SECONDS={W}")
+    all_ok = True
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[waketimer] RESULT: {'PASS' if all_ok else 'FAIL'}")
+    return 0 if all_ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "waketimer":
+        raise SystemExit(_wake_timer_test())
     if cmd == "wake":
         raise SystemExit(_wake_test())
     if cmd == "smoke":
@@ -1133,4 +1272,4 @@ if __name__ == "__main__":
     if cmd == "prompt":
         msg = sys.argv[2] if len(sys.argv) > 2 else "merhaba de"
         raise SystemExit(asyncio.run(_prompt_test(msg)))
-    print("usage: python pi_brain.py [smoke|prompt <text>]")
+    print("usage: python pi_brain.py [smoke|prompt <text>|wake|waketimer]")
