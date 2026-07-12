@@ -28,15 +28,28 @@
 - Web: `cd web && pnpm dev` → localhost:3000.
 - Worker RESTART sonrası: tarayıcı sekmesini TAM KAPAT → yeniden bağlan (mevcut odaya oto-dispatch olmaz).
 
-## 🔬 AÇIK İŞ: anlık wake için KWS "Jackie" (yeni session'da devam)
-- **Türkçe "candan" onnx-KWS ile yakalanMIYOR** (GigaSpeech İngilizce akustik model). Whisper-"candan" (WAKE_STT) çalışıyor ama izole-candan Whisper'da zayıf → fuzzy ile telafi.
-- **Fikir:** wake word'ü İngilizce **"Jackie"/"Hey Jackie"** yap → İngilizce KWS on-device anlık yakalar (Whisper'sız). Encode HAZIR, KWS mekanizması KANITLI (referans "forever" wav tetikliyor). Ama **OmniVoice sentetik İngilizcesi GigaSpeech'e uymuyor** → offline test geçersiz. **Karar GERÇEK insan sesiyle canlı testte verilecek.**
-- **SIRADAKI ADIM — kullanıcı kendi sesiyle çalıştırsın:**
-  `cd /Users/drascom/work/candan-lite/worker && .venv/bin/python /private/tmp/claude-501/-Users-drascom-work-candan-lite/1a2a38c8-7ee1-44d3-8585-79fe4db4f8cf/scratchpad/kws/live_mic_kws.py`
-  (level metre + kontrol kelimeleri: önce **"forever"** de → tetiklerse pipeline sağlam; sonra "Hey Jackie"/"Jackie". Gerekirse `--threshold 0.10 --score 4.0 --device 3`.)
-  - ⚠️ **ÖN KOŞUL — macOS mikrofon izni:** ilk denemede `level: 0.000` çıktı (hem kullanıcı terminali hem Claude süreci RMS≈0 = sessizlik). Sorun KWS değil, **terminal uygulamasına mikrofon izni verilmemiş**. Fix: macOS Ayarlar→Gizlilik→Mikrofon→terminal uygulamasını (Terminal/iTerm/VSCode) AÇ → terminali kapat-aç → tekrar dene. `level:` konuşunca dolmalı; DOLMADAN KWS testi anlamsız. (Tarayıcı mikrofonu ayrı izinle zaten çalışıyor.)
-  NOT: scratchpad session'a özel — yeni session'da scratchpad yolu değişebilir; araç `scratchpad/kws/` altında, gerekirse yeniden üret. KWS modeli: `sherpa-onnx-kws-zipformer-gigaspeech-3.3M`.
-- **Karar:** Jackie gerçek sesle tutarlı yakalanırsa → KWS'i `wake_stt` yerine/yanına on-device wake olarak entegre et, wake word="Jackie". Tutmazsa Whisper-"candan"da kal.
+## ✅ KAPANDI (2026-07-12): KWS "Jackie" — canlı testte ELENDİ, wake word "candan" kalıyor
+
+**KARAR: Jackie İPTAL.** Mevcut sistem korunuyor: Whisper-"candan" (`WAKE_STT` + fuzzy `wake_match`).
+Canlı test gerçek insan sesiyle yapıldı (kullanıcı konuştu, Claude arka planda çalıştırıp logları okudu).
+
+**Sonuç:**
+- **KWS mekanizması canlı mikrofonda ÇALIŞIYOR** — kontrol kelimesi "forever" gerçek sesle tetikledi. Yani ölü olan mekanizma değil, **sadece "Jackie" kelimesi**.
+- **"Jackie" / "Hey Jackie" ADİL koşulda defalarca denendi → HİÇ tetiklemedi.** (Adil = sinyal referans seviyesine çıkarılmış: peak_out 0.66 vs referans wav peak 0.42.)
+- Muhtemel sebep: "jackie" GigaSpeech'te seyrek (BPE: `▁JA CK I E`, zayıf temsil) + TR aksanı İngilizce akustik modele uymuyor. "forever" ise sık geçen + modelin kendi örnek keyword'ü.
+
+**⚠️ DERSLER (KWS'e dönülürse aynı tuzağa düşme):**
+1. **Eski handoff'taki eşikler YANLIŞTI.** `--threshold 0.25 --score 1.5` ile kontrol keyword'ü **referans wav'da bile tetiklemiyor**. Çalışan bölge: **`threshold ≤ 0.20` VE `score ≥ 4.0`** (iki knob BİRLİKTE gerekiyor). O ayarla teste girilseydi "Jackie tutmuyor" sonucuna YANLIŞ sebeple varılacaktı.
+2. **Mikrofon seviyesi KRİTİK.** HUAWEI USB-C headset ham peak ~0.03 = referans wav'ın (0.42) ~14 katı altında. **O seviyede "forever" bile tetiklemiyor.** Gain/AGC olmadan yapılan her KWS testi GEÇERSİZ. Araçta `--agc` (hedef peak 0.40, sessizlikte gürültü şişirmez) ve `--gain X` var.
+3. `level: 0.000` = macOS mikrofon izni yok (ÇÖZÜLDÜ). İzin verilince Claude'un kendi süreci de mikrofonu okuyabiliyor → canlı testi Claude çalıştırıp logu okuyabilir, kullanıcı sadece konuşur.
+4. sherpa-onnx per-keyword `:score #thr @name` sözdizimi **sessizce çalışmıyor** → düz token dosyası + global `--score` kullan.
+5. Model asset adı **tarihli**: `sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2` (tarihsiz isim 404).
+
+**Test aracı SAKLANDI:** `worker/tools/live_mic_kws.py` (üretmesi pahalıydı; scratchpad session'la silinir).
+Kullanım: `cd worker && .venv/bin/python tools/live_mic_kws.py --agc --threshold 0.10 --score 5.0`
+(model ilk çalıştırmada indirilir; başlangıçta referans wav ile kendini test eder — "forever" tetiklemezse kurulum bozuktur, mikrofona geçme.)
+
+**KWS'e dönülürse yapılacak (YAPILMADI):** aday kelime turu — 6-8 İngilizce aday (computer, jack, jackson, hey jack…) aynı anda encode edilip tek oturumda test edilir, kullanıcının sesiyle tutarlı tetikleyen aranır.
 
 ## Memory (index): delegation=Agent tool; kaldırmadan-önce-sor. Kişisel hafıza dosyaları `memory/` (gitignored, local).
 
