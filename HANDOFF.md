@@ -62,9 +62,51 @@ bağlanmalı → konuşup doğrulayacak: turlar hızlandı mı, 40sn takılma te
 takılmaları azalttığı DOĞRUDAN kanıtlanmadı; kanıtlanan şey onlara yol açan tool bacaklarının
 sıfırlandığı.
 
-**Bekleyen küçük kararlar:** (a) `sessions/` altındaki bench artıkları (`*_bench-*.jsonl`)
-silinsin mi — SORULDU, cevap YOK; (b) `konusma.md` untracked duruyor (Candan'ın yazdığı konuşma
-dökümü); (c) `web_search` lokal extension olarak geri eklensin mi.
+## ✅ CANLI TEST GEÇTİ (2026-07-12) — fix'ler doğrulandı
+
+| | Fix öncesi | Fix sonrası (canlı) |
+|---|---|---|
+| Medyan TTFT | 3.11s | **1.85s** |
+| Medyan tur | 3.35s | **2.22s** |
+| En kötü tur | 11.87s | **7.50s** |
+| >10s takılan tur | 2 | **0** |
+| `WebSocket closed 1000` | var | **yok** |
+| Built-in tool (read/edit/bash) | çağrılıyordu | **hiç çağrılmadı** |
+
+Hafıza canlı doğrulandı (Candan kullanıcıyı + köpeklerini hatırladı).
+
+## 🆔 KİMLİK: `baba` → `ayhan` (2026-07-12, `4660882`)
+
+**Bulunan sorun:** aynı kişi İKİ kimliğe bölünmüştü — `baba` (adult, hafızası dolu) ve `ayhan`
+(policy'de YOK → **guest** → hafıza YAZAMIYOR). Kullanıcı "not al" deyince Candan "erişimim yok"
+diyordu — doğru söylüyormuş.
+
+**Kök sebep:** `baba` sadece **2 ses örneğiyle** enroll edilmiş (zayıf centroid) → farklı gün/mikrofon
+koşulunda skor `SPEAKER_THRESHOLD`(0.45) altında kaldı → 5 miss → unknown → "adını söyler misin?"
+→ kullanıcı "Ayhan" dedi → `_create_speaker()` **SADECE İSME** bakıyordu → YENİ KİMLİK açtı.
+Sistemde **"bu ses zaten kayıtlı birine benziyor mu?"** kontrolü YOKTU.
+
+**Migrasyon:** policy `{"ayhan":"adult"}`, `memory/users/baba/` → `memory/users/ayhan/`,
+persona `pi/personas/ayhan.md`, speakers.db'de Baba'nın 2 örneği Ayhan'a taşındı (→ **6 örnek**,
+silme yok). FTS5 index kendini onardı (dosyalar otoriter). Yedek: scratchpad `backup-20260712-221520/`.
+Doğrulandı: `ayhan` kimliğiyle eski hafıza geliyor (Oscar/Amy, Londra) + `memory_add` yazıyor.
+
+**Enroll ses-benzerlik kapısı (tekrar bölünmesin):** `_finish_enrollment()` artık yeni kişi açmadan
+ÖNCE embedding'i tüm centroid'lere ölçüyor → `skor >= threshold` = yeni kimlik AÇMA, mevcut kişiye
+EK ÖRNEK / `merge_low(0.35) <= skor < threshold` = **"Sen X misin?"** diye SOR / altındaysa yeni kişi.
+`SPEAKER_THRESHOLD` **0.45'te BIRAKILDI** (düşürmek yanlış-pozitifi artırır: misafiri ev sahibi sanıp
+özel hafızasına yazma riski). Artımlı öğrenme eklendi ama **default KAPALI** (`SPEAKER_LEARN_ENABLED=false`).
+
+**Log gürültüsü:** livekit `dev` modu log_level'ı DEBUG yapıyordu → her sessiz pencere basılıyordu.
+Artık `WorkerOptions(log_level=INFO)` + `worker/log_utils.py` `DedupeFilter` (aynı mesaj 30sn içinde
+tekrarlanırsa susturulur, pencere sonunda "[+N tekrar bastırıldı]" özeti). `WORKER_VERBOSE_LOGS=true`
+→ eski ham davranış.
+
+**Bekleyen küçük kararlar:** (a) `sessions/` altındaki bench artıkları (`*_bench-*.jsonl`) silinsin mi
+— SORULDU, cevap YOK; (b) `sessions/*_baba.jsonl` (191 KB) tarihsel olarak duruyor, yeni turlar
+`*_ayhan.jsonl`'e gidiyor — bırakılması önerildi; (c) `speakers.db`'de boş `Baba` satırı (id=1,
+0 örnek) etkisiz duruyor; (d) `web_search` lokal extension olarak geri eklensin mi (izolasyonla gitti).
+`konusma.md` kullanıcı izniyle SİLİNDİ.
 
 ## 🟢 GÜNCEL DURUM (2026-07-10 session sonu) — hepsi çalışıyor, main'de push'lu
 
@@ -152,7 +194,8 @@ Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev 
 - **KRİTİK DERS — enroll = recognize AYNI ses yolu:** CLI `--record` (Mac mic, ham) ile enroll edilince tanıma skorları düşük/oynak (0.1-0.6) çünkü oda sesi tarayıcı-WebRTC işlemeli. **Oda sesinden oto-enroll** (SpeakerState.last_embedding) → skorlar 0.45-0.67, tutarlı. Enrollment'ı HEP oda sesinden yap.
 - **Sticky speaker-ID:** `SPEAKER_VAD_RMS`(0.01) sessizlik-kapısı + `SPEAKER_STICKY_MISSES`(5) → kısa sessizlik/dip'lerde konuşmacı korunur, pi swap thrash yok.
 - **Hafıza Faz A:** boot enjeksiyonu (persona+profile+family, role-gated) + `MEM_USER` env + memory-skill v0. Test edildi: özel not→`notes/`, aile→`family.md`(açık istekle), profil kendini zenginleştirdi, izolasyon OK. `memory/` gitignored (public repo'ya girmez) + nested audit-git.
-- **Kullanıcı:** `baba` (adult, policy.json). persona `pi/personas/baba.md`. Model pin `gpt-5.6-terra`.
+- **Kullanıcı:** ~~`baba`~~ → **`ayhan`** (adult, policy.json). persona `pi/personas/ayhan.md`. Model pin `gpt-5.6-terra`.
+  ⚠️ 2026-07-12'de kimlik `baba`→`ayhan` olarak taşındı (aynı kişi ikiye bölünmüştü). Detay en üstteki bölümde.
 - **SIRADAKİ:** Hafıza Faz B (`tools/mem` CLI + SQLite FTS5 arama + session-finalize + git-audit). Detay: `docs/hafiza-implementasyon-rehberi.md`.
 
 ## 🎉 FAZ 2 ÇALIŞIYOR (2026-07-10): sesli uçtan-uca
