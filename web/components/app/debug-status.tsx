@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { useVoiceAssistant } from '@livekit/components-react';
+import { useConnectError } from '@/hooks/useConnectError';
 import { cn } from '@/lib/shadcn/utils';
 
 /**
@@ -42,6 +43,7 @@ function playChime(kind: 'wake' | 'sleep') {
  */
 export function DebugStatus({ className }: { className?: string }) {
   const { state, agent, agentAttributes } = useVoiceAssistant();
+  const { connectError } = useConnectError();
   const awake = agentAttributes?.['candan.awake'];
 
   // Wake geçişinde çan sesi. İlk değer gelişinde çalma; sadece gerçek geçişte.
@@ -55,7 +57,13 @@ export function DebugStatus({ className }: { className?: string }) {
   }, [awake]);
 
   let text = 'Bağlanıyor…';
-  if (!agent || state === 'disconnected' || state === 'connecting') {
+  if (connectError) {
+    // Bağlantı hiç kurulamadı: token/LiveKit/mikrofon hatası — sebebini göster.
+    text = connectError.message;
+  } else if (state === 'failed') {
+    // Odaya bağlandık ama asistan (worker) katılmadı — en sık sebep: worker kapalı/restart sonrası dispatch yok.
+    text = '❌ Asistan odaya katılmadı — worker çalışıyor mu?';
+  } else if (!agent || state === 'disconnected' || state === 'connecting') {
     text = 'Bağlanıyor…';
   } else if (awake === 'false') {
     text = "😴 Uykuda — 'candan' de";

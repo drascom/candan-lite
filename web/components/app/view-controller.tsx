@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useSessionContext } from '@livekit/components-react';
 import type { AppConfig } from '@/app-config';
 import { AgentSessionView_01 } from '@/components/agents-ui/blocks/agent-session-view-01';
+import { classifyConnectError, useConnectError } from '@/hooks/useConnectError';
 
 const MotionSessionView = motion.create(AgentSessionView_01);
 
@@ -35,13 +36,20 @@ export function ViewController({ appConfig }: ViewControllerProps) {
   const { start } = useSessionContext();
   const { resolvedTheme } = useTheme();
   const startedRef = useRef(false);
+  const { setConnectError } = useConnectError();
 
   // Auto-connect: WelcomeView'i atla, mount'ta doğrudan bağlan (sürekli-açık).
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    start().catch((err) => console.error('auto-connect failed', err));
-  }, [start]);
+    setConnectError(null);
+    start()
+      .then(() => setConnectError(null))
+      .catch((err) => {
+        console.error('auto-connect failed', err);
+        setConnectError(classifyConnectError(err));
+      });
+  }, [start, setConnectError]);
 
   return (
     <AnimatePresence mode="wait">

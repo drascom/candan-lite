@@ -55,17 +55,22 @@ export function AgentChatTranscript({
   className,
   ...props
 }: AgentChatTranscriptProps) {
-  // Uyurken (candan.awake === "false") gelen KULLANICI mesajlarını gizle.
-  // Agent mesajları asla gizlenmez. Bir kez gizlenen id kalıcı gizli kalır (interim→final tutarlı).
+  // Uyurken (candan.awake === "false") söylenen KULLANICI mesajları gizlenir.
+  // Karar MESAJ BAZINDA verilir: her mesaj id'si ilk göründüğü andaki awake durumunu
+  // kalıcı olarak "yakalar" (snapshot). Böylece sonradan uykuya geçilse bile, uyanıkken
+  // söylenmiş eski mesajlar ekrandan SİLİNMEZ — sadece uyurken söylenenler gizli kalır.
+  // Agent mesajları asla gizlenmez.
   const { agentAttributes } = useVoiceAssistant();
   const awake = agentAttributes?.['candan.awake'];
-  const hiddenIdsRef = useRef<Set<string>>(new Set());
+  const awakeSnapshotRef = useRef<Map<string, string | undefined>>(new Map());
 
   const visibleMessages = messages.filter((m) => {
     const isUser = m.from?.isLocal === true;
     if (!isUser) return true; // agent mesajı: her zaman görünür
-    if (awake === 'false') hiddenIdsRef.current.add(m.id);
-    return !hiddenIdsRef.current.has(m.id);
+    if (!awakeSnapshotRef.current.has(m.id)) {
+      awakeSnapshotRef.current.set(m.id, awake);
+    }
+    return awakeSnapshotRef.current.get(m.id) !== 'false';
   });
 
   return (

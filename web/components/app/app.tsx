@@ -10,6 +10,7 @@ import { StartAudioButton } from '@/components/agents-ui/start-audio-button';
 import { ViewController } from '@/components/app/view-controller';
 import { Toaster } from '@/components/ui/sonner';
 import { useAgentErrors } from '@/hooks/useAgentErrors';
+import { ConnectErrorProvider } from '@/hooks/useConnectError';
 import { useDebugMode } from '@/hooks/useDebug';
 import { getSandboxTokenSource } from '@/lib/utils';
 
@@ -53,26 +54,28 @@ export function App({ appConfig }: AppProps) {
   );
 
   return (
-    <AgentSessionProvider session={session}>
-      <AppSetup />
-      <main className="grid h-svh grid-cols-1 place-content-center">
-        <ViewController appConfig={appConfig} />
-      </main>
-      <StartAudioButton label="Start Audio" />
-      <Toaster
-        icons={{
-          warning: <WarningIcon weight="bold" />,
-        }}
-        position="top-center"
-        className="toaster group"
-        style={
-          {
-            '--normal-bg': 'var(--popover)',
-            '--normal-text': 'var(--popover-foreground)',
-            '--normal-border': 'var(--border)',
-          } as React.CSSProperties
-        }
-      />
-    </AgentSessionProvider>
+    <ConnectErrorProvider>
+      <AgentSessionProvider session={session}>
+        <AppSetup />
+        <main className="grid h-svh grid-cols-1 place-content-center">
+          <ViewController appConfig={appConfig} />
+        </main>
+        <StartAudioButton label="Start Audio" />
+        <Toaster
+          icons={{
+            warning: <WarningIcon weight="bold" />,
+          }}
+          position="top-center"
+          className="toaster group"
+          style={
+            {
+              '--normal-bg': 'var(--popover)',
+              '--normal-text': 'var(--popover-foreground)',
+              '--normal-border': 'var(--border)',
+            } as React.CSSProperties
+          }
+        />
+      </AgentSessionProvider>
+    </ConnectErrorProvider>
   );
 }
