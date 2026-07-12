@@ -25,7 +25,10 @@ from livekit.agents.utils import AudioBuffer
 from wyoming.event import Event, async_read_event, async_write_event
 import asyncio
 
+from log_utils import DedupeFilter
+
 logger = logging.getLogger("whisper_stt")
+logger.addFilter(DedupeFilter())
 
 STT_WIDTH = 2  # bytes/sample: s16le
 

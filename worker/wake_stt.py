@@ -23,8 +23,10 @@ from livekit import rtc
 from whisper_stt import _WhisperSession  # wyoming transcribe roundtrip'i yeniden kullan
 # Wake eşleştirme TEK yerde (pi_brain) — kopya sapmasın. Fuzzy/izole tolerans dahil.
 from pi_brain import wake_match, _wake_norm, _wake_variants
+from log_utils import DedupeFilter
 
 log = logging.getLogger("worker.wake_stt")
+log.addFilter(DedupeFilter())  # tekrarlayan stream/hata loglarını seyreltir
 
 TAP_RATE = 16000  # wyoming whisper 16k s16le ister; AudioStream doğrudan 16k verir
 TAP_CHANNELS = 1

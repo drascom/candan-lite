@@ -26,7 +26,10 @@ import websockets
 from livekit.agents import tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 
+from log_utils import DedupeFilter
+
 logger = logging.getLogger("omnivoice_tts")
+logger.addFilter(DedupeFilter())
 
 # OmniVoice non-verbal etiketleri (adapter.py ~207-221). TTS metnine gömülür ve
 # OmniVoice seslendirir; sadece transkript gösteriminde strip edilir.

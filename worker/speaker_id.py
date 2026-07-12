@@ -24,7 +24,10 @@ from pathlib import Path
 
 import numpy as np
 
+from log_utils import DedupeFilter
+
 log = logging.getLogger("worker.speaker_id")
+log.addFilter(DedupeFilter())
 
 # Bu dosyanın dizini = worker/. Relative env yollarını buna göre çöz.
 WORKER_DIR = Path(__file__).resolve().parent
@@ -74,6 +77,7 @@ class SpeakerID:
         threshold: float = 0.45,
         margin: float = 0.05,
         num_threads: int = 1,
+        merge_low: float = 0.35,
     ):
         import sherpa_onnx
 
@@ -85,6 +89,9 @@ class SpeakerID:
         self.model_id = model_id
         self.threshold = threshold
         self.margin = margin
+        # Enroll koruması: bu skorun ALTI "gerçekten yeni kişi", arası belirsiz bant
+        # (kullanıcıya "Sen X misin?" diye sorulur), threshold üstü = zaten kayıtlı.
+        self.merge_low = merge_low
         self._lock = threading.Lock()  # extractor stream'i seri kullanılsın
         self._names: list[str] = []
         self._centroids = np.zeros((0, self.dim), dtype=np.float32)  # L2-normalize
@@ -129,6 +136,16 @@ class SpeakerID:
         if best < self.threshold or (best - second) < self.margin:
             return None, best
         return ranking[0][0], best
+
+    def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
+        """HAM en-yakın centroid (eşik/marj UYGULANMAZ). Enroll öncesi "bu ses
+        zaten kayıtlı birine benziyor mu?" kontrolü için. Kimse yoksa (None, 0.0)."""
+        if self._centroids.shape[0] == 0:
+            return None, 0.0
+        q = _l2(np.asarray(emb, dtype=np.float32))
+        sims = self._centroids @ q
+        i = int(np.argmax(sims))
+        return self._names[i], float(sims[i])
 
     def num_speakers(self) -> int:
         return len(self._names)
@@ -198,8 +215,11 @@ def _default_db_path() -> str:
     return _resolve(os.getenv("SPEAKER_DB", "data/speakers.db"))
 
 
-def _name_key(name: str) -> str:
+def name_key(name: str) -> str:
     return " ".join((name or "").split()).casefold()
+
+
+_name_key = name_key  # geriye-uyum takma ad
 
 
 class SpeakerStore:
@@ -380,10 +400,11 @@ def build_speaker_id() -> "SpeakerID | None":
             model_id,
             _f("SPEAKER_THRESHOLD", 0.45),
             _f("SPEAKER_MARGIN", 0.05),
+            merge_low=_f("SPEAKER_MERGE_LOW", 0.35),
         )
         log.info(
-            "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f)",
-            model_path, sp.dim, sp.threshold, sp.margin,
+            "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f)",
+            model_path, sp.dim, sp.threshold, sp.margin, sp.merge_low,
         )
         return sp
     except Exception as e:  # noqa: BLE001

@@ -14,12 +14,15 @@ import asyncio
 import logging
 import math
 import os
+import time
 
 from livekit import rtc
 
-from speaker_id import SpeakerID, pcm_to_f32
+from speaker_id import SpeakerID, emb_to_bytes, pcm_to_f32
+from log_utils import DedupeFilter
 
 log = logging.getLogger("worker.speaker_tap")
+log.addFilter(DedupeFilter())  # "sessiz pencere atlandı" vb. tekrarları seyreltir
 
 TAP_RATE = 16000  # sherpa 16k dışını içeride resample eder; 16k besliyoruz
 TAP_CHANNELS = 1
@@ -37,6 +40,13 @@ def _i(name: str, default: int) -> int:
         return int(float(os.getenv(name, "") or default))
     except (TypeError, ValueError):
         return default
+
+
+def _b(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 class SpeakerState:
@@ -79,7 +89,8 @@ class SpeakerState:
 class SpeakerTap:
     """Room'daki her uzak mikrofon track'i için bir embed/identify döngüsü sürer."""
 
-    def __init__(self, sp: SpeakerID, state: SpeakerState, min_seconds: float = 1.0):
+    def __init__(self, sp: SpeakerID, state: SpeakerState, min_seconds: float = 1.0,
+                 store=None):
         self._sp = sp
         self._state = state
         self._min_seconds = max(0.5, min_seconds)
@@ -87,6 +98,36 @@ class SpeakerTap:
         # Konuşma-kapısı: normalize [-1,1] RMS eşiği. Bunun altındaki (sessizlik/
         # kelime-arası) pencereler identify EDİLMEZ; current DEĞİŞMEZ.
         self._vad_rms = _f("SPEAKER_VAD_RMS", 0.01)
+        # Artımlı öğrenme (opsiyonel, default KAPALI): YÜKSEK güvenle tanınan
+        # pencerelerden ara sıra örnek ekleyip centroid'i güçlendir. Az örnekli
+        # centroid'in başka gün/mikrofonda eşiğin altına düşmesine karşı.
+        self._store = store if _b("SPEAKER_LEARN_ENABLED", False) else None
+        self._learn_min = _f("SPEAKER_LEARN_MIN_SCORE", 0.60)
+        self._learn_max_add = _i("SPEAKER_LEARN_MAX_PER_SESSION", 2)
+        self._learn_cooldown = _f("SPEAKER_LEARN_COOLDOWN_S", 60.0)
+        self._learned = 0
+        self._last_learn = 0.0
+
+    async def _maybe_learn(self, name: str, emb) -> None:
+        """Güvenli tanımada örnek ekle (kapalıysa / kota dolduysa no-op)."""
+        if self._store is None or self._learned >= self._learn_max_add:
+            return
+        now = time.monotonic()
+        if self._last_learn and (now - self._last_learn) < self._learn_cooldown:
+            return
+        sid = self._sp.id_for(name)
+        if sid is None:
+            return
+        self._last_learn = now
+        self._learned += 1
+        try:
+            await self._store.add_speaker_sample(
+                sid, emb_to_bytes(emb), self._sp.dim, self._sp.model_id, source="auto-learn"
+            )
+            self._sp.reload(await self._store.all_speaker_embeddings())
+            log.info("speaker-tap: %r için örnek eklendi (auto-learn)", name)
+        except Exception as e:  # noqa: BLE001 — öğrenme asla akışı bozmasın
+            log.debug("auto-learn hata: %s", e)
 
     def attach(self, room: rtc.Room) -> None:
         """Track subscribe olaylarını dinle; mevcut abonelikleri de yakala."""
@@ -144,6 +185,9 @@ class SpeakerTap:
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)
                     continue
+                # Artımlı öğrenme (default kapalı): yüksek güvenli tanımada centroid'i besle.
+                if name is not None and score >= self._learn_min:
+                    await self._maybe_learn(name, emb)
                 # Yapışkan güncelleme: anlık unknown current'ı hemen düşürmez.
                 if self._state.observe(name, score):
                     log.info(

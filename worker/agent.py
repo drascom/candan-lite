@@ -45,6 +45,14 @@ WAKE_STT_ENABLED = _envflag("WAKE_STT_ENABLED", False)
 WAKE_STT_WINDOW = float(os.environ.get("WAKE_STT_WINDOW", "1.5") or 1.5)
 WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 
+# Log gürültüsü: livekit-agents 'dev' modu varsayılan olarak DEBUG basar
+# (worker.py _default_log_level dev_default="DEBUG") → speaker-tap/wake_stt gibi
+# her pencerede/chunk'ta basılan debug loglar sürekli akar. Varsayılanı INFO'ya
+# çekiyoruz; ham/eski (DEBUG + dedupe kapalı) davranış WORKER_VERBOSE_LOGS=true
+# ile geri gelir (bkz. log_utils.DedupeFilter, aynı bayrağı okur).
+WORKER_VERBOSE_LOGS = _envflag("WORKER_VERBOSE_LOGS", False)
+WORKER_LOG_LEVEL = "DEBUG" if WORKER_VERBOSE_LOGS else os.environ.get("WORKER_LOG_LEVEL", "INFO")
+
 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
@@ -61,7 +69,7 @@ async def entrypoint(ctx: JobContext):
             store = SpeakerStore()
             sp.reload(await store.all_speaker_embeddings())  # enrolled kişileri yükle
             speaker_state = SpeakerState(sticky_misses=SPEAKER_STICKY_MISSES)
-            tap = SpeakerTap(sp, speaker_state, min_seconds=SPEAKER_MIN_S)
+            tap = SpeakerTap(sp, speaker_state, min_seconds=SPEAKER_MIN_S, store=store)
         except Exception as e:  # noqa: BLE001 — speaker-ID hiç kurulamazsa Faz 2'ye düş
             import logging
             logging.getLogger("worker.agent").warning("speaker-ID kurulamadı: %r", e)
@@ -162,4 +170,4 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, log_level=WORKER_LOG_LEVEL))

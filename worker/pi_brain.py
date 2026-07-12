@@ -31,8 +31,10 @@ from name_parser import (
     is_affirmative_reply,
     _is_decline_enroll,
 )
+from log_utils import DedupeFilter
 
 logger = logging.getLogger("pi_brain")
+logger.addFilter(DedupeFilter())  # tekrarlayan warning/info loglarını seyreltir
 
 # Repo kökü = worker/'ın bir üstü. cwd bu olmalı ki local pi/ ve sessions/ çözülsün.
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -695,11 +697,14 @@ if _HAS_LIVEKIT:
             self._speaker_store = speaker_store
             self._enroll_ok = bool(speaker_state and speaker_id and speaker_store)
             # Enrollment state machine (bağlantı ömrü boyunca yaşar).
-            self._enroll_stage: Optional[str] = None      # None | "ask_name" | "confirm"
+            # verify_existing: ses mevcut bir kişiye "belirsiz bant"ta benziyor →
+            # "Sen X misin?" diye sorup onayı bekliyoruz (kimlik bölünmesi koruması).
+            self._enroll_stage: Optional[str] = None      # None|"ask_name"|"confirm"|"verify_existing"
             self._enroll_name: Optional[str] = None
             self._enroll_emb: Any = None                  # tetikleyen sözün embed'i
             self._enroll_name_emb: Any = None             # ismi söylerkenki embed
             self._enroll_retried = False                  # isim bir kez tekrar soruldu mu
+            self._enroll_match: Optional[str] = None      # sese benzeyen mevcut kişi
             self._onboarding_asked = False                # bu bağlantıda soruldu mu
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
@@ -754,6 +759,7 @@ if _HAS_LIVEKIT:
             self._enroll_emb = None
             self._enroll_name_emb = None
             self._enroll_retried = False
+            self._enroll_match = None
 
         async def _enrollment_line(self, text: str) -> Optional[str]:
             """Enrollment kararı. Scripted TR satır döndürürse pi ATLANIR; None →
@@ -776,7 +782,15 @@ if _HAS_LIVEKIT:
                 return None
 
         async def _continue_enrollment(self, text: str) -> Optional[str]:
-            """ask_name → confirm → finish akışı. _enroll_lock altında çağrılır."""
+            """ask_name → confirm → (verify_existing) → finish akışı.
+            _enroll_lock altında çağrılır."""
+            if self._enroll_stage == "verify_existing":
+                match = self._enroll_match or ""
+                if is_affirmative_reply(text):
+                    # Aynı kişi: yeni kimlik AÇMA, mevcut kişiye örnek ekle.
+                    return await self._merge_into(match)
+                logger.info("enrollment: %r değilmiş → yeni kişi açılıyor", match)
+                return await self._enroll_new(self._enroll_name or "")
             if self._enroll_stage == "confirm":
                 if is_affirmative_reply(text):
                     return await self._finish_enrollment()
@@ -803,25 +817,76 @@ if _HAS_LIVEKIT:
             self._enroll_stage = "confirm"
             return f"Seni {name} olarak kaydedeyim mi?"
 
+        def _best_existing(self) -> tuple[Optional[str], float]:
+            """Enroll embedding'lerini MEVCUT tüm centroid'lere karşı ölç; en yüksek
+            skoru döndür (eşik/marj uygulanmaz). Kimse/emb yoksa (None, 0.0)."""
+            best_name, best_score = None, 0.0
+            for emb in (self._enroll_name_emb, self._enroll_emb):
+                if emb is None:
+                    continue
+                try:
+                    name, score = self._speaker_id.best_match(emb)
+                except Exception as e:  # noqa: BLE001
+                    logger.debug("best_match hata: %s", e)
+                    continue
+                if name and score > best_score:
+                    best_name, best_score = name, score
+            return best_name, best_score
+
         async def _finish_enrollment(self) -> str:
-            """Onay alındı → kişi oluştur + ses örneklerini yaz + reload + swap."""
-            from speaker_id import emb_to_bytes
+            """Onay alındı. YENİ KİMLİK AÇMADAN ÖNCE ses-benzerlik koruması:
+              skor >= threshold → zaten kayıtlı kişi, sessizce ona örnek ekle
+              merge_low <= skor < threshold → belirsiz → "Sen X misin?" diye sor
+              skor < merge_low → gerçekten yeni kişi → normal enroll
+            (Aynı kişinin iki kimliğe bölünmesini engeller.)"""
+            from speaker_id import name_key
 
             name = self._enroll_name or ""
+            match, score = self._best_existing()
+            if match and name_key(match) != name_key(name):
+                thr = float(getattr(self._speaker_id, "threshold", 0.45))
+                low = float(getattr(self._speaker_id, "merge_low", 0.35))
+                if score >= thr:
+                    logger.info(
+                        "enrollment: ses zaten %r'a ait gibi (skor=%.3f >= %.2f) → yeni kişi AÇILMIYOR",
+                        match, score, thr,
+                    )
+                    return await self._merge_into(match)
+                if score >= low:
+                    logger.info(
+                        "enrollment: belirsiz bant (%r skor=%.3f, %.2f–%.2f) → onay soruluyor",
+                        match, score, low, thr,
+                    )
+                    self._enroll_match = match
+                    self._enroll_stage = "verify_existing"
+                    return f"Sen {match} misin?"
+                logger.info(
+                    "enrollment: en yakın %r skor=%.3f < %.2f → gerçekten yeni kişi",
+                    match, score, low,
+                )
+            return await self._enroll_new(name)
+
+        async def _store_samples(self, sid: int, source: str) -> None:
+            from speaker_id import emb_to_bytes
+
+            mid, dim = self._speaker_id.model_id, self._speaker_id.dim
+            for emb in (self._enroll_emb, self._enroll_name_emb):
+                if emb is not None:
+                    await self._speaker_store.add_speaker_sample(
+                        sid, emb_to_bytes(emb), dim, mid, source=source
+                    )
+            # Değişiklik hemen etkili olsun: centroid'leri DB'den yeniden kur.
+            self._speaker_id.reload(await self._speaker_store.all_speaker_embeddings())
+
+        async def _enroll_new(self, name: str) -> str:
+            """Kişi oluştur (isim eşleşiyorsa mevcut kaydı kullanır) + örnek yaz + swap."""
             try:
                 rec = await self._speaker_store.create_speaker(name)
                 sid = rec["id"]
-                mid, dim = self._speaker_id.model_id, self._speaker_id.dim
-                for emb in (self._enroll_emb, self._enroll_name_emb):
-                    if emb is not None:
-                        await self._speaker_store.add_speaker_sample(
-                            sid, emb_to_bytes(emb), dim, mid, source="voice-enroll"
-                        )
-                # Yeni kişi hemen tanınsın: DB'den yeniden yükle.
-                self._speaker_id.reload(await self._speaker_store.all_speaker_embeddings())
+                await self._store_samples(sid, "voice-enroll")
                 # Bu bağlantıda konuşmacı artık bu kişi (sonraki tur persona swap eder).
-                self._speaker_state.current = name
-                self._greeted.add(name)  # kimliği onayladık → tekrar selam gerekmez
+                self._speaker_state.current = rec.get("name") or name
+                self._greeted.add(self._speaker_state.current)  # kimliği onayladık
                 logger.info("enrollment: %r kaydedildi (id=%s)", name, sid)
             except Exception as e:  # noqa: BLE001
                 logger.warning("enrollment başarısız (%s)", e)
@@ -829,6 +894,25 @@ if _HAS_LIVEKIT:
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
             return f"Memnun oldum {name}!"
+
+        async def _merge_into(self, match: str) -> str:
+            """Ses mevcut kişiye ait → YENİ kişi açma; örnekleri o kişiye ekle
+            (centroid güçlenir, hafıza bölünmez)."""
+            try:
+                sid = self._speaker_id.id_for(match)
+                if sid is None:
+                    rec = await self._speaker_store.create_speaker(match)
+                    sid = rec["id"]
+                await self._store_samples(sid, "voice-enroll-merge")
+                self._speaker_state.current = match
+                self._greeted.add(match)
+                logger.info("enrollment: örnekler mevcut kişi %r'a eklendi (id=%s)", match, sid)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("enrollment merge başarısız (%s)", e)
+                self._reset_enroll()
+                return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
+            self._reset_enroll()
+            return f"Tamam {match}, sesini daha iyi tanıyacağım artık."
 
         def _maybe_greet(self, text: str) -> str:
             """Tanınan kişinin bu bağlantıdaki İLK turunda pi'ya ismiyle-selam
