@@ -1,7 +1,70 @@
-# candan-lite — HANDOFF (2026-07-10)
+# candan-lite — HANDOFF (2026-07-12)
 
 > ⚠️ **AŞAĞIDAKİ BÖLÜM GÜNCELDİR — önce bunu oku.** Altındaki eski bölümler tarihsel
 > (özellikle "Beyin = OpenAI-uyumlu /v1 + PIDEV_BASE_URL" İPTAL — pivot edildi).
+
+## 🔥 2026-07-12: pi gecikmesi ÇÖZÜLDÜ (40sn turlar) + global izolasyon
+
+**Kök sebep (ölçümle kanıtlandı):** `pi` bir KODLAMA ajanı ve global kurulumdan built-in
+tool'ları miras alıyordu, üstelik oto-onaylı. Gerçek oturumda Candan `read`×8, `edit`×6,
+`bash`×2, `grep`×1 çağırmış — 23 tool çağrısının 19'u sesli asistanda gereksiz.
+Her tool çağrısı = modele fazladan istek bacağı; `openai-codex` bunları WebSocket üzerinden
+atıyor ve bacaklar ara sıra 30-100s asılı kalıp `WebSocket closed 1000` (0 token) üretiyor.
+40sn turun anatomisi: `toolUse → toolResult → [30.8s asılı] → error WS-1000 → retry → 39.9s`.
+Ölçüm: tool'suz tur TTFT medyan **2.4s**, tool'lu **6.4s** (2.7x). Aykırılar HEP tool'lu turlarda.
+
+**Fix 1 — tool allowlist** (`7584165`): `PI_TOOLS_ALLOWLIST=memory_add,memory_search,web_search`
++ `PI_NO_BUILTIN_TOOLS=true`. ⚠️ **`--no-builtin-tools` TEK BAŞINA İŞE YARAMIYOR** — o bayrak
+altında bile pi `read`/`find`/`ls` çağırdı (29.9s aykırı üretti). Built-in'leri gerçekten kesen
+tek şey **allowlist (`-t`)**. Zorlayıcı testte built-in çağrısı SIFIR.
+Yan fayda: asistanın repo'da oto-onaylı `bash`/`edit` çalıştırabildiği **güvenlik açığı kapandı**
+(baseline'da gerçekten bir dosyaya yazabildiği doğrulandı).
+
+**Fix 2 — global izolasyon** (`c53f1cc`): `PI_ISOLATED=true` (default) →
+`--no-extensions --no-skills --no-prompt-templates --no-themes --no-context-files`.
+Worker'ın pi süreci `~/.pi/agent`'tan şunları miras alıyordu: `filechanges`, `read-only-mode`,
+`pi-beautify`, **global `memory.ts`** (bizim mem extension'ının YANINDA ikinci hafıza sistemi!),
+`pi-mcp-adapter` → `ha-builtin` MCP sunucusu, `stop-slop` skill.
+Bayraklar sadece KEŞFİ kapatıyor; `-e` ile verdiğimiz mem extension ve `--skill` ile verdiğimiz
+memory skill AYNEN yükleniyor (kanıt: izolasyonlu spawn stdout'u BOŞ; `memory_search` canlı
+turda gerçek veriden cevap verdi). **Kullanıcının global pi kurulumuna DOKUNULMADI.**
+Brain VPS'te çalışacak ve orada global pi olmayacak → izolasyon zaten prod davranışını taklit ediyor.
+⚠️ `web_search` pi built-in'i DEĞİL, global `npm:pi-web-access`'ten geliyordu → izolasyonla
+**web arama yeteneği ŞU AN YOK** (allowlist'teki isim ölü giriş, zararsız). Gerekirse lokal
+extension olarak eklenecek. Kullanıcı diğer tool'ları "birer birer" kendisi ekleyecek.
+
+**Oturum şişmesi — ROTATE GEREKMİYOR (ölçüldü, varsayım çürüdü).** 185 KB'lık gerçek oturumda
+TTFT medyan **1.81s** (hedef ≤2s). Bağlam etkisi ~**2.4ms/KB**, lineer, kırılma noktası YOK;
+TTFT'nin 2s'yi aşması için ~380-400 KB gerekir. Daha önceki "185KB → 4.17s (2.5x)" ölçümü
+**tool'lar açıkken** yapılmıştı — o yükün asıl kaynağı bağlam değil TOOL BACAKLARIYMIŞ.
+→ Session rotasyonu / alt-oturum / eşik mantığı **YAZILMADI** (gereksiz karmaşıklık olurdu).
+~350 KB'a yaklaşınca yeniden ölç. Boot enjeksiyonu (persona+profile+family+skill) toplam
+~3.9 KB (~1000 token) — TTFT'ye ölçülebilir katkısı YOK.
+
+**Oturum davranışı (mevcut, doğru):** `--session-id <slug>` ile **kişi başına KALICI oturum** —
+bağlan/kes yeni oturum AÇMIYOR, aynı dosyaya devam ediyor (`baba` oturumu 10 Tem'de açıldı,
+12 Tem'de hâlâ aynı dosyada). Kullanıcının istediği "tek ana oturum sürekli devam etsin"
+davranışı ZATEN VAR. `session-finalize` (`agent.py:87` → `PiBrain.finalize()`) da bağlı ve çalışıyor.
+
+**Hafıza durumu:** dead/bağlanmamış modül YOK. `pi/extensions/mem/index.ts` (memory_add/
+memory_search) + `pi/skills/memory/SKILL.md` + boot enjeksiyonu + `MEM_USER` + policy.json +
+FTS5 index + finalize → hepsi bağlı ve canlı loglarda çalışıyor. Planlanıp YAZILMAYAN: `tools/mem`
+CLI (gereksiz, extension yerini aldı) ve **git-audit** (`memory/.git` var ama TEK COMMIT YOK,
+kodda hiç git çağrısı yok → fiilen ÖLÜ).
+`Moduler_Cok_Kullanicili_Hafiza_Sistemi_Plani.md` (`32c4ea5`) = kullanıcının İLK planı, **kuzey
+yıldızı/referans** — ŞU AN UYGULANMAYACAK. Sistem bitince son halle karşılaştırılıp sapma
+kontrolü yapılacak. (Mevcut pi-native hafıza plandaki ihtiyaçların çoğunu çok daha hafif karşılıyor.)
+
+**⏳ AÇIK: CANLI TEST YAPILMADI.** Yukarıdaki iki fix CLI ölçümleriyle doğrulandı ama sesli
+oturumda test edilmedi. Worker yeni ayarlarla ayakta. Kullanıcı tarayıcıyı TAM KAPATIP yeniden
+bağlanmalı → konuşup doğrulayacak: turlar hızlandı mı, 40sn takılma tekrar ediyor mu, hafıza
+çalışıyor mu. ⚠️ WS-1000 fix sonrası hiç YENİDEN ÜRETİLEMEDİ (her varyantta 0) — yani fix'in
+takılmaları azalttığı DOĞRUDAN kanıtlanmadı; kanıtlanan şey onlara yol açan tool bacaklarının
+sıfırlandığı.
+
+**Bekleyen küçük kararlar:** (a) `sessions/` altındaki bench artıkları (`*_bench-*.jsonl`)
+silinsin mi — SORULDU, cevap YOK; (b) `konusma.md` untracked duruyor (Candan'ın yazdığı konuşma
+dökümü); (c) `web_search` lokal extension olarak geri eklensin mi.
 
 ## 🟢 GÜNCEL DURUM (2026-07-10 session sonu) — hepsi çalışıyor, main'de push'lu
 
