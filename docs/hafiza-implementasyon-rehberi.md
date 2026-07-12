@@ -1,4 +1,4 @@
-> ⚠️ **TARİHSEL / GEÇERSİZ (2026-07-10).** Bu plan Hermes-çerçeveliydi. Gerçek uygulama **Pi-native**: kendi lokal extension `pi/extensions/mem/` (`memory_add`/`memory_search`), `pi-hermes-memory` KALDIRILDI. Güncel durum: `HANDOFF.md`. Bu dosya yalnız fikir/kavram referansı.
+> ⚠️ **TARİHSEL / GEÇERSİZ (2026-07-10).** Bu plan Hermes-çerçeveliydi. Gerçek uygulama **Pi-native**: kendi lokal extension `pi/extensions/family-memory/` (`memory_add`/`memory_search`), `pi-hermes-memory` KALDIRILDI. Güncel durum: `HANDOFF.md`. Bu dosya yalnız fikir/kavram referansı.
 
 # Hafıza v2 — İmplementasyon Rehberi
 

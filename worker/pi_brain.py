@@ -23,6 +23,7 @@ import sys
 import time
 import unicodedata
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -81,9 +82,20 @@ def _envflag(name: str, default: bool) -> bool:
 #   PI_NO_BUILTIN_TOOLS=true (DEFAULT) → `-nbt`: ek savunma katmanı (tek başına yetersiz).
 # İkisini de kapatmak → pi'nın kendi varsayılanı (eski davranış; geri dönüş kolay).
 PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
+# NOT: buraya EKLENMEYEN tool çalışmaz. reminder_* (proaktif hatırlatma) ve
+# memory_consolidate (bağlam şişmesi) mem extension'ından geliyor → allowlist'te olmalı.
 PI_TOOLS_ALLOWLIST = os.environ.get(
-    "PI_TOOLS_ALLOWLIST", "memory_add,memory_search,web_search"
+    "PI_TOOLS_ALLOWLIST",
+    "memory_add,memory_search,web_search,"
+    "reminder_add,reminder_list,reminder_cancel,memory_consolidate",
 )
+
+# Zaman dilimi: kullanıcı Londra'da. due_at hesabı pi extension'da (server-side),
+# burada SADECE modele her turda verilen "şu an" satırı için kullanılır.
+CANDAN_TZ = os.environ.get("CANDAN_TZ", "Europe/London")
+# profile.md / family.md sert sınırı (bunlar HER TURDA bağlama enjekte edilir).
+MEM_CONTEXT_LIMIT = int(os.environ.get("MEM_CONTEXT_LIMIT_BYTES", "2048") or 2048)
+CONSOLIDATE_COOLDOWN = float(os.environ.get("CONSOLIDATE_COOLDOWN_SECONDS", "86400") or 86400)
 
 # İZOLASYON (PI_ISOLATED, DEFAULT açık). Worker'ın pi süreci, kullanıcının GLOBAL pi
 # kurulumundan (~/.pi/agent/: settings.json extensions+packages, skills/, prompts,
@@ -237,6 +249,9 @@ class WakeGate:
         # Sayaç duraklatma bayrakları (agent.py: user_state_changed/agent_state_changed).
         self.user_speaking = False   # kullanıcı şu an konuşuyor (VAD)
         self.agent_busy = False      # asistan düşünüyor/konuşuyor (cevap sürüyor)
+        # Proaktif seslenme sürerken True: kullanıcının onay sözü ("efendim") pi'ya
+        # GİTMESİN (yoksa hem biz hatırlatmayı iletiriz hem pi ayrıca cevap verir).
+        self.hold = False
         # Uyku↔uyanık GEÇİŞİNDE çağrılır (sync). Web'e attribute yayını + transcript
         # kapısı buraya bağlanır. None → geçiş sinyali yok (mevcut davranış).
         self.on_change = on_change
@@ -306,6 +321,10 @@ class WakeGate:
         "candan" TEK BAŞINA (uyurken ya da uyanıkken) → 'silent': uyan (çan) ama
         pi'ya GİTME, sözlü yanıt YOK. Wake + kalan metin → uyan + 'process' (kalan).
         Uyurken + wake yok → 'silent'."""
+        if self.hold:
+            # Proaktif seslenme sürüyor: kullanıcının onay sözünü BİZ işliyoruz,
+            # pi'ya gitmesin (çift cevap yok). Kısa ve deterministik kapı.
+            return ("silent", None)
         if not self.enabled:
             return ("process", text)
         now = time.monotonic() if now is None else now
@@ -491,10 +510,10 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     skills = REPO_ROOT / PI_SKILLS_DIR
     if skills.exists():
         args += ["--skill", str(skills)]
-    # Hafıza Faz B: LOKAL pi memory extension (memory_add / memory_search tool'ları).
-    # Sadece worker'ın pi'sinde yüklenir (global DEĞİL). Guest'te de yüklenebilir —
-    # tool'lar MEM_USER boşsa kendini reddeder. Dosya yoksa graceful (Faz A davranışı).
-    mem_ext = REPO_ROOT / "pi" / "extensions" / "mem" / "index.ts"
+    # LOKAL pi extension: family-memory (memory_add/memory_search + reminder_* +
+    # memory_consolidate). Sadece worker'ın pi'sinde yüklenir (global DEĞİL). Guest'te de
+    # yüklenebilir — tool'lar MEM_USER boşsa kendini reddeder. Dosya yoksa graceful.
+    mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
     if mem_ext.is_file():
         args += ["-e", str(mem_ext)]
     # web_search: LOKAL extension (anahtarsız Qwant). `web_search` pi'nin built-in'i
@@ -730,6 +749,10 @@ if _HAS_LIVEKIT:
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
+            # ZAMAN: warm pi süreci GÜNLERCE yaşar → boot'ta enjekte edilen tarih BAYATLAR.
+            # Her tura güncel saati (Europe/London) iliştir. Model yine de due_at HESAPLAMAZ
+            # (onu reminder_add server-side çözer); bu satır "bugün/yarın/şu an" için.
+            text = self._brain._now_note() + "\n\n" + text
 
             q: asyncio.Queue = asyncio.Queue()
 
@@ -853,6 +876,8 @@ if _HAS_LIVEKIT:
             # Wake word gate (konuşma penceresi). Kapalıysa gate yok (mevcut davranış).
             self._wake = WakeGate()
             self._wake_task: Optional[asyncio.Task] = None
+            # Konsolidasyon: dosya başına son çalıştırma (günde en çok 1 → LLM turu yakma).
+            self._consolidated: dict[str, float] = {}
 
         # ── Wake word gate (konuşma penceresi) ───────────────────────────────
         def set_wake_change(self, cb: Optional[Callable[[bool], None]]) -> None:
@@ -911,6 +936,128 @@ if _HAS_LIVEKIT:
                         logger.info("wake: %.0fs sessizlik → uyku", self._wake.window)
             except asyncio.CancelledError:
                 pass
+
+        # ── Proaktif ajan kancaları (worker/reminders.py bunları kullanır) ────
+        def proactive_hold(self, v: bool) -> None:
+            """Proaktif seslenme sürerken kullanıcının onay sözü ('efendim') pi'ya
+            GİTMESİN — hatırlatmayı BİZ iletiyoruz; pi ayrıca cevap verirse çift konuşma
+            olur. Deterministik kapı (yarış yok)."""
+            self._wake.hold = bool(v)
+
+        def busy(self) -> bool:
+            """Kullanıcı konuşuyor ya da asistan cevap veriyor → proaktif seslenme ERTELE."""
+            return self._wake.busy()
+
+        def current_user(self) -> str:
+            """Hafıza kimliği (guest/unknown → ''). Olaylar bu kullanıcıya ait."""
+            return _mem_user(self._session_id)
+
+        def display_name(self, user: str = "") -> str:
+            """Sesli seslenmede kullanılacak ad ('ayhan' → 'Ayhan')."""
+            name = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            return (name or (user or self._session_id) or "").strip().capitalize()
+
+        def _now_note(self) -> str:
+            """Modele HER TURDA verilen güncel saat satırı. Warm süreç günlerce yaşadığı
+            için boot'ta enjekte edilen tarih bayatlar; bu satır taze kalır."""
+            try:
+                from zoneinfo import ZoneInfo
+
+                now = datetime.now(ZoneInfo(CANDAN_TZ))
+            except Exception:  # noqa: BLE001 — tz verisi yoksa yerel saat
+                now = datetime.now()
+            days = ("Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar")
+            return (f"(Sistem: şu an {now:%d.%m.%Y} {days[now.weekday()]}, saat {now:%H:%M} "
+                    f"[{CANDAN_TZ}].)")
+
+        # ── Sessiz pi turu (TTS'e GİTMEZ; AgentSession'ı hiç görmez) ──────────
+        async def _silent_turn(self, prompt: str, timeout: float = 30.0) -> bool:
+            """pi'ya arka planda bir prompt gönder ve tur bitene kadar bekle. Çıktı sesli
+            OKUNMAZ (LLMStream değil, doğrudan RPC). Hata/timeout → False (akış bloklanmaz)."""
+            client = self._client
+            if client is None or not client.started or not client._mem_user:
+                return False
+            q: asyncio.Queue = asyncio.Queue()
+            try:
+                async with client._turn_lock:
+                    client._turn_q = q
+                    try:
+                        await client.send({"type": "prompt", "message": prompt})
+
+                        async def _drain() -> None:
+                            while True:
+                                obj = await q.get()
+                                if obj is None or obj.get("type") == "agent_settled":
+                                    break
+
+                        await asyncio.wait_for(_drain(), timeout=timeout)
+                        return True
+                    except Exception as e:  # noqa: BLE001 — arka plan turu akışı bloklamaz
+                        logger.info("sessiz tur atlandı/timeout: %r", e)
+                        client._write({"type": "abort"})
+                        return False
+                    finally:
+                        client._turn_q = None
+            except Exception:  # noqa: BLE001
+                return False
+
+        # ── PARÇA B: konsolidasyon (bağlam şişmesi) ───────────────────────────
+        def _context_files(self, user: str) -> list[tuple[str, Path]]:
+            mem = REPO_ROOT / MEMORY_DIR
+            return [("profile", mem / "users" / user / "profile.md"),
+                    ("family", mem / "family.md")]
+
+        async def consolidate_if_needed(self, now: Optional[float] = None) -> Optional[str]:
+            """profile.md / family.md HER TURDA bağlama enjekte ediliyor (ölçüm: ~2.4 ms/KB).
+            2 KB'ı aşan dosya varsa pi'ya SESSİZ bir tur açıp memory_consolidate çağırtır:
+            kalıcı gerçekler dosyada kalır, olaylar notes/'a iner (kayıp yok).
+
+            Ne zaman: yalnız kullanıcı SESSİZKEN (busy DEĞİL + uyku gate'i uyanık değil) —
+            konuşmayı bölmez. Dosya başına günde 1 (gereksiz LLM turu yakma).
+            Boyutlar LOGLANIR (önce/sonra) → büyüme hızı ölçülebilsin."""
+            user = self.current_user()
+            if not user:
+                return None
+            if self._wake.busy():
+                return None                      # konuşma sürüyor → ASLA
+            if self._wake.enabled and self._wake.awake:
+                return None                      # konuşma penceresi açık → bekle (gece/sessizlik)
+            now = time.time() if now is None else now
+            for which, path in self._context_files(user):
+                try:
+                    size = path.stat().st_size
+                except OSError:
+                    continue
+                if size <= MEM_CONTEXT_LIMIT:
+                    continue
+                if now - self._consolidated.get(which, 0.0) < CONSOLIDATE_COOLDOWN:
+                    continue
+                self._consolidated[which] = now
+                try:
+                    content = path.read_text()
+                except OSError:
+                    continue
+                logger.info("konsolidasyon: %s %d bayt > %d sınır → pi turu açılıyor",
+                            which, size, MEM_CONTEXT_LIMIT)
+                prompt = (
+                    f"[sistem] Bağlam dosyan '{which}' {size} bayt; sert sınır "
+                    f"{MEM_CONTEXT_LIMIT} bayt. Bu dosya HER TURDA bağlamına yükleniyor, "
+                    f"şişmesi gecikme demek. memory_consolidate tool'unu çağır: "
+                    f"file='{which}', text=<sınırın ALTINDA yeni özet>, demoted=<özetten "
+                    f"çıkardığın satırlar>. KALICI gerçekleri (kim, nerede, aile, kalıcı "
+                    f"tercihler) KORU; tarihli/olay içeriğini demoted ile notes'a indir — "
+                    f"hiçbir şey kaybolmasın. Sesli yanıt verme, sadece tool'u çağır.\n\n"
+                    f"--- {which} (mevcut içerik) ---\n{content}"
+                )
+                await self._silent_turn(prompt, timeout=90.0)
+                try:
+                    after = path.stat().st_size
+                except OSError:
+                    after = 0
+                logger.info("konsolidasyon bitti: %s %d → %d bayt (sınır %d)",
+                            which, size, after, MEM_CONTEXT_LIMIT)
+                return which
+            return None
 
         # ── Faz 3.1: sesli oto-enrollment state machine ──────────────────────
         def _reset_enroll(self) -> None:
@@ -1188,34 +1335,11 @@ if _HAS_LIVEKIT:
             """Oturum kapanışı: pi'yı öldürmeden ÖNCE tek best-effort tur — kalıcı
             maddeler varsa memory_add ile kaydettir. 30 sn timeout; kapanışı ASLA
             bloklamaz, hata yutulur. Guest / süreç ölü / hafıza yok → hiçbir şey yapma."""
-            client = self._client
-            if client is None or not client.started or not client._mem_user:
-                return
-            prompt = (
+            await self._silent_turn(
                 "Oturum bitiyor. Bu konuşmadan hatırlanmaya değer kalıcı 3-5 madde "
-                "varsa memory_add ile kaydet; yoksa sadece 'yok' de. Sesli yanıt verme."
+                "varsa memory_add ile kaydet; yoksa sadece 'yok' de. Sesli yanıt verme.",
+                timeout=30.0,
             )
-            q: asyncio.Queue = asyncio.Queue()
-            try:
-                async with client._turn_lock:
-                    client._turn_q = q
-                    try:
-                        await client.send({"type": "prompt", "message": prompt})
-
-                        async def _drain() -> None:
-                            while True:
-                                obj = await q.get()
-                                if obj is None or obj.get("type") == "agent_settled":
-                                    break
-
-                        await asyncio.wait_for(_drain(), timeout=30.0)
-                    except Exception as e:  # noqa: BLE001 — kapanış bloklanmaz
-                        logger.info("finalize atlandı/timeout: %r", e)
-                        client._write({"type": "abort"})
-                    finally:
-                        client._turn_q = None
-            except Exception:  # noqa: BLE001
-                pass
 
         def chat(
             self,
@@ -1570,8 +1694,321 @@ def _policy_test() -> int:
     return 0 if all_ok else 1
 
 
+def _proactive_test() -> int:
+    """Proaktif ajan + konsolidasyon senaryoları — SAHTE SAAT/IO (ses, token, livekit YOK).
+
+    Senaryolar (kullanıcının istediği 7):
+      (a) 23:50'de "saat 1" → due YARIN 01:00   [events.ts selftest — gerçek TZ aritmetiği]
+      (b) vakti gelen pending → seslenme tetikleniyor
+      (c) cevap yok → 1 kez daha → pending'e dönüyor (attempts++)
+      (d) kullanıcı konuşuyorken → seslenme ERTELENİYOR
+      (e) kullanıcı odada yok → seslenme YOK; bağlanınca gecikmiş iletiliyor (>12sa "geçmiş")
+      (f) UYKUDAYKEN → seslenme YAPILIYOR (uyku susturmuyor)
+      (g) profile 2 KB'ı aşınca → konsolidasyon tetikleniyor (kayıpsızlık: events.ts (9))
+    """
+    global MEMORY_DIR
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not _HAS_LIVEKIT:
+        print("[proactive] SKIP: livekit yok (worker/.venv ile çalıştır)")
+        return 1
+
+    from reminders import Deliverer, EventStore
+
+    results: list[tuple[str, bool, str]] = []
+    tmp = tempfile.mkdtemp(prefix="candan-proactive-")
+    old_mem, old_env = MEMORY_DIR, dict(os.environ)
+    T0 = 1_000_000.0  # sahte "şimdi" (monotonic değil; Deliverer'a enjekte edilir)
+
+    class FakeIO:
+        """ProactiveIO sahtesi. GERÇEK WakeGate kullanır → uyku/kesme etkileşimi de test edilir."""
+
+        def __init__(self, gate: WakeGate):
+            self.gate = gate
+            self.said: list[str] = []
+            self.replies: list[bool] = []   # wait_reply'ın sırayla döneceği cevaplar
+            self.here = True
+            self.holds: list[bool] = []
+
+        def present(self) -> bool:
+            return self.here
+
+        def busy(self) -> bool:
+            return self.gate.busy()
+
+        def display_name(self, user: str) -> str:
+            return (user or "").capitalize()
+
+        def set_busy(self, v: bool) -> None:
+            self.gate.set_agent_busy(v)
+
+        def hold(self, v: bool) -> None:
+            self.gate.hold = v
+            self.holds.append(v)
+
+        def wake(self) -> None:
+            self.gate.wake_now()
+
+        async def say(self, text: str) -> None:
+            self.said.append(text)
+
+        async def wait_reply(self, timeout: float) -> bool:
+            return self.replies.pop(0) if self.replies else False
+
+    def fresh(asleep: bool = True) -> tuple[EventStore, FakeIO, Deliverer, WakeGate]:
+        store = EventStore(Path(tmp) / f"ev-{uuid.uuid4().hex}.db")
+        gate = WakeGate(enabled=True, word="candan", window=15.0)
+        if not asleep:
+            gate.wake_now()
+        io = FakeIO(gate)
+        d = Deliverer(store, io, reply_timeout=0.01, retry_after=300.0,
+                      late_hours=12.0, now_fn=lambda: T0)
+        return store, io, d, gate
+
+    async def run() -> None:
+        # (b) vakti gelmiş pending → seslen + onay + ilet
+        store, io, d, gate = fresh()
+        eid = store.add("reminder", "ayhan", "yatma vakti", due_ts=T0 - 60, now=T0 - 3600)
+        io.replies = [True]                       # kullanıcı "efendim" dedi
+        n = await d.tick("ayhan")
+        ev = store.get(eid)
+        ok = (n == 1 and io.said[0] == "Ayhan?" and "yatma vakti" in io.said[1]
+              and ev.status == "delivered" and ev.attempts == 1)
+        results.append(("(b) vakti gelen pending → seslendi, onay alındı, iletildi", ok,
+                        f"said={io.said} status={ev.status} attempts={ev.attempts}"))
+        # üç zaman da kayıtlı mı (determinizm şartı)
+        ok = bool(ev.requested_at and ev.due_at and store.get(eid).status == "delivered")
+        results.append(("(b2) requested_at / due_at / status ÜÇÜ DE kayıtlı", ok,
+                        f"requested={ev.requested_at} due={ev.due_at} status={ev.status}"))
+
+        # (c) cevap YOK → bir kez daha seslen → pending'e dön (attempts++), hemen tekrarlama
+        store, io, d, gate = fresh()
+        eid = store.add("reminder", "ayhan", "su iç", due_ts=T0 - 60, now=T0 - 120)
+        io.replies = [False, False]
+        n = await d.tick("ayhan")
+        ev = store.get(eid)
+        again = await d.tick("ayhan")             # backoff → hemen ısrar ETMEZ
+        ok = (n == 0 and io.said == ["Ayhan?", "Ayhan?"] and ev.status == "pending"
+              and ev.attempts == 1 and again == 0 and len(io.said) == 2)
+        results.append(("(c) cevap yok → 1 kez daha → pending (attempts++), ısrar yok", ok,
+                        f"said={io.said} status={ev.status} attempts={ev.attempts}"))
+
+        # (d) kullanıcı KONUŞUYOR → seslenme ERTELENİR (kesme koruması)
+        store, io, d, gate = fresh(asleep=False)
+        eid = store.add("reminder", "ayhan", "ilaç", due_ts=T0 - 60, now=T0 - 120)
+        gate.set_user_speaking(True)              # VAD: kullanıcı konuşuyor
+        io.replies = [True]
+        n = await d.tick("ayhan")
+        ok = (n == 0 and io.said == [] and store.get(eid).status == "pending"
+              and any("defer" in x for x in d.log))
+        results.append(("(d) kullanıcı konuşuyorken → seslenme ERTELENDİ (pending kaldı)", ok,
+                        f"said={io.said} log={d.log[-1:]}"))
+        gate.set_user_speaking(False)             # konuşma bitti → sıradaki tick iletir
+        io.replies = [True]
+        n = await d.tick("ayhan")
+        ok = (n == 1 and store.get(eid).status == "delivered")
+        results.append(("(d2) konuşma bitince → sırası gelince iletildi", ok, f"said={io.said}"))
+
+        # (e) kullanıcı ODADA YOK → seslenme YOK, pending kalır; bağlanınca GECİKMİŞ iletilir
+        store, io, d, gate = fresh()
+        eid = store.add("reminder", "ayhan", "yatma vakti",
+                        due_ts=T0 - 20 * 3600, now=T0 - 30 * 3600)   # 20 saat gecikmiş
+        io.here = False
+        n = await d.tick("ayhan")
+        ok = (n == 0 and io.said == [] and store.get(eid).status == "pending")
+        results.append(("(e) kullanıcı odada yok → seslenme YOK, pending korundu", ok,
+                        f"said={io.said} status={store.get(eid).status}"))
+        io.here = True                            # kullanıcı bağlandı
+        io.replies = [True]
+        n = await d.tick("ayhan")
+        msg = io.said[1] if len(io.said) > 1 else ""
+        ok = (n == 1 and "geç kaldım" in msg.lower() and "vakti geçmiş" in msg.lower()
+              and store.get(eid).status == "delivered")
+        results.append(("(e2) bağlanınca gecikmiş (>12sa) → 'geç kaldım/geçmiş' diye iletildi",
+                        ok, f"msg={msg!r}"))
+
+        # (f) UYKUDAYKEN → seslenme YAPILIYOR (uyku susturmuyor) + sayaç dondu + pencere açıldı
+        store, io, d, gate = fresh(asleep=True)
+        assert not gate.awake
+        eid = store.add("reminder", "ayhan", "yatma vakti", due_ts=T0 - 60, now=T0 - 120)
+        io.replies = [True]
+        # Uykudayken kullanıcı sözü normalde pi'ya gitmez; seslenme sırasında hold=True
+        # olduğu için ONAY sözü de pi'ya GİTMEZ (çift cevap yok) → decide() 'silent'.
+        n = await d.tick("ayhan")
+        ev = store.get(eid)
+        ok = (n == 1 and io.said[0] == "Ayhan?" and ev.status == "delivered"
+              and io.holds == [True, False]      # hold açıldı ve KAPANDI
+              and gate.awake                     # onay sonrası konuşma penceresi AÇIK
+              and not gate.agent_busy)           # meşgul bayrağı geri bırakıldı
+        results.append(("(f) UYKUDAYKEN seslendi (susturulmadı); hold aç/kapa, pencere açıldı",
+                        ok, f"said={io.said[0]!r} awake={gate.awake} holds={io.holds}"))
+        # hold sırasında kullanıcının onay sözü pi'ya GİTMEZ (yarış/çift cevap koruması)
+        g2 = WakeGate(enabled=True, word="candan", window=15.0)
+        g2.hold = True
+        act, _ = g2.decide("efendim")
+        ok = act == "silent"
+        results.append(("(f2) hold açıkken onay sözü pi'ya GİTMİYOR (çift cevap yok)", ok,
+                        f"decide('efendim')={act}"))
+
+        # (g) profile 2KB'ı aşınca → konsolidasyon TETİKLENİYOR (sessizken; busy'de ASLA)
+        MEM = Path(tmp) / "memory"
+        (MEM / "users" / "ayhan" / "notes").mkdir(parents=True, exist_ok=True)
+        (MEM / "policy.json").write_text('{"ayhan": "adult"}')
+        globals()["MEMORY_DIR"] = str(MEM)
+        prof = MEM / "users" / "ayhan" / "profile.md"
+        prof.write_text("# Profil\n" + "".join(
+            f"- [2026-07-{(i % 28) + 1:02d}] Olay {i}: uzun bir gün özeti satırı.\n"
+            for i in range(60)))
+        size_before = prof.stat().st_size
+
+        brain = PiBrain(session_id="ayhan")
+        captured: list[str] = []
+
+        async def fake_turn(prompt: str, timeout: float = 30.0) -> bool:
+            captured.append(prompt)               # pi'ya giden sessiz tur (LLM YOK)
+            return True
+
+        brain._silent_turn = fake_turn            # type: ignore[assignment]
+        brain._wake.enabled = True
+        brain._wake.awake = False                 # kullanıcı sessiz / uyku → uygun an
+        which = await brain.consolidate_if_needed(now=T0)
+        ok = (size_before > MEM_CONTEXT_LIMIT and which == "profile" and len(captured) == 1
+              and "memory_consolidate" in captured[0] and "Olay 59" in captured[0])
+        results.append((f"(g) profile {size_before}B > {MEM_CONTEXT_LIMIT}B → konsolidasyon "
+                        f"turu AÇILDI (içerik prompt'ta)", ok,
+                        f"which={which} prompt_len={len(captured[0]) if captured else 0}"))
+
+        # (g2) konuşma sürerken ASLA konsolide etme + günde 1 kez
+        brain2 = PiBrain(session_id="ayhan")
+        c2: list[str] = []
+        brain2._silent_turn = (lambda p, timeout=30.0: c2.append(p) or True)  # type: ignore
+        brain2._wake.set_user_speaking(True)      # busy
+        w = await brain2.consolidate_if_needed(now=T0)
+        busy_skip = (w is None and not c2)
+        brain2._wake.set_user_speaking(False)
+        brain2._wake.awake = True                 # konuşma penceresi açık → yine bekle
+        w = await brain2.consolidate_if_needed(now=T0)
+        awake_skip = (w is None and not c2)
+        again = await brain.consolidate_if_needed(now=T0 + 60)   # aynı gün 2. kez → HAYIR
+        ok = busy_skip and awake_skip and again is None and len(captured) == 1
+        results.append(("(g2) busy/uyanıkken konsolidasyon YOK; günde en fazla 1 kez", ok,
+                        f"busy_skip={busy_skip} awake_skip={awake_skip} again={again}"))
+
+    try:
+        asyncio.run(run())
+    finally:
+        globals()["MEMORY_DIR"] = old_mem
+        os.environ.clear()
+        os.environ.update(old_env)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # (a) + kayıpsız konsolidasyon mekanizması: events.ts selftest (gerçek TZ aritmetiği)
+    print("[proactive] events.ts selftest (zaman + events.db + konsolidasyon):")
+    ts = subprocess.run(
+        ["node", "--experimental-strip-types",
+         str(REPO_ROOT / "pi" / "extensions" / "family-memory" / "events.ts"), "selftest"],
+        capture_output=True, text=True, cwd=str(REPO_ROOT),
+    )
+    ts_out = "\n".join(l for l in ts.stdout.splitlines() if l.strip())
+    print(ts_out)
+    ts_ok = ts.returncode == 0
+
+    print(f"[proactive] geçici kök: {tmp} (silindi)")
+    all_ok = ts_ok
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[proactive] RESULT: {'PASS' if all_ok else 'FAIL'}")
+    return 0 if all_ok else 1
+
+
+async def _reminder_e2e() -> int:
+    """UÇTAN UCA (GERÇEK pi turu, token harcar): "10 dakika sonra ... hatırlat" →
+    reminder_add FIRE ediyor mu, due_at DOĞRU mu? GEÇİCİ memory kökü kullanır —
+    gerçek memory/ KİRLENMEZ."""
+    global MEMORY_DIR
+    import shutil
+    import tempfile
+
+    from reminders import EventStore
+
+    tmp = Path(tempfile.mkdtemp(prefix="candan-e2e-"))
+    mem = tmp / "memory"
+    (mem / "users" / "ayhan" / "notes").mkdir(parents=True, exist_ok=True)
+    (mem / "policy.json").write_text('{"ayhan": "adult"}')
+    old_mem = MEMORY_DIR
+    globals()["MEMORY_DIR"] = str(mem)
+    os.environ["MEM_DIR"] = str(mem)                       # extension'ın kökü
+    os.environ["EVENTS_DB"] = str(mem / "events.db")       # olay deposu (izole)
+
+    client = PiRpcClient(PI_DEFAULT_PERSONA, "ayhan")
+    brain_now = None
+    try:
+        from zoneinfo import ZoneInfo
+        brain_now = datetime.now(ZoneInfo(CANDAN_TZ))
+    except Exception:  # noqa: BLE001
+        brain_now = datetime.now()
+    t0 = time.time()
+    prompt = ("(Sistem: şu an " + brain_now.strftime("%d.%m.%Y %H:%M") + f" [{CANDAN_TZ}].)\n\n"
+              "bana 10 dakika sonra su içmemi hatırlat")
+    print(f"[e2e] MEM_DIR={mem}\n[e2e] prompt={prompt!r}")
+    await client.start()
+    q: asyncio.Queue = asyncio.Queue()
+    client._turn_q = q
+    tools: list[str] = []
+    text = ""
+    try:
+        await client.send({"type": "prompt", "message": prompt})
+        while True:
+            obj = await asyncio.wait_for(q.get(), timeout=120.0)
+            if obj is None:
+                break
+            t = obj.get("type")
+            if t and "tool" in t:
+                name = (obj.get("toolCall") or obj.get("tool") or {})
+                nm = name.get("name") if isinstance(name, dict) else None
+                if nm:
+                    tools.append(nm)
+            if t == "message_update":
+                ame = obj.get("assistantMessageEvent") or {}
+                if ame.get("type") == "text_delta":
+                    text += ame.get("delta") or ""
+            elif t == "agent_settled":
+                break
+    finally:
+        await client.stop()
+
+    store = EventStore(mem / "events.db")
+    rows = store.due("ayhan", now=time.time() + 3600)   # 1 saat sonrası → 10dk'lık görünür
+    ok = False
+    detail = "kayıt YOK"
+    if rows:
+        ev = rows[0]
+        delta_min = (ev.due_ts - t0) / 60.0
+        ok = 9.0 <= delta_min <= 11.5                   # ~10 dakika (model/tur gecikmesi payı)
+        detail = (f"text={ev.text!r} requested={ev.requested_at} due={ev.due_at} "
+                  f"(+{delta_min:.1f} dk) status={ev.status}")
+    store.close()
+    print(f"[e2e] tool çağrıları: {tools}")
+    print(f"[e2e] asistan: {text.strip()!r}")
+    print(f"[e2e] events.db: {detail}")
+    print(f"[e2e] RESULT: {'PASS' if ok else 'FAIL'}")
+
+    globals()["MEMORY_DIR"] = old_mem
+    os.environ.pop("MEM_DIR", None)
+    os.environ.pop("EVENTS_DB", None)
+    shutil.rmtree(tmp, ignore_errors=True)
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "proactive":
+        raise SystemExit(_proactive_test())
+    if cmd == "e2e":
+        raise SystemExit(asyncio.run(_reminder_e2e()))
     if cmd == "policy":
         raise SystemExit(_policy_test())
     if cmd == "waketimer":
@@ -1583,4 +2020,5 @@ if __name__ == "__main__":
     if cmd == "prompt":
         msg = sys.argv[2] if len(sys.argv) > 2 else "merhaba de"
         raise SystemExit(asyncio.run(_prompt_test(msg)))
-    print("usage: python pi_brain.py [smoke|prompt <text>|wake|waketimer|policy]")
+    print("usage: python pi_brain.py "
+          "[smoke|prompt <text>|wake|waketimer|policy|proactive|e2e]")

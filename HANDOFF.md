@@ -46,7 +46,7 @@ bağlan/kes yeni oturum AÇMIYOR, aynı dosyaya devam ediyor (`baba` oturumu 10 
 12 Tem'de hâlâ aynı dosyada). Kullanıcının istediği "tek ana oturum sürekli devam etsin"
 davranışı ZATEN VAR. `session-finalize` (`agent.py:87` → `PiBrain.finalize()`) da bağlı ve çalışıyor.
 
-**Hafıza durumu:** dead/bağlanmamış modül YOK. `pi/extensions/mem/index.ts` (memory_add/
+**Hafıza durumu:** dead/bağlanmamış modül YOK. `pi/extensions/family-memory/index.ts` (memory_add/
 memory_search) + `pi/skills/memory/SKILL.md` + boot enjeksiyonu + `MEM_USER` + policy.json +
 FTS5 index + finalize → hepsi bağlı ve canlı loglarda çalışıyor. Planlanıp YAZILMAYAN: `tools/mem`
 CLI (gereksiz, extension yerini aldı) ve **git-audit** (`memory/.git` var ama TEK COMMIT YOK,
@@ -190,7 +190,7 @@ tekrarlanırsa susturulur, pencere sonunda "[+N tekrar bastırıldı]" özeti). 
 - **Beyin = `pi` CLI**, warm `--mode rpc` alt-süreci (HTTP /v1 DEĞİL). Codex subscription. Model pin: `PI_MODEL=openai-codex/gpt-5.6-terra` (global `gpt-5.6-luna` bozuk). thinking=minimal. `worker/pi_brain.py`. Detay: `docs/pi-brain-design.md`.
 - **Ses:** livekit-agents `AgentSession` — web → Whisper STT (wyoming .25:10300) → pi beyni → OmniVoice TTS (.25:8808, **24kHz**) → ses + barge-in.
 - **Speaker-ID:** campplus (sherpa-onnx), konuşarak oto-enroll (bilinmeyen ses→"adını söyler misin?"→onay→kaydet). **Enrollment ODA sesinden olmalı** (CLI mic yolu tanımayla uyuşmaz). Sticky (`SPEAKER_VAD_RMS`/`SPEAKER_STICKY_MISSES`). Kullanıcı=slug → persona `pi/personas/<user>.md` + session `<user>` + `MEM_USER`.
-- **Hafıza = PI-NATIVE (Hermes YOK):** `pi-hermes-memory` extension KALDIRILDI (`pi remove`). Kendi **lokal** extension'ımız `pi/extensions/mem/index.ts` (`memory_add`/`memory_search`, node:sqlite FTS5, per-user `memory/users/<user>/`, rol=policy.json). Worker `-e` ile SADECE kendi pi'sine yükler. Boot: profile.md+family.md enjeksiyon. Session-finalize (kapanışta 3-5 kalıcı not). Detay: `docs/hafiza-v2-plan.md` (⚠️ Hermes-çerçeveli, tarihsel) yerine gerçek = `pi/extensions/mem/`.
+- **Hafıza = PI-NATIVE (Hermes YOK):** `pi-hermes-memory` extension KALDIRILDI (`pi remove`). Kendi **lokal** extension'ımız `pi/extensions/family-memory/index.ts` (`memory_add`/`memory_search`, node:sqlite FTS5, per-user `memory/users/<user>/`, rol=policy.json). Worker `-e` ile SADECE kendi pi'sine yükler. Boot: profile.md+family.md enjeksiyon. Session-finalize (kapanışta 3-5 kalıcı not). Detay: `docs/hafiza-v2-plan.md` (⚠️ Hermes-çerçeveli, tarihsel) yerine gerçek = `pi/extensions/family-memory/`.
 
 **Wake word tasarımı (worker-tarafı):**
 - Wake word **"candan"**, akış: **tek başına "candan" → çan → sonra soru** (iki-adım). Konuşma penceresi 15s sessizlikte uyur. Uyurken sessiz (token yok). `WakeGate` PiBrain'de; `wake_match()` merkezi (izole/cümle ayrımlı **fuzzy** — izole yanlış-çevirileri "John Don/Can dan/Kandan" yakalar, cümlede sadece gerçek "candan").
@@ -256,12 +256,12 @@ Candan'ın hafif yeniden yapımı `candan-lite` başlatıldı. Beyin = **pi.dev 
 
 ## 🎉 HAFIZA FAZ B ÇALIŞIYOR — Pİ-NATIVE (2026-07-10)
 **KARAR: kendi memory sistemimiz Pi-native; Hermes YOK.** `pi-hermes-memory` extension'ı KALDIRILDI (`pi remove`) — Hermes-türeviydi + bizim sistemle paralel koşup karışıklık yapıyordu.
-- **Kendi lokal extension'ımız:** `pi/extensions/mem/index.ts` — `memory_add` + `memory_search` custom tool'ları (pi `registerTool` API). Worker pi'yı `-e pi/extensions/mem/index.ts` ile **sadece kendi süreçlerinde** yükler (global DEĞİL; senin kişisel pi'na dokunmaz).
+- **Kendi lokal extension'ımız:** `pi/extensions/family-memory/index.ts` — `memory_add` + `memory_search` custom tool'ları (pi `registerTool` API). Worker pi'yı `-e pi/extensions/family-memory/index.ts` ile **sadece kendi süreçlerinde** yükler (global DEĞİL; senin kişisel pi'na dokunmaz).
 - **Kullanıcı-başı:** `MEM_USER` env → `memory/users/<user>/` + rol (adult/child/guest, `policy.json`). Depolama = repo'daki markdown dosyalar (otoriter) + `node:sqlite` FTS5 (`memory/.index/mem.db`, Türkçe diacritics-duyarsız). `memory/` gitignored + nested audit-git.
 - **Session-finalize:** `ctx.add_shutdown_callback` → `PiBrain.finalize()` → pi oturum kapanınca 3-5 kalıcı not çıkarır (30sn best-effort). Canlı test: köpek isimleri kendiliğinden kaydedildi.
 - **Canlı doğrulandı:** memory_add(private+family), memory_search (FTS getirme), correction/update, izolasyon, finalize. Hepsi sesli oturumda.
 - **AÇIK KONU (D fazı):** pi rpc'de ara sıra `WebSocket closed 1000` + tek turda ~40sn gecikme. Ses için yüksek — kararlılık/gecikme incelenecek.
-- Eski plan dokümanları (`docs/hafiza-v2-plan.md`, `hafiza-implementasyon-rehberi.md`) Hermes-çerçeveliydi; artık geçersiz/tarihsel — gerçek = bu bölüm + `pi/extensions/mem/`.
+- Eski plan dokümanları (`docs/hafiza-v2-plan.md`, `hafiza-implementasyon-rehberi.md`) Hermes-çerçeveliydi; artık geçersiz/tarihsel — gerçek = bu bölüm + `pi/extensions/family-memory/`.
 
 ## 🎉 FAZ 3 + HAFIZA-A ÇALIŞIYOR (2026-07-10)
 - **Speaker-ID (campplus, sherpa-onnx):** oto-enroll konuşarak (bilinmeyen ses → "adını söyler misin?" → onay → kaydet). Tanıma tutarlı.

@@ -21,6 +21,9 @@ from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
+from reminders import (                                 # proaktif ajan (hatırlatma/olay)
+    HEARTBEAT_SECONDS, Deliverer, EventStore,
+)
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -199,6 +202,81 @@ async def entrypoint(ctx: JobContext):
         # katılınca kısaca selamla.
         _apply_wake_state(True)
         await session.generate_reply(instructions="Kullanıcıyı kısaca selamla.")
+
+    # ── Proaktif ajan: vakti gelen hatırlatmaları KENDİ BAŞLATARAK ilet ──────
+    # Veriyi pi extension (family-memory) yazar → memory/events.db; sesi worker verir
+    # (AgentSession sadece burada). Sözleşme = paylaşılan SQLite dosyası.
+    reply_seen = asyncio.Event()   # proaktif seslenmeye kullanıcı yanıt verdi mi
+
+    @session.on("user_input_transcribed")
+    def _on_any_transcript(_ev) -> None:
+        reply_seen.set()           # herhangi bir söz = onay ("efendim", "ne var", ...)
+
+    @session.on("user_state_changed")
+    def _on_user_speaking(ev) -> None:
+        if getattr(ev, "new_state", "") == "speaking":
+            reply_seen.set()       # VAD daha hızlı: konuşmaya başlaması bile onaydır
+
+    class _LiveKitIO:
+        """Deliverer'ın dış dünyası (reminders.ProactiveIO). Uyku/kesme/varlık kuralları
+        BURADA bağlanır: pi_brain'in wake bayrakları + odadaki katılımcılar."""
+
+        def present(self) -> bool:
+            return bool(ctx.room.remote_participants)   # kullanıcı odada yoksa SESLENME
+
+        def busy(self) -> bool:
+            return brain.busy()                         # konuşuyor/cevaplıyor → ERTELE
+
+        def display_name(self, user: str) -> str:
+            return brain.display_name(user)
+
+        def set_busy(self, v: bool) -> None:
+            brain.wake_agent_busy(v)                    # uykudayken de seslen; sayaç dursun
+
+        def hold(self, v: bool) -> None:
+            brain.proactive_hold(v)                     # onay sözü pi'ya gitmesin
+
+        def wake(self) -> None:
+            brain.wake_now()                            # onay geldi → konuşma penceresi
+
+        async def say(self, text: str) -> None:
+            await session.say(text)                     # SpeechHandle → playout'u bekler
+
+        async def wait_reply(self, timeout: float) -> bool:
+            reply_seen.clear()
+            try:
+                await asyncio.wait_for(reply_seen.wait(), timeout)
+                return True
+            except asyncio.TimeoutError:
+                return False
+
+    store = EventStore()
+    deliverer = Deliverer(store, _LiveKitIO())
+    log = logging.getLogger("worker.proactive")
+
+    async def _heartbeat() -> None:
+        """Periyodik tick: vakti gelen olayları ilet + (sessizken) konsolidasyon."""
+        try:
+            while True:
+                await asyncio.sleep(HEARTBEAT_SECONDS)
+                try:
+                    user = brain.current_user()          # guest/unknown → '' → iş yok
+                    if not user:
+                        continue
+                    await deliverer.tick(user)
+                    await brain.consolidate_if_needed()  # busy/uyanıkken kendi atlar
+                except Exception:  # noqa: BLE001 — tek tur hatası döngüyü öldürmesin
+                    log.warning("heartbeat tick hatası", exc_info=True)
+        except asyncio.CancelledError:
+            pass
+
+    hb = asyncio.create_task(_heartbeat())
+
+    async def _stop_hb() -> None:
+        hb.cancel()
+        store.close()
+
+    ctx.add_shutdown_callback(_stop_hb)
 
 
 if __name__ == "__main__":
