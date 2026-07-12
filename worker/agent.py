@@ -53,6 +53,14 @@ WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 WORKER_VERBOSE_LOGS = _envflag("WORKER_VERBOSE_LOGS", False)
 WORKER_LOG_LEVEL = "DEBUG" if WORKER_VERBOSE_LOGS else os.environ.get("WORKER_LOG_LEVEL", "INFO")
 
+# Explicit agent dispatch. agent_name VERİLMEZSE LiveKit otomatik dispatch yapar; ama
+# otomatik dispatch sadece oda İLK OLUŞTURULURKEN tetiklenir. Oda adımız sabit
+# (candan-lite-dev) olduğu için, oda yaşarken worker restart edilince agent odaya bir
+# daha giremiyordu ("registered worker" yazar, iş gelmez) — yarış koşulu buydu.
+# agent_name verince worker artık SADECE açıkça çağrılınca iş alır; web token'ı
+# roomConfig.agents[] ile bu ADI istemek zorunda (web/lib/agent-name.ts — aynı ad!).
+AGENT_NAME = os.environ.get("LIVEKIT_AGENT_NAME") or os.environ.get("AGENT_NAME") or "candan"
+
 
 async def entrypoint(ctx: JobContext):
     await ctx.connect()
@@ -194,4 +202,10 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, log_level=WORKER_LOG_LEVEL))
+    cli.run_app(
+        WorkerOptions(
+            entrypoint_fnc=entrypoint,
+            agent_name=AGENT_NAME,  # explicit dispatch — web token'ı bu adı çağırır
+            log_level=WORKER_LOG_LEVEL,
+        )
+    )

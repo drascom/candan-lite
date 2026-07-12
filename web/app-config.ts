@@ -1,3 +1,5 @@
+import { AGENT_NAME } from '@/lib/agent-name';
+
 export interface AppConfig {
   pageTitle: string;
   pageDescription: string;
@@ -64,8 +66,10 @@ export const APP_CONFIG_DEFAULTS: AppConfig = {
   // audioVisualizerWaveLineWidth: 3,
   // audioVisualizerType: 'aura',
 
-  // agent dispatch configuration
-  agentName: process.env.AGENT_NAME ?? undefined,
+  // agent dispatch configuration — explicit dispatch (bkz. lib/agent-name.ts).
+  // Worker agent_name ile kayıtlı olduğu için otomatik dispatch YOK; token'daki
+  // roomConfig.agents[] bu adı taşımak ZORUNDA.
+  agentName: AGENT_NAME,
 
   // LiveKit Cloud Sandbox configuration
   sandboxId: undefined,

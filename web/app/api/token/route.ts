@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AccessToken, type AccessTokenOptions, type VideoGrant } from 'livekit-server-sdk';
-import { RoomConfiguration } from '@livekit/protocol';
+import { RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
+import { AGENT_NAME } from '@/lib/agent-name';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -26,9 +27,11 @@ export async function POST(req: NextRequest) {
   try {
     // Parse room config from request body.
     const body = await req.json();
-    const roomConfig = body?.room_config
-      ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
-      : new RoomConfiguration();
+    const roomConfig = withAgentDispatch(
+      body?.room_config
+        ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
+        : new RoomConfiguration()
+    );
 
     // Generate participant token
     const deviceId = req.cookies.get(DEVICE_COOKIE)?.value ?? crypto.randomUUID();
@@ -88,6 +91,26 @@ export async function POST(req: NextRequest) {
       return new NextResponse(error.message, { status: 500 });
     }
   }
+}
+
+/**
+ * Explicit agent dispatch (https://docs.livekit.io/agents/worker/agent-dispatch).
+ *
+ * Otomatik dispatch SADECE oda ilk kez OLUŞTURULURKEN tetiklenir. Oda adımız sabit
+ * (MATE_LIVEKIT_ROOM) olduğu için, oda yaşarken worker restart edilince agent odaya
+ * bir daha giremiyordu. Çözüm: token'a roomConfig.agents[] koyup agent'ı HER
+ * bağlantıda açıkça çağırmak — oda yeni de olsa eski de olsa dispatch olur.
+ *
+ * Client (livekit-client TokenSource) zaten `room_config` gönderiyor; yine de adı
+ * burada, server-side env'den ZORLUYORUZ: sessizce düşerse agent hiç çağrılmaz.
+ */
+function withAgentDispatch(roomConfig: RoomConfiguration): RoomConfiguration {
+  if (!AGENT_NAME) return roomConfig;
+  const existing = roomConfig.agents.find((a) => a.agentName === AGENT_NAME);
+  if (!existing) {
+    roomConfig.agents.push(new RoomAgentDispatch({ agentName: AGENT_NAME }));
+  }
+  return roomConfig;
 }
 
 async function fetchHermesToken(identity: string) {
