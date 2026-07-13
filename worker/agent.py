@@ -17,6 +17,7 @@ from livekit.plugins import silero
 
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
+from moss_stt import MossSTT                 # MOSS-Transcribe-Diarize STT (alternatif)
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
@@ -34,6 +35,22 @@ TTS_HOST = os.environ.get("TTS_HOST", "192.168.0.25")
 TTS_PORT = int(os.environ.get("TTS_PORT", "8808"))
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
+# STT backend seçimi: wyoming (varsayılan, mevcut Wyoming/faster-whisper davranışı
+# birebir) | moss (MOSS-Transcribe-Diarize HTTP servisi, .25:8909). Kapalı/tanımsızsa
+# wyoming. MOSS_STT_URL sadece backend=moss iken kullanılır.
+STT_BACKEND = os.environ.get("STT_BACKEND", "wyoming").strip().lower()
+MOSS_STT_URL = os.environ.get("MOSS_STT_URL", "http://192.168.0.25:8909")
+
+
+def _build_stt():
+    """STT_BACKEND'e göre STT plugin'i seç (varsayılan wyoming = mevcut davranış)."""
+    log = logging.getLogger("worker.agent")
+    if STT_BACKEND == "moss":
+        log.info("STT backend = moss (%s), dil=%s", MOSS_STT_URL, LANG)
+        return MossSTT(url=MOSS_STT_URL, language=LANG)
+    log.info("STT backend = wyoming (%s:%s), dil=%s", STT_HOST, STT_PORT, LANG)
+    return WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG)
+
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
 PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
 SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.0") or 1.0)
@@ -48,6 +65,12 @@ WAKE_STT_ENABLED = _envflag("WAKE_STT_ENABLED", False)
 WAKE_STT_WINDOW = float(os.environ.get("WAKE_STT_WINDOW", "1.5") or 1.5)
 WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 
+# Uyurken kullanıcı transkriptini web UI'a YAYINLAMA (DEFAULT açık). Ses/STT/wake
+# boru hattı AYNEN çalışır (wake eşleşmesi + konu bildirimi transcript'i görür); sadece
+# UI'a giden "kullanıcı ne dedi" yayını uykuda susturulur. false → eski davranış
+# (uyurken de UI'a yazılır; gizleme yalnız web tarafında `candan.awake` ile yapılır).
+SLEEP_TRANSCRIPTS_HIDDEN = _envflag("SLEEP_TRANSCRIPTS_HIDDEN", True)
+
 # Log gürültüsü: livekit-agents 'dev' modu varsayılan olarak DEBUG basar
 # (worker.py _default_log_level dev_default="DEBUG") → speaker-tap/wake_stt gibi
 # her pencerede/chunk'ta basılan debug loglar sürekli akar. Varsayılanı INFO'ya
@@ -57,12 +80,60 @@ WORKER_VERBOSE_LOGS = _envflag("WORKER_VERBOSE_LOGS", False)
 WORKER_LOG_LEVEL = "DEBUG" if WORKER_VERBOSE_LOGS else os.environ.get("WORKER_LOG_LEVEL", "INFO")
 
 # Explicit agent dispatch. agent_name VERİLMEZSE LiveKit otomatik dispatch yapar; ama
-# otomatik dispatch sadece oda İLK OLUŞTURULURKEN tetiklenir. Oda adımız sabit
-# (candan-lite-dev) olduğu için, oda yaşarken worker restart edilince agent odaya bir
-# daha giremiyordu ("registered worker" yazar, iş gelmez) — yarış koşulu buydu.
-# agent_name verince worker artık SADECE açıkça çağrılınca iş alır; web token'ı
-# roomConfig.agents[] ile bu ADI istemek zorunda (web/lib/agent-name.ts — aynı ad!).
+# hem otomatik dispatch hem token'a gömülü dispatch YALNIZCA oda İLK OLUŞTURULURKEN
+# işlenir; oda zaten varsa yok sayılır. Oda adımız sabit (candan-lite-dev) olduğu için,
+# oda yaşarken worker restart edilince agent odaya bir daha giremiyordu ("registered
+# worker" yazar, iş gelmez) — yarış koşulu buydu. agent_name verince worker SADECE
+# açıkça çağrılınca iş alır; web token route'u VAR OLAN oda için `AgentDispatchClient.
+# createDispatch` ile bu ADI açıkça dispatch eder (web/app/api/token/route.ts:
+# ensureAgentDispatch, web/lib/agent-name.ts — aynı ad!).
 AGENT_NAME = os.environ.get("LIVEKIT_AGENT_NAME") or os.environ.get("AGENT_NAME") or "candan"
+
+
+def _install_sleep_transcript_gate(session, brain) -> None:
+    """Uyurken KULLANICI transkriptinin web UI'a yayınını bastır (ses/STT/wake AYNEN sürer).
+
+    Mekanizma (livekit-agents 1.6.5, voice/room_io): RoomIO, `user_input_transcribed`
+    olaylarını arka plan task'ında (`_forward_user_transcript`) tek bir yayın noktasından
+    — `_user_tr_output.capture_text()` — odaya (web transkript stream'i) basar. Bu tek
+    noktayı brain UYKUDAYKEN no-op'a çeviriyoruz.
+
+    Neden BOZMAZ:
+    - Session olayları (agent.py'deki wake_now / konu bildirimi / proaktif reply_seen)
+      AYNI emit'ten BAĞIMSIZ, doğrudan `session.on(...)` ile beslenir → susturma onları
+      görmez. Wake eşleşmesi + konu bildirimi çalışmaya devam eder.
+    - capture_text yayınlanmazsa alt-çıkışlar `_capturing=False` kalır → `flush()` da
+      no-op olur (yarım/partial metin sızmaz).
+    - AGENT metnini (TranscriptSynchronizer / `session.output.transcription`) HİÇ ELLEMEZ;
+      bu ayrı bir nesne. Eski uyarı (agent output toggle'ı sync'i bozar) hâlâ geçerli,
+      biz USER çıkışına dokunuyoruz.
+
+    Wake cümlesi GÖRÜNÜR kalır: EventEmitter.emit SENKRON ve kayıt sırasıyla çağırır;
+    agent.py'nin `_on_transcript`'i (wake_now → awake=True) `session.start`'tan SONRA
+    kaydedildiği için RoomIO handler'ından SONRA ama capture_text'i işleyen arka-plan
+    task'ından ÖNCE çalışır → wake cümlesi işlendiğinde awake=True olur, yayınlanır."""
+    log = logging.getLogger("worker.agent")
+    try:
+        rio = session.room_io
+    except Exception:  # noqa: BLE001 — room'suz start (olmamalı) → gate kurma
+        log.warning("uyku-transkript gate: room_io yok, atlanıyor")
+        return
+    out = getattr(rio, "_user_tr_output", None)
+    if out is None or not callable(getattr(out, "capture_text", None)):
+        log.warning("uyku-transkript gate kurulamadı: _user_tr_output yok/uyumsuz")
+        return
+    orig_capture = out.capture_text
+    wake = getattr(brain, "_wake", None)
+
+    async def _gated_capture(text: str) -> None:
+        # Uyurken (awake False) kullanıcı metnini web'e yayınlama. wake yoksa (beklenmez)
+        # eski davranış = yayınla.
+        if wake is not None and not getattr(wake, "awake", True):
+            return
+        await orig_capture(text)
+
+    out.capture_text = _gated_capture  # instance-attr bound method'u gölgeler
+    log.info("uyku-transkript gate aktif (SLEEP_TRANSCRIPTS_HIDDEN=true)")
 
 
 async def entrypoint(ctx: JobContext):
@@ -106,7 +177,7 @@ async def entrypoint(ctx: JobContext):
 
     session = AgentSession(
         vad=silero.VAD.load(),
-        stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
+        stt=_build_stt(),  # STT_BACKEND: wyoming (varsayılan) | moss
         # Faz 3.1: sesli oto-enrollment — bilinmeyen ses gelince PiBrain isim sorar,
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
         llm=brain,
@@ -118,6 +189,12 @@ async def entrypoint(ctx: JobContext):
         agent=Agent(instructions="Sen Candan'sın. Türkçe, kısa ve yardımcı konuş."),
         room=ctx.room,
     )
+    # Uyurken kullanıcı transkriptini web UI'a YAYINLAMA (default açık). Ses/STT/wake
+    # boru hattı AYNEN çalışır; sadece RoomIO'nun user-transkript yayını uykuda susar.
+    # WAKE kapalıysa hep uyanık → gate zaten no-op olurdu; kurma.
+    if WAKE_ENABLED and SLEEP_TRANSCRIPTS_HIDDEN:
+        _install_sleep_transcript_gate(session, brain)
+
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
         tap.attach(ctx.room)
@@ -143,9 +220,10 @@ async def entrypoint(ctx: JobContext):
         ctx.add_shutdown_callback(wake_stt.aclose)
 
     # Wake durumunu web'e sinyalle: local participant attribute `candan.awake`.
-    # NOT: transcript'i worker'da toggle ETME — session.output.set_transcription_enabled
-    # TranscriptSynchronizer'ı detach edip agent metnini bozuyor. Uyurken kullanıcı
-    # metnini gizleme WEB tarafında `candan.awake` ile yapılır.
+    # NOT: AGENT metnini worker'da toggle ETME — session.output.set_transcription_enabled
+    # TranscriptSynchronizer'ı detach edip agent metnini bozuyor. USER (kullanıcı)
+    # transkripti uyurken _install_sleep_transcript_gate ile RoomIO'nun ayrı user-çıkışında
+    # (agent output DEĞİL) susturulur; web tarafı ayrıca `candan.awake` ile de gizler.
     # asyncio, task'lara sadece ZAYIF referans tutar: create_task'ın dönüşünü
     # tutmazsak GC task'ı iş bitmeden toplayabilir → attribute sessizce gitmez
     # (çan çalmaz). Güçlü referansı burada tutup bitince bırakıyoruz.
