@@ -1,7 +1,70 @@
-# candan-lite — HANDOFF (2026-07-12)
+# candan-lite — HANDOFF (2026-07-13)
 
 > ⚠️ **AŞAĞIDAKİ BÖLÜM GÜNCELDİR — önce bunu oku.** Altındaki eski bölümler tarihsel
 > (özellikle "Beyin = OpenAI-uyumlu /v1 + PIDEV_BASE_URL" İPTAL — pivot edildi).
+
+---
+
+# 📍 BURADAN DEVAM ET (2026-07-13 session sonu)
+
+## Durum: her şey çalışıyor, main'de push'lu. Sistem TEMİZ SAYFADAN yeniden kuruldu.
+
+**Canlı doğrulanmış (kullanıcı kendi sesiyle test etti):**
+- Tanıma + oto-enroll → `ayhan` = `adult` (policy'ye otomatik yazıldı)
+- Hafıza: not alma, arama, aile/özel ayrımı, dedup, düzeltmede taşıma
+- **Proaktif hatırlatma: ÇALIŞTI** — uykudayken "Ayhan, bir hatırlatmam var" deyip seslendi,
+  onaydan sonra hatırlatmayı iletti. Uzun konuşma içinde de sırasını bekleyip araya girmedi.
+- Gecikme: medyan tur **2.22s**, >10s takılan tur **0**, WS-1000 yok
+- Bağlantı: explicit dispatch → restart sırası artık önemsiz
+
+## ⏳ SIRADAKİ ADIM (yarın ilk iş)
+**Son commit (`eab1522`) CANLI TEST EDİLMEDİ** — worker restart gerekiyor. Test edilecek:
+1. Uykudayken hatırlatma vakti gelsin → "Ayhan, bir hatırlatmam var" → **"candan" DEMEDEN** "efendim"
+   de → hatırlatmayı iletmeli. (Bu, kullanıcının bildirdiği bug'ın fix'i; giriş penceresi artık
+   seslenme anında açılıyor.)
+2. Hatırlatma **bir kez** duyulmalı (pi ayrıca cevap vermemeli — `hold` mekanizması).
+3. İletimden sonra pencere açık kalmalı (devamında "candan" demeden konuşulabilmeli).
+4. Cevap verilmezse → 2 seslenmeden sonra tekrar uykuya dönmeli; hatırlatma 5dk sonra yeniden denenmeli.
+
+## 🔭 AÇIK KONULAR / GELECEK
+- **`task_done` bildirimleri:** kuyruk kaynak-agnostik (`kind` alanı) ama hiçbir şey beslemiyor.
+  "Şu iş bitti" senaryosu için arka plan iş motoru gerekecek.
+- **Konsolidasyon izleme:** `profile.md`/`family.md` > 2KB olunca tetikleniyor, boyutlar loglanıyor.
+  **Birkaç gün sonra gerçek büyüme hızına BAK** (kullanıcı istedi: "zaman zaman bakalım").
+- **Self-extending:** kullanıcı sistemin kendi kendine extension/tool/skill kurmasını istiyor (Hermes gibi).
+  ⚠️ Şart: **insan onaylı** (Candan teklif etsin, kullanıcı onaylasın). Otomatik kurulum = tedarik
+  zinciri riski. Şimdilik HİÇBİR paket kurulmadı.
+- **Yayın:** `pi/extensions/family-memory/` ileride pi paketi olarak yayınlanacak (katalogda
+  multi-tenant/rol/aile-kapsamı olan YOK — gerçek boşluk). **Yayına hazır yazıldı ama YAYINLANMADI**:
+  dış bağımlılık yok, yollar env ile override edilebilir, worker'a bağımlı değil.
+  Genelleştirme/paketleme İLERİDE (erken soyutlama yapılmadı — bilinçli).
+- **VPS:** brain VPS'e taşınacak; orada global pi OLMAYACAK → `PI_ISOLATED` zaten prod davranışını
+  taklit ediyor.
+- **Mobil:** yerleşik (cihaz) speech recognition planlanıyor → wake tespiti cihaza geçecek.
+  Bu yüzden fuzzy wake'in yanlış-pozitifi ("Dondon" uyandırıyor) **bilinçli olarak ERTELENDİ**.
+- **`web_search`:** izolasyonla gitti (global `npm:pi-web-access`'ten geliyormuş). Allowlist'te ölü
+  isim olarak duruyor, zararsız. Kullanıcı tool'ları "birer birer" kendisi ekleyecek.
+
+## 🧨 BU SESSION'IN EN ÖNEMLİ DERSİ: "sessizce yanlış çalışan kod"
+Üç bug aynı aileden çıktı — hiçbiri hata BASMIYORDU:
+1. `logging` shadowing (fonksiyon-içi import) → job canlıda düştü
+2. `asyncio.create_task()` dönüşü tutulmuyordu → **wake word sessizce kaçabilirdi** (GC task'ı toplar)
+3. `wake_now("")` → boş metinde wake word arıyordu → **proaktif uyandırma HİÇ çalışmıyordu** (no-op)
+Üçünü de testler DEĞİL, ya kullanıcı ya statik analiz yakaladı.
+→ **`./check.sh` (ruff + strict tsc) repoda. Yeni kod yazmadan ÖNCE koş.** F ailesi sıfır-ignore.
+→ Test dersi: sahte (fake) nesne üretim yolundan AYRIŞMIŞTI (`FakeIO.wake()` doğrudan gate'i
+  çağırıyor, üretim ise `wake_now()` üzerinden) → bug test edilen yolda değil, edilmeyen yoldaydı.
+
+## 🗺️ MİMARİ SINIR (kilitli)
+- **Extension (TS, pi içinde):** `pi/extensions/family-memory/` — veri + tool'lar
+  (`memory_add/search`, `reminder_add/list/cancel`, `memory_consolidate`) + konsolidasyon mantığı.
+  Yayınlanabilir; worker'a BAĞIMLI DEĞİL.
+- **Worker (Python, ayrı süreç):** ses hattı (LiveKit/STT/TTS/speaker-ID/wake) + heartbeat +
+  proaktif seslenme (`session.say` → LiveKit oturumu gerekir, pi'nin eli YOK).
+- **Tek kontrat:** paylaşılan SQLite (`memory/events.db`).
+- ⚠️ Ses hattı pi extension'ı OLAMAZ — pi bir ajan çalıştırıcısı, ses hattı değil.
+
+---
 
 ## 🔥 2026-07-12: pi gecikmesi ÇÖZÜLDÜ (40sn turlar) + global izolasyon
 
