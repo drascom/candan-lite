@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { AccessToken, type AccessTokenOptions, type VideoGrant } from 'livekit-server-sdk';
-import { RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
+import {
+  AccessToken,
+  AgentDispatchClient,
+  RoomServiceClient,
+  type AccessTokenOptions,
+  type VideoGrant,
+} from 'livekit-server-sdk';
+import { ParticipantInfo_Kind, RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
 import { AGENT_NAME } from '@/lib/agent-name';
 
 type ConnectionDetails = {
@@ -64,6 +70,11 @@ export async function POST(req: NextRequest) {
         roomName,
         roomConfig
       );
+      // Token'a gömülü dispatch YALNIZCA oda ilk yaratılırken işlenir; oda zaten
+      // varsa yok sayılır. Worker restart edilince agent düşer ama oda (açık sekme +
+      // emptyTimeout) yaşar → yeni token'ın daveti işlenmez. Var olan oda için
+      // agent'ı server tarafında açıkça çağırıyoruz.
+      await ensureAgentDispatch(serverUrl, roomName);
     }
 
     // Return connection details
@@ -96,10 +107,10 @@ export async function POST(req: NextRequest) {
 /**
  * Explicit agent dispatch (https://docs.livekit.io/agents/worker/agent-dispatch).
  *
- * Otomatik dispatch SADECE oda ilk kez OLUŞTURULURKEN tetiklenir. Oda adımız sabit
- * (MATE_LIVEKIT_ROOM) olduğu için, oda yaşarken worker restart edilince agent odaya
- * bir daha giremiyordu. Çözüm: token'a roomConfig.agents[] koyup agent'ı HER
- * bağlantıda açıkça çağırmak — oda yeni de olsa eski de olsa dispatch olur.
+ * Token'a gömülü `roomConfig.agents[]` daveti LiveKit'te YALNIZCA oda İLK KEZ
+ * OLUŞTURULURKEN işlenir; oda zaten varsa yok sayılır. Bu yüzden gömülü davet tek
+ * başına yetmez — YENİ oda yolunu (ilk bağlantı) o kaplar; VAR OLAN oda için
+ * agent'ı `ensureAgentDispatch` ile server tarafında açıkça çağırıyoruz.
  *
  * Client (livekit-client TokenSource) zaten `room_config` gönderiyor; yine de adı
  * burada, server-side env'den ZORLUYORUZ: sessizce düşerse agent hiç çağrılmaz.
@@ -111,6 +122,34 @@ function withAgentDispatch(roomConfig: RoomConfiguration): RoomConfiguration {
     roomConfig.agents.push(new RoomAgentDispatch({ agentName: AGENT_NAME }));
   }
   return roomConfig;
+}
+
+/**
+ * Var olan oda için agent'ı server tarafında açıkça dispatch et.
+ *
+ * - Oda YOKSA: dokunma — token'a gömülü dispatch oda yaratılırken zaten tetiklenir.
+ * - Oda VARSA ama içinde AGENT katılımcı yoksa: `createDispatch` ile agent'ı çağır
+ *   (worker restart senaryosu: oda yaşıyor, gömülü davet yok sayılıyor).
+ * - Oda VARSA ve agent zaten içindeyse: dokunma (çift dispatch = iki agent istemiyoruz).
+ *
+ * Hata dayanıklılığı: dispatch adımı patlarsa token yine döner (yeni-oda yolu bozulmaz);
+ * hata yalnız console'a loglanır.
+ */
+async function ensureAgentDispatch(serverUrl: string, roomName: string): Promise<void> {
+  if (!AGENT_NAME || !API_KEY || !API_SECRET) return;
+  try {
+    const roomService = new RoomServiceClient(serverUrl, API_KEY, API_SECRET);
+    const rooms = await roomService.listRooms([roomName]);
+    if (rooms.length === 0) return; // oda yok → gömülü dispatch halleder
+    const participants = await roomService.listParticipants(roomName);
+    const agentPresent = participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT);
+    if (agentPresent) return; // agent zaten odada → çift dispatch yapma
+    const dispatchClient = new AgentDispatchClient(serverUrl, API_KEY, API_SECRET);
+    await dispatchClient.createDispatch(roomName, AGENT_NAME);
+    console.log(`[token] var olan oda ${roomName} için agent dispatch edildi (${AGENT_NAME})`);
+  } catch (error) {
+    console.error('[token] ensureAgentDispatch başarısız (token yine dönüyor):', error);
+  }
 }
 
 async function fetchHermesToken(identity: string) {

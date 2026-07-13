@@ -268,7 +268,7 @@ tekrarlanırsa susturulur, pencere sonunda "[+N tekrar bastırıldı]" özeti). 
 ## Çalıştırma
 - Worker (Mac): `cd worker && .venv/bin/python agent.py dev` (venv kurulu; sherpa-onnx/soundfile/sounddevice/websockets dahil).
 - Web: `cd web && pnpm dev` → localhost:3000.
-- Worker RESTART sonrası: tarayıcı sekmesini TAM KAPAT → yeniden bağlan (mevcut odaya oto-dispatch olmaz).
+- Worker RESTART sonrası: normal refresh yeter (sekmeyi kapatmaya GEREK YOK). Token route `ensureAgentDispatch` ile var olan oda için agent'ı açıkça `createDispatch` eder.
 
 ## ✅ KAPANDI (2026-07-12): KWS "Jackie" — canlı testte ELENDİ, wake word "candan" kalıyor
 
@@ -340,7 +340,7 @@ web → STT (Whisper wyoming) → pi beyni (Candan, warm rpc) → TTS (OmniVoice
 - **Repo:** github.com/drascom/candan-lite (public, main). web/ absorbe (fork silindi).
 - **Çalıştırma:** worker `cd worker && .venv/bin/python agent.py dev`; web `cd web && pnpm dev` (:3000).
 - **OmniVoice gerçek çıktı = 24kHz** (audio_start bildiriyor; referans "48kHz" YANLIŞti → 2× hız bug'ıydı, düzeltildi).
-- **GOTCHA — worker restart:** worker'ı yeniden başlatınca mevcut odaya OTOMATİK dispatch OLMAZ (sadece yeni odaya). Tarayıcı sekmesini TAM KAPAT → tekrar bağlan (oda sıfırdan oluşsun).
+- **GOTCHA — worker restart (ÇÖZÜLDÜ):** worker'ı yeniden başlatınca mevcut odaya token'a gömülü dispatch OLMAZ (gömülü/otomatik dispatch sadece oda İLK yaratılırken işlenir). Artık sekmeyi kapatmaya gerek YOK — token route `ensureAgentDispatch` (web/app/api/token/route.ts) var olan oda için `AgentDispatchClient.createDispatch` çağırıyor; normal refresh yeter.
 - Not: cloud turn-detector 401 → yerel mini modele düşüyor (zararsız; Faz 3'te düzeltilir).
 
 ## KARAR GÜNCELLEME (2026-07-10): beyin = pi CLI, warm RPC
