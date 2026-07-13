@@ -13,7 +13,8 @@ Two pieces:
                  ProactiveIO duck type, so it is unit-testable with a fake clock/IO.
 
 Protocol (approved by the user):
-  1. When an event is due, call the user by name ("Ayhan?").
+  1. When an event is due, call the user BY NAME AND SAY WHAT IT IS ABOUT — "Ayhan, bir
+     hatırlatmam var." (never the content itself; that comes after the ack).
   2. Any reply counts as acknowledgement → deliver the reminder → mark `delivered`.
   3. No reply → call ONE more time; still nothing → the event stays `pending` (attempts++)
      and is retried later (RETRY_AFTER backoff). Not pushy, but never forgets.
@@ -22,9 +23,12 @@ Boundaries:
   - If the user is SPEAKING (or the assistant is answering) → the call is DEFERRED.
   - If the user is not in the room → no call at all; the event stays pending. On reconnect
     overdue events are delivered; if more than LATE_HOURS late, it is flagged as overdue.
-  - Reminders fire EVEN WHILE ASLEEP (sleep must not mute them): during the exchange we
-    hold `agent_busy` (so the sleep timer cannot run) and, once the user acknowledges,
-    `wake()` opens the conversation window.
+  - Reminders fire EVEN WHILE ASLEEP (sleep must not mute them). Speaking up STARTS a
+    conversation, so the INPUT side must open at the same moment: `wake()` is called
+    BEFORE the first call-out — the user must NOT have to say the wake word to answer a
+    question WE asked. `hold()` still routes that answer to US (not to pi → no double
+    reply). Nobody answers after both attempts → `sleep()` puts us back where we were
+    (staying awake for nothing burns tokens on every ambient word).
 """
 from __future__ import annotations
 
@@ -158,9 +162,27 @@ class ProactiveIO(Protocol):
     def display_name(self, user: str) -> str: ...
     def set_busy(self, v: bool) -> None: ...   # wake_agent_busy → freeze the sleep timer
     def hold(self, v: bool) -> None: ...       # during the exchange, don't route to pi
-    def wake(self) -> None: ...                # wake_now → open the conversation window
+    def wake(self) -> bool: ...                # open the conversation window (True = newly)
+    def sleep(self) -> None: ...               # close it again (nobody answered)
     async def say(self, text: str) -> None: ...
     async def wait_reply(self, timeout: float) -> bool: ...
+
+
+# Call-out lines: name + WHAT IT IS ABOUT, never the content (that follows the ack).
+# Rotated so a daily reminder does not sound like a recording. No LLM here on purpose:
+# a call-out must be instant and free.
+CALL_LINES: dict[str, tuple[str, ...]] = {
+    "reminder": (
+        "{name}, bir hatırlatmam var.",
+        "{name}, sana bir şey hatırlatacaktım.",
+        "{name}, bir hatırlatma için seslendim.",
+    ),
+    "task_done": (
+        "{name}, bir işin bitti.",
+        "{name}, sana bir haberim var.",
+        "{name}, biten bir iş için seslendim.",
+    ),
+}
 
 
 class Deliverer:
@@ -179,6 +201,7 @@ class Deliverer:
         self.now = now_fn
         # In-memory backoff: an unanswered event must not be retried on the very next tick.
         self._backoff: dict[int, float] = {}
+        self._call_i = 0          # call-out line rotation (no robotic repetition)
         self.log: list[str] = []  # recent actions (tests / observability)
 
     async def tick(self, user: str) -> int:
@@ -205,23 +228,37 @@ class Deliverer:
         name = io.display_name(ev.user)
         io.hold(True)      # the user's ack goes to US, not to pi (no double answer)
         io.set_busy(True)  # fire even while asleep; freeze the sleep timer meanwhile
+        # WE are starting this conversation → open the INPUT side too, exactly as if the
+        # user had said the wake word. Making them wake us up to answer OUR question was
+        # the bug: output was awake (say bypasses the gate), input was still asleep.
+        woke = io.wake()
         try:
             for attempt in (1, 2):  # no reply → call ONE more time
-                await io.say(f"{name}?")
+                await io.say(self._call_line(ev, name))
                 if await io.wait_reply(self.reply_timeout):
-                    io.wake()  # acknowledged → open the conversation window
+                    io.wake()  # keep the window open (idempotent; ack refreshes it)
                     await io.say(self._message(ev, now))
                     self.store.mark_delivered(ev.id, now)
                     self._backoff.pop(ev.id, None)
                     self.log.append(f"delivered#{ev.id} (attempt {attempt})")
-                    return True
+                    return True   # window stays OPEN → the user may just keep talking
             self.store.bump_attempt(ev.id)  # stays pending → never forgotten
             self._backoff[ev.id] = now + self.retry_after
+            if woke:
+                io.sleep()  # nobody answered → back to sleep (we woke it, we undo it)
             self.log.append(f"no-reply#{ev.id}: back to pending (attempts++)")
             return False
         finally:
             io.set_busy(False)
             io.hold(False)
+
+    def _call_line(self, ev: Event, name: str) -> str:
+        """The call-out: name + WHAT it is about. Never the content — that is the reward
+        for answering (and keeps us from talking to an empty room)."""
+        lines = CALL_LINES.get(ev.kind) or CALL_LINES["reminder"]
+        line = lines[self._call_i % len(lines)]
+        self._call_i += 1
+        return line.format(name=name)
 
     def _message(self, ev: Event, now: float) -> str:
         """What Candan actually SAYS — Turkish (the user speaks Turkish)."""

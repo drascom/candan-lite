@@ -315,6 +315,16 @@ class WakeGate:
         self.last_activity = now
         return not was
 
+    def sleep_now(self) -> bool:
+        """Erken uyut (pencereyi KAPAT). Proaktif seslenmeye cevap gelmediğinde kullanılır:
+        seslenmek için uyandırdık, karşılık yoksa açık bırakmak boşuna dinleme/token demek.
+        Uyanıktan uykuya GEÇTİYSE True + on_change(False) (çan/attribute). Kapalı → no-op."""
+        if not self.enabled:
+            return False
+        was = self.awake
+        self._set_awake(False)
+        return was
+
     def decide(self, text: str, now: Optional[float] = None) -> tuple[str, Optional[str]]:
         """('process', metin) | ('scripted', satır) | ('silent', None).
 
@@ -938,6 +948,22 @@ if _HAS_LIVEKIT:
                 pass
 
         # ── Proaktif ajan kancaları (worker/reminders.py bunları kullanır) ────
+        def proactive_wake(self) -> bool:
+            """Konuşma penceresini KOŞULSUZ aç (Candan KENDİ seslendi → konuşma başladı).
+
+            `wake_now(text)` KULLANILAMAZ: o, metinde wake word ARAR (kullanıcının bizi
+            çağırdığı yol) — boş metinle çağrılınca sessizce no-op'tur. Biz seslendiğimizde
+            kullanıcıdan "candan" demesini beklemek yanlış: cevabı ('efendim') normal akışta
+            alınabilmeli. Yeni uyandıysa True (cevapsız kalırsa geri uyutmak için)."""
+            if not self._wake.enabled:
+                return False
+            self._ensure_wake_timer()
+            return self._wake.wake_now()
+
+        def proactive_sleep(self) -> bool:
+            """Seslendik, cevap YOK → uyandırmayı geri al (pencere kapansın)."""
+            return self._wake.sleep_now()
+
         def proactive_hold(self, v: bool) -> None:
             """Proaktif seslenme sürerken kullanıcının onay sözü ('efendim') pi'ya
             GİTMESİN — hatırlatmayı BİZ iletiyoruz; pi ayrıca cevap verirse çift konuşma
@@ -1704,7 +1730,8 @@ def _proactive_test() -> int:
       (c) cevap yok → 1 kez daha → pending'e dönüyor (attempts++)
       (d) kullanıcı konuşuyorken → seslenme ERTELENİYOR
       (e) kullanıcı odada yok → seslenme YOK; bağlanınca gecikmiş iletiliyor (>12sa "geçmiş")
-      (f) UYKUDAYKEN → seslenme YAPILIYOR (uyku susturmuyor)
+      (f) UYKUDAYKEN → seslenme YAPILIYOR (uyku susturmuyor) + GİRİŞ penceresi de açılıyor
+          (kullanıcı 'candan' demeden cevap verebilir; ama cevabı pi'ya gitmez) — canlı bug
       (g) profile 2 KB'ı aşınca → konsolidasyon tetikleniyor (kayıpsızlık: events.ts (9))
     """
     global MEMORY_DIR  # noqa: PLW0602 — atama globals()[..] ile yapılıyor; bu satır
@@ -1733,6 +1760,10 @@ def _proactive_test() -> int:
             self.replies: list[bool] = []   # wait_reply'ın sırayla döneceği cevaplar
             self.here = True
             self.holds: list[bool] = []
+            self.slept = 0                  # cevapsız kalınca uyandırma geri alındı mı
+            # Cevap beklenirken (kullanıcı "efendim" derken) dünyanın hali:
+            self.awake_at_reply: list[bool] = []   # GİRİŞ penceresi açık mıydı?
+            self.decide_at_reply: list[str] = []   # o söz pi'ya gider miydi?
 
         def present(self) -> bool:
             return self.here
@@ -1750,13 +1781,21 @@ def _proactive_test() -> int:
             self.gate.hold = v
             self.holds.append(v)
 
-        def wake(self) -> None:
-            self.gate.wake_now()
+        def wake(self) -> bool:
+            return self.gate.wake_now()     # agent.py: brain.proactive_wake() (KOŞULSUZ)
+
+        def sleep(self) -> None:
+            self.slept += 1
+            self.gate.sleep_now()           # agent.py: brain.proactive_sleep()
 
         async def say(self, text: str) -> None:
             self.said.append(text)
 
         async def wait_reply(self, timeout: float) -> bool:
+            # Kullanıcı tam BURADA cevap veriyor ("efendim"): o an giriş penceresi açık
+            # mıydı ve o söz pi'ya gider miydi? (canlı bug'ın tam noktası)
+            self.awake_at_reply.append(self.gate.awake)
+            self.decide_at_reply.append(self.gate.decide("efendim")[0])
             return self.replies.pop(0) if self.replies else False
 
     def fresh(asleep: bool = True) -> tuple[EventStore, FakeIO, Deliverer, WakeGate]:
@@ -1776,10 +1815,27 @@ def _proactive_test() -> int:
         io.replies = [True]                       # kullanıcı "efendim" dedi
         n = await d.tick("ayhan")
         ev = store.get(eid)
-        ok = (n == 1 and io.said[0] == "Ayhan?" and "yatma vakti" in io.said[1]
+        ok = (n == 1 and io.said[0] == "Ayhan, bir hatırlatmam var."
+              and "yatma vakti" in io.said[1]
               and ev.status == "delivered" and ev.attempts == 1)
         results.append(("(b) vakti gelen pending → seslendi, onay alındı, iletildi", ok,
                         f"said={io.said} status={ev.status} attempts={ev.attempts}"))
+        # (b3) seslenme metni: İSİM + KONU var, ama hatırlatmanın İÇERİĞİ SIZMIYOR
+        ok = ("Ayhan" in io.said[0] and "hatırlat" in io.said[0].lower()
+              and "yatma vakti" not in io.said[0])
+        results.append(("(b3) seslenme: isim + konu; içerik onaydan ÖNCE sızmıyor", ok,
+                        f"call={io.said[0]!r}"))
+        # (b4) task_done başka bir konu bildirir + varyantlar dönüyor (robotik tekrar yok)
+        store, io, d, gate = fresh()
+        store.add("task_done", "ayhan", "çamaşır", due_ts=T0 - 60, now=T0 - 120)
+        store.add("reminder", "ayhan", "ilaç", due_ts=T0 - 50, now=T0 - 120)
+        io.replies = [True, True]
+        await d.tick("ayhan")
+        calls = [s for s in io.said if s.startswith("Ayhan,")]
+        ok = (len(calls) == 2 and "işin bitti" in calls[0] and calls[1] != calls[0]
+              and "çamaşır" not in calls[0] and "ilaç" not in calls[1])
+        results.append(("(b4) task_done → 'bir işin bitti'; varyant rotasyonu (tekrar yok)",
+                        ok, f"calls={calls}"))
         # üç zaman da kayıtlı mı (determinizm şartı)
         ok = bool(ev.requested_at and ev.due_at and store.get(eid).status == "delivered")
         results.append(("(b2) requested_at / due_at / status ÜÇÜ DE kayıtlı", ok,
@@ -1792,10 +1848,26 @@ def _proactive_test() -> int:
         n = await d.tick("ayhan")
         ev = store.get(eid)
         again = await d.tick("ayhan")             # backoff → hemen ısrar ETMEZ
-        ok = (n == 0 and io.said == ["Ayhan?", "Ayhan?"] and ev.status == "pending"
-              and ev.attempts == 1 and again == 0 and len(io.said) == 2)
+        ok = (n == 0 and len(io.said) == 2 and io.said[0] != io.said[1]
+              and all(s.startswith("Ayhan,") for s in io.said)
+              and ev.status == "pending" and ev.attempts == 1 and again == 0)
         results.append(("(c) cevap yok → 1 kez daha → pending (attempts++), ısrar yok", ok,
                         f"said={io.said} status={ev.status} attempts={ev.attempts}"))
+        # (c2) cevapsız kalınca UYANMA GERİ ALINIR: seslenmek için uyandırdık, karşılık
+        # yoksa pencereyi açık bırakmak boşuna dinleme/token demek → tekrar uyku.
+        ok = (io.awake_at_reply == [True, True]   # ama seslenirken pencere AÇIKTI
+              and io.slept == 1 and not gate.awake)
+        results.append(("(c2) cevapsızsa uyandırma geri alındı (tekrar uyku)", ok,
+                        f"awake_at_reply={io.awake_at_reply} slept={io.slept} "
+                        f"awake={gate.awake}"))
+        # (c3) ZATEN UYANIKKEN cevapsız kalırsa uyutMA (bizim açmadığımızı kapatmayız)
+        store, io, d, gate = fresh(asleep=False)
+        store.add("reminder", "ayhan", "su iç", due_ts=T0 - 60, now=T0 - 120)
+        io.replies = [False, False]
+        await d.tick("ayhan")
+        ok = (io.slept == 0 and gate.awake)
+        results.append(("(c3) uyanıkken cevapsız → pencere KAPATILMAZ (bozmuyoruz)", ok,
+                        f"slept={io.slept} awake={gate.awake}"))
 
         # (d) kullanıcı KONUŞUYOR → seslenme ERTELENİR (kesme koruması)
         store, io, d, gate = fresh(asleep=False)
@@ -1840,19 +1912,36 @@ def _proactive_test() -> int:
         # olduğu için ONAY sözü de pi'ya GİTMEZ (çift cevap yok) → decide() 'silent'.
         n = await d.tick("ayhan")
         ev = store.get(eid)
-        ok = (n == 1 and io.said[0] == "Ayhan?" and ev.status == "delivered"
+        ok = (n == 1 and io.said[0].startswith("Ayhan,") and ev.status == "delivered"
               and io.holds == [True, False]      # hold açıldı ve KAPANDI
               and gate.awake                     # onay sonrası konuşma penceresi AÇIK
               and not gate.agent_busy)           # meşgul bayrağı geri bırakıldı
         results.append(("(f) UYKUDAYKEN seslendi (susturulmadı); hold aç/kapa, pencere açıldı",
                         ok, f"said={io.said[0]!r} awake={gate.awake} holds={io.holds}"))
-        # hold sırasında kullanıcının onay sözü pi'ya GİTMEZ (yarış/çift cevap koruması)
-        g2 = WakeGate(enabled=True, word="candan", window=15.0)
-        g2.hold = True
-        act, _ = g2.decide("efendim")
-        ok = act == "silent"
-        results.append(("(f2) hold açıkken onay sözü pi'ya GİTMİYOR (çift cevap yok)", ok,
-                        f"decide('efendim')={act}"))
+        # (f1) CANLI BUG REGRESYONU: uykudayken seslendik → kullanıcı "efendim" derken
+        # GİRİŞ penceresi de AÇIK olmalı. Eskiden çıkış (say) uykuyu delerdi ama giriş
+        # hâlâ wake word beklerdi → cevap ONAY sayılmaz, önce "candan" demek gerekirdi.
+        ok = (io.awake_at_reply == [True] and io.slept == 0)
+        results.append(("(f1) uykudayken seslenince GİRİŞ penceresi de açılıyor "
+                        "('candan' demeden onay)", ok,
+                        f"awake_at_reply={io.awake_at_reply} slept={io.slept}"))
+        # (f2) ...ama o onay sözü pi'ya GİTMEZ (hold) → çift konuşma yok
+        ok = io.decide_at_reply == ["silent"]
+        results.append(("(f2) onay sözü ('efendim') pi'ya GİTMİYOR (çift cevap yok)", ok,
+                        f"decide_at_reply={io.decide_at_reply}"))
+        # (f3) ÜRETİM KABLOLAMASI (bug'ın kök sebebi): agent.py _LiveKitIO.wake() eskiden
+        # brain.wake_now() çağırıyordu — o METİNDE wake word ARAR → boş metinle SESSİZ
+        # NO-OP → pencere hiç açılmazdı. proactive_wake() koşulsuz açar, proactive_sleep()
+        # geri alır. (FakeIO gate'i doğrudan kullandığı için bu ayrım SADECE burada görünür.)
+        pb = PiBrain(session_id="ayhan")
+        pb._wake.enabled = True
+        pb._wake.awake = False
+        noop = pb.wake_now("")                    # eski yol: wake word yok → no-op
+        opened = pb.proactive_wake()              # yeni yol: KOŞULSUZ aç
+        closed = pb.proactive_sleep()
+        ok = (noop is False and opened is True and pb._wake.awake is False and closed is True)
+        results.append(("(f3) wake_now('') no-op (kök sebep); proactive_wake/sleep çalışıyor",
+                        ok, f"wake_now('')={noop} proactive_wake={opened} sleep={closed}"))
 
         # (g) profile 2KB'ı aşınca → konsolidasyon TETİKLENİYOR (sessizken; busy'de ASLA)
         MEM = Path(tmp) / "memory"

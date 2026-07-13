@@ -242,8 +242,14 @@ async def entrypoint(ctx: JobContext):
         def hold(self, v: bool) -> None:
             brain.proactive_hold(v)                     # onay sözü pi'ya gitmesin
 
-        def wake(self) -> None:
-            brain.wake_now()                            # onay geldi → konuşma penceresi
+        def wake(self) -> bool:
+            # Seslendiğimiz AN pencereyi aç: konuşmayı BİZ başlattık, cevabı ('efendim')
+            # duymak için kullanıcının ayrıca "candan" demesi GEREKMEZ. (brain.wake_now()
+            # burada YANLIŞTI: o metinde wake word arar → boş metinle sessiz no-op.)
+            return brain.proactive_wake()
+
+        def sleep(self) -> None:
+            brain.proactive_sleep()                     # cevap yok → uyandırmayı geri al
 
         async def say(self, text: str) -> None:
             await session.say(text)                     # SpeechHandle → playout'u bekler
