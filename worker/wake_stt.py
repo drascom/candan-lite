@@ -6,6 +6,11 @@ bağlar, silero VAD ile konuşma segmentini yakalar ve segmentin KISA erken
 penceresini (WAKE_STT_WINDOW sn) wyoming Whisper'a verir. Transcript'te wake
 word ("candan") varsa `on_wake()` çağrılır → brain.wake_now() → çan erken çalar.
 
+VERİMLİLİK: wake kelimesi cümlenin BAŞINDA söylenir. Bu yüzden bir segmentin yalnız
+İLK `WAKE_STT_MAX_SECONDS` (varsayılan 4 sn) kadarı taranır; sonrası ne transcribe
+edilir ne biriktirilir. (Eskiden segmentin tamamı her pencerede baştan gönderiliyordu:
+9 sn'lik tek cümle Whisper'a ~40 sn ses işletiyordu.)
+
 ADIM 1 fizibilite (OmniVoice sesiyle offline): kısa-pencere Whisper 'candan'ı
 ~200-270ms roundtrip'te, 0 false-positive ile yakaladı; ≥1.0s pencere yeterli.
 
@@ -31,7 +36,8 @@ log.addFilter(DedupeFilter())  # tekrarlayan stream/hata loglarını seyreltir
 TAP_RATE = 16000  # wyoming whisper 16k s16le ister; AudioStream doğrudan 16k verir
 TAP_CHANNELS = 1
 STT_WIDTH = 2  # s16le
-MAX_SEG_SECONDS = 10.0  # tek segment için üst sınır (bellek/latency koruması)
+MAX_SEG_SECONDS = 10.0  # tek segment için mutlak üst sınır (bellek/latency koruması)
+WAKE_MAX_SECONDS = 4.0  # varsayılan: segmentin yalnız İLK bu kadar sn'si wake taramasına girer
 
 
 class WakeSTT:
@@ -43,6 +49,9 @@ class WakeSTT:
              stream açar, ana session'a dokunmaz).
     active:  opsiyonel; False dönerse o an transcribe ATLANIR (ör. sadece UYURKEN çalış —
              uyanıkken ana STT yeterli, çift-transcribe azalır). None → hep çalış.
+    max_seconds: segmentin yalnız İLK bu kadar saniyesi wake taramasına girer. Wake kelimesi
+             cümlenin BAŞINDA söylenir; gerisini taramak GPU israfı. Sonrası ne transcribe
+             edilir ne de biriktirilir.
     """
 
     def __init__(
@@ -54,6 +63,7 @@ class WakeSTT:
         language: str = "tr",
         wake_word: str = "candan",
         window: float = 1.5,
+        max_seconds: float = WAKE_MAX_SECONDS,
         on_wake: Callable[[str], None],
         active: Optional[Callable[[], bool]] = None,
     ):
@@ -64,6 +74,8 @@ class WakeSTT:
         self._wake_norm = _wake_norm(wake_word)
         self._wake_variants = _wake_variants(wake_word)
         self._window = max(0.5, float(window))
+        # Üst sınır en az bir pencere kadar, en fazla MAX_SEG_SECONDS olabilir.
+        self._max_seconds = min(max(self._window, float(max_seconds)), MAX_SEG_SECONDS)
         self._on_wake = on_wake
         self._active = active
         self._tasks: dict[str, asyncio.Task] = {}
@@ -110,16 +122,18 @@ class WakeSTT:
             track=track, sample_rate=TAP_RATE, num_channels=TAP_CHANNELS
         )
         vad_stream = self._vad.stream()
-        seg = bytearray()  # aktif konuşma segmentinin s16le ham audio'su
-        state = {"speaking": False, "next_win": 0, "busy": False}
+        seg = bytearray()  # aktif konuşma segmentinin s16le ham audio'su (en fazla max_bytes)
+        # scanned: gerçekten Whisper'a giden son payload'ın boyutu (mükerrer çağrıyı eler).
+        state = {"speaking": False, "next_win": 0, "busy": False, "scanned": 0}
         win_bytes = int(self._window * TAP_RATE) * STT_WIDTH
-        max_bytes = int(MAX_SEG_SECONDS * TAP_RATE) * STT_WIDTH
+        max_bytes = int(self._max_seconds * TAP_RATE) * STT_WIDTH  # wake taraması üst sınırı
 
         async def transcribe(payload: bytes) -> None:
             """Kısa pencere → wyoming Whisper → wake word varsa on_wake (tek seferde bir)."""
             if state["busy"] or not payload or not self._is_active():
                 return
             state["busy"] = True
+            state["scanned"] = len(payload)  # busy/pasif yüzünden düşenler "tarandı" sayılmaz
             try:
                 sess = _WhisperSession(self._host, self._port, self._lang)
                 try:
@@ -147,10 +161,12 @@ class WakeSTT:
                     name = getattr(et, "name", str(et))
                     if name == "START_OF_SPEECH":
                         seg.clear()
-                        state.update(speaking=True, next_win=1)
+                        state.update(speaking=True, next_win=1, scanned=0)
                     elif name == "END_OF_SPEECH":
                         state["speaking"] = False
-                        if seg:  # segment sonu: tüm (kısa) segmenti son bir kez dene
+                        # Segment sonu: yalnız İLK max_seconds'ı dene (seg zaten orada kırpık).
+                        # Aynı aralık bir erken-pencerede tam olarak tarandıysa tekrarlama.
+                        if seg and state["scanned"] < len(seg):
                             self._spawn_bg(transcribe(bytes(seg)))
                         seg.clear()
             except asyncio.CancelledError:
@@ -159,19 +175,29 @@ class WakeSTT:
                 log.debug("wake_stt vad-pump bitti (%s): %s", key, e)
 
         pump = asyncio.create_task(pump_vad())
-        log.info("wake_stt: track dinleniyor (%s), pencere=%.1fs", key, self._window)
+        log.info(
+            "wake_stt: track dinleniyor (%s), pencere=%.1fs, üst sınır=%.1fs",
+            key, self._window, self._max_seconds,
+        )
         try:
             async for event in stream:
                 frame = event.frame
                 vad_stream.push_frame(frame)
-                if not state["speaking"]:
+                if not state["speaking"] or len(seg) >= max_bytes:
+                    # Üst sınır dolduysa: ne biriktir ne tara. Wake kelimesi cümlenin
+                    # BAŞINDA; gerisi wake tespitine katkı yok → saf GPU/bellek israfı.
                     continue
                 seg.extend(bytes(frame.data))
-                if len(seg) > max_bytes:  # aşırı uzun → baştan pencere kadar tut
-                    del seg[:-win_bytes]
+                if len(seg) > max_bytes:  # sınırı aşan kuyruğu at → segmentin BAŞI kalsın
+                    del seg[max_bytes:]
                 # Erken pencere: konuşurken WINDOW dolar dolmaz transcribe et (cümle
-                # bitmeden 'candan'ı yakala). Her katta bir kez (next_win artar).
-                if len(seg) >= win_bytes * state["next_win"]:
+                # bitmeden 'candan'ı yakala). Her katta bir kez (next_win artar); sınırı
+                # aşan katlar tetiklenmez, sınıra değen son parça bir kez taranır.
+                target = win_bytes * state["next_win"]
+                if len(seg) >= max_bytes:
+                    state["next_win"] += 1
+                    self._spawn_bg(transcribe(bytes(seg)))  # ilk max_seconds — son tarama
+                elif len(seg) >= target:
                     state["next_win"] += 1
                     self._spawn_bg(transcribe(bytes(seg)))
         except asyncio.CancelledError:

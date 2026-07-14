@@ -63,6 +63,9 @@ def _envflag(name: str, default: bool = False) -> bool:
 
 WAKE_STT_ENABLED = _envflag("WAKE_STT_ENABLED", False)
 WAKE_STT_WINDOW = float(os.environ.get("WAKE_STT_WINDOW", "1.5") or 1.5)
+# Segmentin yalnız İLK bu kadar saniyesi wake taramasına girer (wake kelimesi cümle
+# başında söylenir; gerisini Whisper'a vermek saf GPU israfı).
+WAKE_STT_MAX_SECONDS = float(os.environ.get("WAKE_STT_MAX_SECONDS", "4.0") or 4.0)
 WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
 
 # Uyurken kullanıcı transkriptini web UI'a YAYINLAMA (DEFAULT açık). Ses/STT/wake
@@ -212,6 +215,7 @@ async def entrypoint(ctx: JobContext):
             language=LANG,
             wake_word=WAKE_WORD,
             window=WAKE_STT_WINDOW,
+            max_seconds=WAKE_STT_MAX_SECONDS,
             on_wake=lambda text: brain.wake_now(text),  # idempotent → çift çan yok
             # Sadece uyurken çalış: uyanıkken ana STT yeterli, çift-transcribe azalır.
             active=lambda: not getattr(getattr(brain, "_wake", None), "awake", True),
