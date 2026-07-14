@@ -297,6 +297,10 @@ If the user CORRECTS a note's place or content, do not add a new one: call memor
 "Remind me to ..." is NOT memory_add → use reminder_add (never compute the time yourself:
 pass in_minutes or at; the real clock is resolved server-side). When it is due, you will be
 the one who speaks up.
+When the user gives a LASTING instruction about how you should BEHAVE toward them ("from now
+on answer me briefly", "always call me X", "stop doing Y") that is NOT a fact → do not use
+memory_add, call soul_add (scope 'self'; 'family' only if an adult asks it apply to everyone).
+Confirm out loud that you'll remember; it takes effect from the next session.
 </memory-policy>`;
 
 export default function memExtension(pi: ExtensionAPI) {
@@ -430,6 +434,87 @@ export default function memExtension(pi: ExtensionAPI) {
 	});
 
 	// ── memory_search ─────────────────────────────────────────────────────────
+	// ── soul_add: kişiye özel "ruh" (kalıcı DAVRANIŞ talimatı; gerçek/not DEĞİL) ──
+	// Dosyalar boot'ta pi_brain tarafından --append-system-prompt ile yüklenir:
+	//   self   → memory/users/<user>/soul.md  (herkes kendi için; guest yazamaz)
+	//   family → memory/soul.md               (ortak taban; SADECE adult)
+	// Kişininki ortak tabanın ÜSTÜNDE yüklenir → çelişirse kişininki geçerli.
+	pi.registerTool({
+		name: "soul_add",
+		label: "Soul Add",
+		description:
+			"Store a DURABLE BEHAVIOUR instruction the user gives about how you should act toward " +
+			"them from now on ('from now on answer briefly', 'always call me X', 'stop doing Y'). " +
+			"This is NOT a fact (use memory_add for facts) and NOT a timed reminder. scope: 'self' " +
+			"(default — only how you treat THIS user) or 'family' (shared base behaviour for " +
+			"everyone; adult only). Takes effect at the next session start. Confirm out loud.",
+		promptSnippet:
+			"Lasting instruction about your behaviour ('from now on'/'always'/'never') → soul_add " +
+			"(scope self; family=adult), then confirm out loud.",
+		parameters: Type.Object({
+			text: Type.String({ description: "The behaviour instruction, one line." }),
+			scope: Type.Optional(
+				Type.String({ description: "'self' (default) | 'family' (adult only)." }),
+			),
+		}),
+		async execute(
+			_id,
+			params: { text: string; scope?: string },
+			_signal,
+			_upd,
+			ctx: ExtensionContext,
+		) {
+			const user = memUser();
+			const r = role(ctx.cwd, user);
+			if (!user || r === "guest")
+				return { content: [{ type: "text" as const, text: "guest: ruh kaydı yok." }] };
+
+			const text = (params.text || "").trim().replace(/\s+/g, " ");
+			if (!text) return { content: [{ type: "text" as const, text: "Boş talimat yazılmadı." }] };
+
+			const root = memDir(ctx.cwd);
+			const fam = (params.scope || "self").trim().toLowerCase() === "family";
+			if (fam && r !== "adult")
+				return {
+					content: [
+						{ type: "text" as const, text: "Ortak ruha yazma yetkin yok (yalnız yetişkin)." },
+					],
+				};
+			const file = fam
+				? path.join(root, "soul.md")
+				: path.join(root, "users", user, "soul.md");
+
+			// Dedup: aynı (normalize) talimat zaten varsa tekrar ekleme.
+			const key = dkey(text);
+			try {
+				for (const raw of fs.readFileSync(file, "utf-8").split("\n")) {
+					const m = LINE_RE.exec(raw.trim());
+					if (m && dkey(m[2]) === key)
+						return {
+							content: [{ type: "text" as const, text: "Zaten kayıtlı, tekrar eklenmedi." }],
+							details: { scope: fam ? "family" : "self", file, wrote: false },
+						};
+				}
+			} catch {}
+
+			try {
+				fs.mkdirSync(path.dirname(file), { recursive: true });
+				fs.appendFileSync(file, `- [${today()}] ${text}\n`, "utf-8");
+			} catch (e: any) {
+				return {
+					content: [{ type: "text" as const, text: `Yazılamadı: ${e?.message || e}` }],
+					isError: true,
+				};
+			}
+			return {
+				content: [
+					{ type: "text" as const, text: fam ? "Ortak ruha eklendi." : "Aklımda tutacağım." },
+				],
+				details: { scope: fam ? "family" : "self", file, wrote: true },
+			};
+		},
+	});
+
 	pi.registerTool({
 		name: "memory_search",
 		label: "Memory Search",

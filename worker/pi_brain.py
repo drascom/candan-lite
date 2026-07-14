@@ -87,7 +87,7 @@ PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
 PI_TOOLS_ALLOWLIST = os.environ.get(
     "PI_TOOLS_ALLOWLIST",
     "memory_add,memory_search,web_search,"
-    "reminder_add,reminder_list,reminder_cancel,memory_consolidate",
+    "reminder_add,reminder_list,reminder_cancel,memory_consolidate,soul_add",
 )
 
 # Zaman dilimi: kullanıcı Londra'da. due_at hesabı pi extension'da (server-side),
@@ -498,6 +498,14 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
     persona_file = REPO_ROOT / PI_PERSONA_DIR / f"{persona}.md"
     if persona_file.is_file():
         args += ["--append-system-prompt", str(persona_file)]
+    # Kişiye özel agent "ruhu" (kalıcı davranış hafızası; soul_add tool'u yazar).
+    # Ortak taban memory/soul.md HERKESE (guest dahil) yüklenir. Kişiye özel olan
+    # (memory/users/<user>/soul.md) SADECE tanınan kullanıcıya ve ortak tabanın
+    # ARDINDAN (sonra gelen = öncelikli) yüklenir → çelişirse kişininki geçerli.
+    # Dosya yoksa graceful: hiçbir şey eklenmez, davranış bugünküyle aynı.
+    soul_common = REPO_ROOT / MEMORY_DIR / "soul.md"
+    if soul_common.is_file():
+        args += ["--append-system-prompt", str(soul_common)]
     # Hafıza çekirdeği (küçük, boot'ta yüklü). Kullanıcı kimliği = session_id slug'ı
     # (tanınan kişi). Guest/unknown → mem_user boş → hiçbir şey eklenmez (Faz 2 aynen).
     mem_user = _mem_user(session_id)
@@ -509,6 +517,10 @@ def _build_pi_args(persona: str, session_id: str) -> list[str]:
         family = mem / "family.md"
         if family.is_file():  # role != guest zaten garanti (mem_user dolu)
             args += ["--append-system-prompt", str(family)]
+        # Kişiye özel ruh (ortak tabanın ÜSTÜNDE; çelişirse bu geçerli).
+        soul = mem / "users" / mem_user / "soul.md"
+        if soul.is_file():
+            args += ["--append-system-prompt", str(soul)]
         # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
         args += [
             "--append-system-prompt",
@@ -2095,8 +2107,70 @@ async def _reminder_e2e() -> int:
     return 0 if ok else 1
 
 
+def _soul_test() -> int:
+    """soul.md yükleme dalları — GEÇİCİ memory kökü (gerçek memory/ KİRLENMEZ).
+
+    _build_pi_args'ın system-prompt argümanlarında soul dosyaları doğru mu:
+      (a) hiç soul yok → ne ortak ne kişisel yüklenir (bugünkü davranış)
+      (b) ortak memory/soul.md → HERKESE yüklenir (tanınan + guest)
+      (c) kişisel memory/users/<u>/soul.md → SADECE tanınan kullanıcıya; guest'e YOK
+      (d) ikisi de → ortak ÖNCE, kişisel SONRA (sonra = öncelikli)."""
+    import shutil
+    import tempfile
+
+    tmp = Path(tempfile.mkdtemp(prefix="candan-soul-test-"))
+    old_mem = MEMORY_DIR
+    MEM = tmp / "memory"
+    (MEM / "users" / "ayhan").mkdir(parents=True, exist_ok=True)
+    (MEM / "policy.json").write_text('{"ayhan": "adult"}')
+    globals()["MEMORY_DIR"] = str(MEM)
+    results: list[tuple[str, bool, str]] = []
+
+    def souls(session_id: str) -> list[str]:
+        """_build_pi_args çıktısındaki --append-system-prompt değerlerinden soul yolları."""
+        args = _build_pi_args("candan", session_id)
+        vals = [args[i + 1] for i, a in enumerate(args) if a == "--append-system-prompt"
+                and i + 1 < len(args)]
+        return [v for v in vals if v.endswith("soul.md")]
+
+    common = str(MEM / "soul.md")
+    personal = str(MEM / "users" / "ayhan" / "soul.md")
+
+    try:
+        # (a) hiç soul yok
+        ok = souls("ayhan") == [] and souls("candan") == []
+        results.append(("(a) soul yok → hiçbir soul yüklenmez", ok, f"{souls('ayhan')}"))
+
+        # (b) ortak soul → tanınan + guest ikisine de
+        (MEM / "soul.md").write_text("- [2026-07-14] kısa konuş\n")
+        ok = souls("ayhan") == [common] and souls("candan") == [common]
+        results.append(("(b) ortak soul → tanınan + guest'e yüklendi", ok,
+                        f"ayhan={souls('ayhan')} guest={souls('candan')}"))
+
+        # (c)+(d) kişisel soul → tanınana eklenir (ortaktan SONRA); guest'e GİRMEZ
+        Path(personal).write_text("- [2026-07-14] bana Ayhan Bey de\n")
+        got_user = souls("ayhan")
+        got_guest = souls("candan")
+        ok = (got_user == [common, personal]     # sıra: ortak ÖNCE, kişisel SONRA
+              and got_guest == [common])          # guest kişiseli ALMAZ
+        results.append(("(c/d) kişisel soul: tanınana ortaktan SONRA; guest'e YOK", ok,
+                        f"user={got_user} guest={got_guest}"))
+    finally:
+        globals()["MEMORY_DIR"] = old_mem
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    all_ok = True
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[soul] RESULT: {'PASS' if all_ok else 'FAIL'}")
+    return 0 if all_ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "soul":
+        raise SystemExit(_soul_test())
     if cmd == "proactive":
         raise SystemExit(_proactive_test())
     if cmd == "e2e":
@@ -2113,4 +2187,4 @@ if __name__ == "__main__":
         msg = sys.argv[2] if len(sys.argv) > 2 else "merhaba de"
         raise SystemExit(asyncio.run(_prompt_test(msg)))
     print("usage: python pi_brain.py "
-          "[smoke|prompt <text>|wake|waketimer|policy|proactive|e2e]")
+          "[smoke|prompt <text>|wake|waketimer|policy|proactive|soul|e2e]")
