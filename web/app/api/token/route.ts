@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   AccessToken,
+  type AccessTokenOptions,
   AgentDispatchClient,
   RoomServiceClient,
-  type AccessTokenOptions,
   type VideoGrant,
 } from 'livekit-server-sdk';
 import { ParticipantInfo_Kind, RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
@@ -77,9 +77,10 @@ export async function POST(req: NextRequest) {
         roomConfig
       );
       // Token'a gömülü dispatch YALNIZCA oda ilk yaratılırken işlenir; oda zaten
-      // varsa yok sayılır. Worker restart edilince agent düşer ama oda (açık sekme +
-      // emptyTimeout) yaşar → yeni token'ın daveti işlenmez. Var olan oda için
-      // agent'ı server tarafında açıkça çağırıyoruz.
+      // varsa yok sayılır. Worker restart edilince agent düşer ama oda YAŞAMAYA DEVAM eder
+      // (sekme açıksa web katılımcısı odayı tutar; herkes çıksa bile departureTimeout=20 sn
+      // boyunca durur) → yeni token'ın gömülü daveti işlenmez. Var olan oda için agent'ı
+      // server tarafında açıkça çağırıyoruz.
       await ensureAgentDispatch(serverUrl, roomName, dispatchMetadata);
     }
 
@@ -158,27 +159,58 @@ function withAgentDispatch(roomConfig: RoomConfiguration, metadata: string): Roo
  * Aynı Next.js süreci içinde oda-başına kısa süreli in-flight kilidi (2. savunma hattı).
  *
  * YARIŞ: iki token POST'u AYNI ANDA gelirse (StrictMode çift-mount, iki sekme, retry),
- * ikisi de `listDispatch`/katılımcı kontrolünü dispatch kaydı DAHA GÖRÜNMEDEN geçer ve
- * İKİSİ de `createDispatch` atar → odaya iki agent → her cevap çift ses (canlıda 23:42:11).
- * `listDispatch` kaydı yalnız SIRALI (kayıt yayılmışsa) istekleri kapatır; gerçek eşzamanlı
- * istek için senkron kilit şart. Map get/set await'siz olduğundan JS tek-thread'inde ilk
- * çağrı damgayı basıp yield eder, sonrakiler damgayı görüp atlar. Pencere dolunca (worker
- * restart → gerçek yeniden dispatch gereği) tekrar geçer. Dev hot-reload map'i sıfırlar — zararsız.
+ * ikisi de aşağıdaki kontrolleri dispatch kaydı DAHA GÖRÜNMEDEN geçer ve İKİSİ de
+ * `createDispatch` atar → odaya iki agent → her cevap çift ses (canlıda 23:42:11).
+ * Sunucudan okunan durum yalnız SIRALI (kayıt yayılmışsa) istekleri kapatır; gerçek
+ * eşzamanlı istek için senkron kilit şart. Map get/set await'siz olduğundan JS
+ * tek-thread'inde ilk çağrı damgayı basıp yield eder, sonrakiler damgayı görüp atlar.
+ * Dev hot-reload map'i sıfırlar — zararsız.
+ *
+ * Kilit worker-restart senaryosunu YUTMAZ: restart sonrası istemci yeniden bağlanırken
+ * yeni token'ı saniyeler sonra ister ve denemeye devam eder (bkz. view-controller.tsx
+ * RECONNECT_DELAY_MS + agent'ın katılma zaman aşımı) → 8 sn'lik pencere dolar, sonraki
+ * POST gerçek dispatch'i atar. Kilidi DARALTMAK çift-ses yarışını geri açar; bu yüzden 8 sn.
  */
 const dispatchInFlight = new Map<string, number>();
 const DISPATCH_LOCK_MS = 8000;
 
 /**
+ * Dispatch kaydı "agent yolda" sayılma penceresi.
+ *
+ * Dispatch verildikten sonra agent'ın odaya KATILMASI zaman alır (worker job süreci doğar,
+ * prewarm çalışır). O aralıkta odada AGENT katılımcı görünmez; katılımcıya bakıp hemen
+ * yeniden dispatch atarsak İKİ agent doğar (çift ses). Bu yüzden TAZE bir dispatch kaydı
+ * varsa (< bu süre) agent'ı "yolda" kabul edip dokunmuyoruz.
+ *
+ * Ölçüm (candan-lite-dev, soğuk worker): dispatch → agent katılımcı odada ≈ 2-8 sn.
+ * 20 sn bunun rahat üstü; tek maliyeti, worker GERÇEKTEN ölüyse yeniden dispatch'in en fazla
+ * 20 sn gecikmesi — istemci denemeye devam ettiği için kendi kendine toparlanır.
+ */
+const DISPATCH_GRACE_MS = 20000;
+
+/**
  * Var olan oda için agent'ı server tarafında açıkça dispatch et.
  *
- * - Kısa süre içinde bu oda için zaten bir dispatch denemesi yapıldıysa: dokunma (kilit).
+ * CANLI KANIT (2026-07-14, candan-lite-dev): worker ölünce LiveKit dispatch KAYDINI SİLMİYOR
+ * ve job'un durumunu da GÜNCELLEMİYOR. Worker öldükten 60+ sn sonra, odada AGENT katılımcı
+ * YOKKEN bile kayıt aynen duruyordu:
+ *     id=AD_RNUp7AemGwKw agentName=candan deletedAt=0
+ *       jobs(1): job AJ_Xr7chM7NvxWT status=RUNNING endedAt=0
+ * Yani "kayıt var mı" — hatta "job'un durumu RUNNING mi" — sorusu agent'ın CANLI olup
+ * olmadığını SÖYLEMEZ: kayıt oda ömrü boyunca ÖLÜ olarak durur. Eski kod "kayıt var →
+ * dokunma" dediği için worker restart'tan sonra agent BİR DAHA dispatch edilmiyordu.
+ * Sekmeyi kapatıp açmak "çözüyordu", çünkü oda boşalınca (departureTimeout=20 sn) SİLİNİYOR,
+ * kayıtlar da onunla gidiyor ve YENİ odada token'a gömülü davet yeniden işleniyordu.
+ *
+ * DOĞRU CANLILIK SİNYALİ: odadaki AGENT kind KATILIMCI. Sıra:
+ * - Kısa süre içinde bu oda için zaten deneme yapıldıysa: dokunma (in-flight kilidi).
  * - Oda YOKSA: dokunma — token'a gömülü dispatch oda yaratılırken zaten tetiklenir.
- * - Oda VARSA ve bu agent için DISPATCH KAYDI zaten varsa: dokunma. Kaydı kontrol ediyoruz
- *   (katılımcı listesini DEĞİL): dispatch verilmiş ama agent henüz KATILMAMIŞken bile kayıt
- *   görünür → yarış penceresi (worker job başlatma gecikmesi) kapanır.
- * - Oda VARSA, kayıt yok ama AGENT katılımcı zaten içindeyse: dokunma. Bu, kaydı görünmeden
- *   düşen gömülü dispatch'i de kapsar (belt-and-suspenders — kayıt VEYA katılımcı yeter).
- * - Aksi halde: `createDispatch` ile agent'ı çağır (worker restart: oda yaşıyor, gömülü yok sayılıyor).
+ * - Odada AGENT katılımcı VARSA: dokunma — agent canlı. (Kaydı görünmeden düşen gömülü
+ *   dispatch de buraya düşer.)
+ * - Katılımcı yok ama bu agent için TAZE dispatch kaydı varsa (< DISPATCH_GRACE_MS):
+ *   dokunma — agent yolda olabilir. Çift-agent (çift ses) yarışını kapatan koşul BUDUR.
+ * - Aksi halde (kayıt yok VEYA kayıt bayat = ölü job): `createDispatch`. Worker restart
+ *   senaryosu tam olarak burasıdır.
  *
  * Hata dayanıklılığı: dispatch adımı patlarsa token yine döner (yeni-oda yolu bozulmaz);
  * hata yalnız console'a loglanır.
@@ -198,17 +230,31 @@ async function ensureAgentDispatch(
     const roomService = new RoomServiceClient(serverUrl, API_KEY, API_SECRET);
     const rooms = await roomService.listRooms([roomName]);
     if (rooms.length === 0) return; // oda yok → gömülü dispatch halleder
-    const dispatchClient = new AgentDispatchClient(serverUrl, API_KEY, API_SECRET);
-    // 1. savunma: dispatch KAYDINA bak (katılımcıya değil) — kayıt agent katılmadan da görünür.
-    const dispatches = await dispatchClient.listDispatch(roomName);
-    if (dispatches.some((d) => d.agentName === AGENT_NAME)) return; // kayıt var → çift dispatch yapma
-    // Kayıt yoksa katılımcıyı da kontrol et: kaydı görünmeden düşen gömülü dispatch'i yakala.
+
+    // 1. savunma: AGENT katılımcı odada mı? Tek güvenilir canlılık sinyali bu.
     const participants = await roomService.listParticipants(roomName);
-    if (participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT)) return; // agent zaten odada
+    if (participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT)) return; // agent canlı
+
+    // Agent odada yok. Dispatch kaydı TAZE ise agent yolda olabilir → bekle (çift dispatch yok).
+    // Kayıt BAYATSA job ölmüştür (durumu güncellenmediği için "RUNNING" görünse bile) → yeniden çağır.
+    const dispatchClient = new AgentDispatchClient(serverUrl, API_KEY, API_SECRET);
+    const dispatches = await dispatchClient.listDispatch(roomName);
+    const newestCreatedAtMs = dispatches
+      .filter((d) => d.agentName === AGENT_NAME)
+      // state.createdAt NANOSANİYE (bigint) — ms'ye çevir. BigInt literali (0n/1_000_000n)
+      // KULLANMIYORUZ: tsconfig target'ı ES2020'nin altında, derleyici reddediyor. Number()'a
+      // çevirip bölüyoruz; ns→ms'de çift duyarlık kaybı ~0.0003 ms → karşılaştırma için önemsiz.
+      .reduce((newest, d) => {
+        const createdAtMs = Number(d.state?.createdAt ?? 0) / 1e6;
+        return createdAtMs > newest ? createdAtMs : newest;
+      }, 0);
+    if (newestCreatedAtMs > 0 && now - newestCreatedAtMs < DISPATCH_GRACE_MS) return; // agent yolda
+
     await dispatchClient.createDispatch(roomName, AGENT_NAME, metadata ? { metadata } : undefined);
     console.log(
       `[token] var olan oda ${roomName} için agent dispatch edildi (${AGENT_NAME}` +
-        `${metadata ? `, ${metadata}` : ''})`
+        `${metadata ? `, ${metadata}` : ''}` +
+        `${newestCreatedAtMs > 0 ? ', bayat kayıt vardı → worker restart' : ''})`
     );
   } catch (error) {
     console.error('[token] ensureAgentDispatch başarısız (token yine dönüyor):', error);
