@@ -113,9 +113,21 @@ PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
 # memory_consolidate (bağlam şişmesi) mem extension'ından geliyor → allowlist'te olmalı.
 PI_TOOLS_ALLOWLIST = os.environ.get(
     "PI_TOOLS_ALLOWLIST",
-    "memory_add,memory_search,web_search,"
+    # web_search    → @oresk/pi-searxng (kendi SearXNG'miz, .25:8888)
+    # fetch_content → pi-web-access (doğrudan HTTP + Readability; sağlayıcı yok)
+    "memory_add,memory_search,web_search,fetch_content,"
     "reminder_add,reminder_list,reminder_cancel,memory_consolidate,soul_add",
 )
+
+# pi'nın GLOBAL npm paket dizini (repo DIŞI). Web eklentileri buradan explicit `-e` ile
+# yükleniyor — bkz. _build_pi_args(). `npm:paket` deseydik her pi doğuşunda temp kurulum
+# olurdu (persona swap sık → saniyeler kaybı). Kurulum: docs/SEARXNG-KURULUM.md
+PI_NPM_DIR = Path(
+    os.environ.get("PI_NPM_DIR", os.path.expanduser("~/.pi/agent/npm/node_modules"))
+)
+# Eski Qwant araması (CAPTCHA yüzünden ÖLÜ) — sadece acil geri dönüş için. true yapılırsa
+# SearXNG yerine o yüklenir. Dosya SİLİNMEDİ, sadece varsayılanda yüklenmiyor.
+WEB_SEARCH_LEGACY_QWANT = _envflag("WEB_SEARCH_LEGACY_QWANT", False)
 
 # Zaman dilimi: kullanıcı Londra'da. due_at hesabı pi extension'da (server-side),
 # burada SADECE modele her turda verilen "şu an" satırı için kullanılır.
@@ -575,14 +587,38 @@ def _build_pi_args(
     mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
     if mem_ext.is_file():
         args += ["-e", str(mem_ext)]
-    # web_search: LOKAL extension (anahtarsız Qwant). `web_search` pi'nin built-in'i
-    # DEĞİL — global npm:pi-web-access'ten geliyordu; PI_ISOLATED onu kapattığı için
-    # yetenek kaybolmuştu. Projeye-lokal → VPS'te de çalışır (global pi gerekmez).
-    # `-e` explicit yol olduğu için --no-extensions bunu BOZMAZ.
-    # WEB_SEARCH_ENABLED=false → extension tool'u kaydetmez (allowlist girişi zararsız).
-    web_ext = REPO_ROOT / "pi" / "extensions" / "websearch" / "index.ts"
-    if web_ext.is_file():
-        args += ["-e", str(web_ext)]
+    # ---- WEB ERİŞİMİ (2026-07-14: Qwant → SearXNG) ---------------------------
+    # ESKİ YOL (DEVRE DIŞI, dosya duruyor): pi/extensions/websearch/index.ts = anahtarsız
+    # Qwant kazıması. Qwant CAPTCHA döndürmeye başladı → `web_search` canlıda ÖLÜYDÜ.
+    # Dosya SİLİNMEDİ (kullanıcı kuralı: sormadan kaldırma), sadece artık YÜKLENMİYOR.
+    # Geri açmak istersen: WEB_SEARCH_LEGACY_QWANT=true (aşağıda) — ama CAPTCHA duruyor.
+    #
+    # YENİ YOL — iki eklenti, iki AYRI iş; ikisi de anahtarsız:
+    #   1) web_search    → @oresk/pi-searxng → KENDİ SearXNG'miz (.25:8888, systemd).
+    #      Hesap/anahtar yok, üçüncü taraf hesabına bağlı değil. Yapılandırma:
+    #      ~/.pi/agent/pi-searxng.jsonc (repo DIŞI → docs/SEARXNG-KURULUM.md).
+    #   2) fetch_content → pi-web-access → sayfayı DOĞRUDAN HTTP ile çekip Readability +
+    #      Turndown ile markdown'a çevirir (sağlayıcı YOK). Aynı pakette bir `web_search`
+    #      de var ama ~/.pi/web-search.json içinde "webSearch.enabled": false ile
+    #      KAPATILDI → iki `web_search` tool'u ÇAKIŞMAZ.
+    #
+    # Neden node_modules'tan explicit `-e` yol:  pi'ya `npm:paket` deseydik HER pi
+    # doğuşunda (persona swap = sık) paketi temp dizine kurmaya kalkardı = saniyeler.
+    # Kurulu yolu doğrudan vermek bu maliyeti SIFIRLIYOR. `-e` explicit olduğu için
+    # --no-extensions (PI_ISOLATED) bunları BOZMAZ.
+    if WEB_SEARCH_LEGACY_QWANT:
+        legacy_ext = REPO_ROOT / "pi" / "extensions" / "websearch" / "index.ts"
+        if legacy_ext.is_file():
+            args += ["-e", str(legacy_ext)]
+    else:
+        searxng_ext = PI_NPM_DIR / "@oresk" / "pi-searxng" / "searxng.ts"
+        if searxng_ext.is_file():
+            args += ["-e", str(searxng_ext)]
+    # fetch_content (sayfa/PDF/GitHub/YouTube okuma). Arama yolundan bağımsız → legacy
+    # modda da yüklenir. Dosya yoksa graceful: tool kaydolmaz, allowlist girişi zararsız.
+    web_access_ext = PI_NPM_DIR / "pi-web-access" / "index.ts"
+    if web_access_ext.is_file():
+        args += ["-e", str(web_access_ext)]
     args += ["--session-dir", PI_SESSION_DIR, "--session-id", session_id]
     return args
 
