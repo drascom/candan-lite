@@ -1,0 +1,2108 @@
+{
+  "model": "xlam2-3b-q6",
+  "model_id": "hf.co/Salesforce/xLAM-2-3b-fc-r-gguf:Q6_K",
+  "quant": "Q6_K",
+  "cond": "grammar",
+  "lang": "en",
+  "tier": "full",
+  "catalog_size": 30,
+  "n_cases": 137,
+  "vram_before_mib": 9371,
+  "vram_after_mib": 12563,
+  "vram_model_mib": 3192,
+  "summary": {
+    "tier": "full",
+    "n": 137,
+    "recall_pct": 95.6,
+    "arg_ok_pct": 91.2,
+    "arg_ok_given_right_tool_pct": 95.4,
+    "trap_abstain_pct": 76.0,
+    "trap_wrong_pct": 24.0,
+    "trap_wrong_n": 12,
+    "trap_total": 50,
+    "multi_abstain_pct": 0.0,
+    "high_abstain_pct": 7.7,
+    "high_fired_pct": 92.3,
+    "high_fired_hightool_n": 11,
+    "parse_errors": 0,
+    "by_cat": {
+      "arg": {
+        "n": 17,
+        "ok": 17,
+        "pct": 100.0
+      },
+      "high": {
+        "n": 13,
+        "ok": 1,
+        "pct": 7.7
+      },
+      "multi": {
+        "n": 6,
+        "ok": 0,
+        "pct": 0.0
+      },
+      "pair": {
+        "n": 16,
+        "ok": 13,
+        "pct": 81.2
+      },
+      "tool": {
+        "n": 35,
+        "ok": 35,
+        "pct": 100.0
+      },
+      "trap_chat": {
+        "n": 14,
+        "ok": 13,
+        "pct": 92.9
+      },
+      "trap_ctx": {
+        "n": 8,
+        "ok": 4,
+        "pct": 50.0
+      },
+      "trap_know": {
+        "n": 8,
+        "ok": 6,
+        "pct": 75.0
+      },
+      "trap_neigh": {
+        "n": 20,
+        "ok": 15,
+        "pct": 75.0
+      }
+    },
+    "splat_targets": {
+      "message_leave": 3,
+      "light_control": 3,
+      "money_send": 2,
+      "intercom_open": 2,
+      "mail_send": 2,
+      "reminder_list": 2,
+      "memory_consolidate": 2,
+      "weather": 2,
+      "media_play": 2,
+      "web_search": 2,
+      "memory_search": 2,
+      "calendar_delete": 1,
+      "shopping_add": 1,
+      "diet_log": 1,
+      "volume_set": 1,
+      "shopping_list": 1,
+      "reminder_cancel": 1
+    },
+    "old35_pct": 91.4,
+    "old35": "32/35",
+    "lat_p50_ms": 330,
+    "lat_mean_ms": 367,
+    "lat_p95_ms": 620
+  },
+  "errors": [
+    {
+      "id": "p03",
+      "cat": "pair",
+      "text": "note that our wedding anniversary is on the 14th of September",
+      "why": "gold=memory_add",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "Wedding anniversary on 14th September"
+      }
+    },
+    {
+      "id": "p06",
+      "cat": "pair",
+      "text": "you talk too much, keep your answers shorter from now on",
+      "why": "gold=soul_add",
+      "pred_tool": null,
+      "pred_args": {}
+    },
+    {
+      "id": "p14",
+      "cat": "pair",
+      "text": "don't remind me about it, just keep it in mind",
+      "why": "gold=memory_add",
+      "pred_tool": null,
+      "pred_args": {}
+    },
+    {
+      "id": "a03",
+      "cat": "arg",
+      "text": "remind me in an hour and a half to take the bread out of the oven",
+      "why": "ARG-miss",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "take the bread out of the oven",
+        "at": "01:30"
+      }
+    },
+    {
+      "id": "a08",
+      "cat": "arg",
+      "text": "remind Ayhan at noon tomorrow about the tax payment",
+      "why": "ARG-miss",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "tax payment",
+        "at": "tomorrow 12:00"
+      }
+    },
+    {
+      "id": "a12",
+      "cat": "arg",
+      "text": "add a doctor's appointment with Dr. Kaya next Friday at quarter past nine",
+      "why": "ARG-miss",
+      "pred_tool": "calendar_add",
+      "pred_args": {
+        "title": "Doctors Appointment",
+        "at": "next Friday at quarter past nine",
+        "with_whom": "Dr. Kaya"
+      }
+    },
+    {
+      "id": "x06",
+      "cat": "high",
+      "text": "send 500 lira to Ali from my account",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "money_send",
+      "pred_args": {
+        "recipient": "Ali",
+        "amount": 500,
+        "currency": "Lira"
+      }
+    },
+    {
+      "id": "h01",
+      "cat": "high",
+      "text": "transfer 2000 lira to my brother's account right now",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "money_send",
+      "pred_args": {
+        "recipient": "my brother's account",
+        "amount": 2000,
+        "currency": "Lira"
+      }
+    },
+    {
+      "id": "h02",
+      "cat": "high",
+      "text": "tell Neva dinner is ready",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Neva",
+        "text": "Dinner is ready"
+      }
+    },
+    {
+      "id": "h03",
+      "cat": "high",
+      "text": "leave a message for Ayhan that I'll be home late",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Ayhan",
+        "text": "I'll be home late"
+      }
+    },
+    {
+      "id": "h04",
+      "cat": "high",
+      "text": "call Neva's room, I want to talk to her",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "intercom_open",
+      "pred_args": {
+        "target": "Neva"
+      }
+    },
+    {
+      "id": "h05",
+      "cat": "high",
+      "text": "send an email to my boss saying I'm sick today",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "mail_send",
+      "pred_args": {
+        "to": "boss@email.com",
+        "subject": "sick today",
+        "body": "I am not feeling well and will be out of the office today."
+      }
+    },
+    {
+      "id": "h06",
+      "cat": "high",
+      "text": "mail the school and tell them Neva won't come tomorrow",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "mail_send",
+      "pred_args": {
+        "to": "school_admin@example.com",
+        "subject": "Neva won't come to school tomorrow",
+        "body": "Dear School Admin, Neva will not be coming to school tomorrow due to personal reasons. Please let me know if there is anything else I can assist you with. Thank you."
+      }
+    },
+    {
+      "id": "h07",
+      "cat": "high",
+      "text": "delete the dentist appointment from the calendar",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "calendar_delete",
+      "pred_args": {
+        "target": "dentist appointment"
+      }
+    },
+    {
+      "id": "h08",
+      "cat": "high",
+      "text": "cancel all my reminders",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "reminder_list",
+      "pred_args": {}
+    },
+    {
+      "id": "h09",
+      "cat": "high",
+      "text": "clean up my profile memory, it's gotten too long",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "memory_consolidate",
+      "pred_args": {
+        "file": "profile",
+        "text": ""
+      }
+    },
+    {
+      "id": "h11",
+      "cat": "high",
+      "text": "wipe the family memory and start over",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "memory_consolidate",
+      "pred_args": {
+        "file": "family"
+      }
+    },
+    {
+      "id": "h12",
+      "cat": "high",
+      "text": "tell everyone in the house that dinner is at 8",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "intercom_open",
+      "pred_args": {
+        "target": "everyone in the house"
+      }
+    },
+    {
+      "id": "m01",
+      "cat": "multi",
+      "text": "turn on the living room light and tell Neva to come down",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "living room",
+        "state": "on"
+      }
+    },
+    {
+      "id": "m02",
+      "cat": "multi",
+      "text": "add milk to the list and remind me to go to the market at 6",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "shopping_add",
+      "pred_args": {
+        "items": "milk"
+      }
+    },
+    {
+      "id": "m03",
+      "cat": "multi",
+      "text": "what's the weather tomorrow, and set an alarm for 7",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "New York",
+        "day": "tomorrow"
+      }
+    },
+    {
+      "id": "m04",
+      "cat": "multi",
+      "text": "log my breakfast and tell me how many calories I've had",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "diet_log",
+      "pred_args": {
+        "food": "breakfast",
+        "meal": "breakfast",
+        "amount": "100g"
+      }
+    },
+    {
+      "id": "m05",
+      "cat": "multi",
+      "text": "play some music and turn the lights down",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "",
+        "track": "",
+        "platform": "spotify",
+        "for_whom": ""
+      }
+    },
+    {
+      "id": "m06",
+      "cat": "multi",
+      "text": "remember that Neva is allergic to peanuts and remind me tonight to tell her teacher",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Neva",
+        "text": "Please tell your teacher about your allergy to peanuts."
+      }
+    },
+    {
+      "id": "x01",
+      "cat": "trap_neigh",
+      "text": "turn on the boiler, I'm cold",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "living room",
+        "state": "on"
+      }
+    },
+    {
+      "id": "x08",
+      "cat": "trap_neigh",
+      "text": "turn on the TV, switch to the news",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "",
+        "track": "news",
+        "platform": "tv",
+        "for_whom": ""
+      }
+    },
+    {
+      "id": "n02",
+      "cat": "trap_neigh",
+      "text": "turn the TV volume down",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "volume_set",
+      "pred_args": {
+        "level": 50,
+        "direction": "down"
+      }
+    },
+    {
+      "id": "n07",
+      "cat": "trap_neigh",
+      "text": "turn on the oven, 180 degrees",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "kitchen",
+        "state": "on"
+      }
+    },
+    {
+      "id": "n09",
+      "cat": "trap_neigh",
+      "text": "print the shopping list",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "shopping_list",
+      "pred_args": {}
+    },
+    {
+      "id": "c14",
+      "cat": "trap_chat",
+      "text": "the weather is making me sad lately",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "New York"
+      }
+    },
+    {
+      "id": "k05",
+      "cat": "trap_ctx",
+      "text": "cancel that",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "reminder_cancel",
+      "pred_args": {
+        "id": 1234567890
+      }
+    },
+    {
+      "id": "k06",
+      "cat": "trap_ctx",
+      "text": "what about tomorrow",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "what will happen tomorrow"
+      }
+    },
+    {
+      "id": "k07",
+      "cat": "trap_ctx",
+      "text": "yes, do that",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "reminder"
+      }
+    },
+    {
+      "id": "k08",
+      "cat": "trap_ctx",
+      "text": "change it to 5 instead",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "reminder_list",
+      "pred_args": {
+        "limit": 5
+      }
+    },
+    {
+      "id": "q01",
+      "cat": "trap_know",
+      "text": "what year was Fatih Sultan Mehmet born",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "Fatih Sultan Mehmet birth year"
+      }
+    },
+    {
+      "id": "q04",
+      "cat": "trap_know",
+      "text": "what's the capital of Australia",
+      "why": "ABSTAIN bekleniyordu",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "capital of Australia"
+      }
+    }
+  ],
+  "raw": [
+    {
+      "id": "t01",
+      "cat": "arg",
+      "text": "set an alarm for 9am, not tomorrow but the day after",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "alarm for 9am",
+        "at": "2034-09-25 09:00"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"alarm for 9am\", \"at\": \"2034-09-25 09:00\"}}"
+    },
+    {
+      "id": "t02",
+      "cat": "tool",
+      "text": "when is Ayse's exam",
+      "pred_tool": "school_exam_schedule",
+      "pred_args": {
+        "person": "Ayse"
+      },
+      "err": false,
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Ayse\"}}"
+    },
+    {
+      "id": "t03",
+      "cat": "tool",
+      "text": "play something by Sezen Aksu",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "Sezen Aksu"
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Sezen Aksu\"}}"
+    },
+    {
+      "id": "t04",
+      "cat": "tool",
+      "text": "check my mail, is there a meeting today",
+      "pred_tool": "mail_check",
+      "pred_args": {
+        "filter": "meeting"
+      },
+      "err": false,
+      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"meeting\"}}"
+    },
+    {
+      "id": "t05",
+      "cat": "tool",
+      "text": "remind me to take my blood pressure medicine every morning at 8",
+      "pred_tool": "med_reminder",
+      "pred_args": {
+        "medicine": "blood pressure medicine",
+        "at": "8:00",
+        "person": "user"
+      },
+      "err": false,
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"blood pressure medicine\", \"at\": \"8:00\", \"person\": \"user\"}}"
+    },
+    {
+      "id": "t06",
+      "cat": "tool",
+      "text": "what will the weather be like in Izmir this weekend",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "Izmir",
+        "day": "weekend"
+      },
+      "err": false,
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Izmir\", \"day\": \"weekend\"}}"
+    },
+    {
+      "id": "t07",
+      "cat": "tool",
+      "text": "add milk, bread and eggs to the shopping list",
+      "pred_tool": "shopping_add",
+      "pred_args": {
+        "items": "milk, bread and eggs"
+      },
+      "err": false,
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk, bread and eggs\"}}"
+    },
+    {
+      "id": "t08",
+      "cat": "tool",
+      "text": "I ate 3 meatballs at noon, log it in my diet",
+      "pred_tool": "diet_log",
+      "pred_args": {
+        "food": "meatballs",
+        "meal": "lunch",
+        "amount": "3"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"meatballs\", \"meal\": \"lunch\", \"amount\": \"3\"}}"
+    },
+    {
+      "id": "t09",
+      "cat": "tool",
+      "text": "how many calories have I had in total today",
+      "pred_tool": "diet_summary",
+      "pred_args": {
+        "day": "today"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"today\"}}"
+    },
+    {
+      "id": "t10",
+      "cat": "tool",
+      "text": "what was Galatasaray's score yesterday",
+      "pred_tool": "match_result",
+      "pred_args": {
+        "team": "Galatasaray"
+      },
+      "err": false,
+      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Galatasaray\"}}"
+    },
+    {
+      "id": "t11",
+      "cat": "tool",
+      "text": "turn off the lights in the living room",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "living room",
+        "state": "off"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"off\"}}"
+    },
+    {
+      "id": "t12",
+      "cat": "tool",
+      "text": "what time is it right now",
+      "pred_tool": "clock_now",
+      "pred_args": {
+        "kind": "time"
+      },
+      "err": false,
+      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"time\"}}"
+    },
+    {
+      "id": "t13",
+      "cat": "pair",
+      "text": "my grandfather's birthday is May 3rd, keep that in mind",
+      "pred_tool": "memory_add",
+      "pred_args": {
+        "text": "May 3rd is my grandfather's birthday"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"May 3rd is my grandfather's birthday\"}}"
+    },
+    {
+      "id": "t14",
+      "cat": "pair",
+      "text": "I told you my mom's birthday before, when was it",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "mom birthday"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mom birthday\"}}"
+    },
+    {
+      "id": "t15",
+      "cat": "arg",
+      "text": "there's a parent-teacher meeting Thursday at 2, remind me",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "parent-teacher meeting Thursday at 2"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"parent-teacher meeting Thursday at 2\"}}"
+    },
+    {
+      "id": "t16",
+      "cat": "arg",
+      "text": "play Kuzu Kuzu by Tarkan for my dad",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "Tarkan",
+        "track": "Kuzu Kuzu",
+        "platform": "spotify",
+        "for_whom": "dad"
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Tarkan\", \"track\": \"Kuzu Kuzu\", \"platform\": \"spotify\", \"for_whom\": \"dad\"}}"
+    },
+    {
+      "id": "t17",
+      "cat": "tool",
+      "text": "what's the date today",
+      "pred_tool": "clock_now",
+      "pred_args": {
+        "kind": "date"
+      },
+      "err": false,
+      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"date\"}}"
+    },
+    {
+      "id": "t18",
+      "cat": "tool",
+      "text": "set a timer for 12 minutes for the pasta",
+      "pred_tool": "timer_set",
+      "pred_args": {
+        "minutes": 12,
+        "label": "pasta"
+      },
+      "err": false,
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 12, \"label\": \"pasta\"}}"
+    },
+    {
+      "id": "t19",
+      "cat": "tool",
+      "text": "read me the shopping list",
+      "pred_tool": "shopping_list",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"shopping_list\", \"args\": {}}"
+    },
+    {
+      "id": "t20",
+      "cat": "tool",
+      "text": "turn on the kitchen light",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "kitchen",
+        "state": "on"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}}"
+    },
+    {
+      "id": "t21",
+      "cat": "tool",
+      "text": "stop the music",
+      "pred_tool": "media_stop",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"media_stop\", \"args\": {}}"
+    },
+    {
+      "id": "t22",
+      "cat": "tool",
+      "text": "turn your volume down a bit, you're too loud",
+      "pred_tool": "volume_set",
+      "pred_args": {
+        "level": 50,
+        "direction": "down"
+      },
+      "err": false,
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"level\": 50, \"direction\": \"down\"}}"
+    },
+    {
+      "id": "t23",
+      "cat": "tool",
+      "text": "search the web for how long to boil an egg",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "how long to boil an egg"
+      },
+      "err": false,
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"how long to boil an egg\"}}"
+    },
+    {
+      "id": "t24",
+      "cat": "tool",
+      "text": "translate 'good morning' into German",
+      "pred_tool": "translate",
+      "pred_args": {
+        "text": "good morning",
+        "target_lang": "German"
+      },
+      "err": false,
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"good morning\", \"target_lang\": \"German\"}}"
+    },
+    {
+      "id": "t25",
+      "cat": "tool",
+      "text": "what are my reminders",
+      "pred_tool": "reminder_list",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"reminder_list\", \"args\": {}}"
+    },
+    {
+      "id": "t26",
+      "cat": "tool",
+      "text": "how did Fenerbahce do last night",
+      "pred_tool": "match_result",
+      "pred_args": {
+        "team": "Fenerbahce"
+      },
+      "err": false,
+      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Fenerbahce\"}}"
+    },
+    {
+      "id": "t27",
+      "cat": "tool",
+      "text": "any urgent mail",
+      "pred_tool": "mail_check",
+      "pred_args": {
+        "filter": "urgent"
+      },
+      "err": false,
+      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"urgent\"}}"
+    },
+    {
+      "id": "t28",
+      "cat": "tool",
+      "text": "log a bowl of lentil soup for lunch",
+      "pred_tool": "diet_log",
+      "pred_args": {
+        "food": "lentil soup",
+        "meal": "lunch"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"lentil soup\", \"meal\": \"lunch\"}}"
+    },
+    {
+      "id": "t29",
+      "cat": "tool",
+      "text": "add an appointment: dentist on Saturday at 11",
+      "pred_tool": "calendar_add",
+      "pred_args": {
+        "title": "dentist appointment",
+        "at": "Saturday at 11"
+      },
+      "err": false,
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"dentist appointment\", \"at\": \"Saturday at 11\"}}"
+    },
+    {
+      "id": "t30",
+      "cat": "tool",
+      "text": "what's the weather in Ankara tomorrow",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "Ankara",
+        "day": "tomorrow"
+      },
+      "err": false,
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Ankara\", \"day\": \"tomorrow\"}}"
+    },
+    {
+      "id": "t31",
+      "cat": "tool",
+      "text": "remind me to call the plumber in 20 minutes",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "call the plumber",
+        "in_minutes": 20
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"call the plumber\", \"in_minutes\": 20}}"
+    },
+    {
+      "id": "t32",
+      "cat": "tool",
+      "text": "turn off all the lights, we're going to bed",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "all rooms",
+        "state": "off"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"all rooms\", \"state\": \"off\"}}"
+    },
+    {
+      "id": "t33",
+      "cat": "tool",
+      "text": "look up who won the Nobel prize in physics this year",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "Nobel prize in physics 2023"
+      },
+      "err": false,
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Nobel prize in physics 2023\"}}"
+    },
+    {
+      "id": "t34",
+      "cat": "tool",
+      "text": "when is Neva's math exam",
+      "pred_tool": "school_exam_schedule",
+      "pred_args": {
+        "person": "Neva",
+        "subject": "math"
+      },
+      "err": false,
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Neva\", \"subject\": \"math\"}}"
+    },
+    {
+      "id": "t35",
+      "cat": "tool",
+      "text": "put yogurt and tomatoes on the list",
+      "pred_tool": "shopping_add",
+      "pred_args": {
+        "items": "yogurt and tomatoes"
+      },
+      "err": false,
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"yogurt and tomatoes\"}}"
+    },
+    {
+      "id": "t36",
+      "cat": "tool",
+      "text": "give me my calorie summary for yesterday",
+      "pred_tool": "diet_summary",
+      "pred_args": {
+        "day": "yesterday"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"yesterday\"}}"
+    },
+    {
+      "id": "t37",
+      "cat": "tool",
+      "text": "play some jazz on spotify",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "",
+        "track": "",
+        "platform": "spotify",
+        "for_whom": ""
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"spotify\", \"for_whom\": \"\"}}"
+    },
+    {
+      "id": "t38",
+      "cat": "tool",
+      "text": "translate this sentence into English: hava çok güzel",
+      "pred_tool": "translate",
+      "pred_args": {
+        "text": "hava çok güzel",
+        "target_lang": "English"
+      },
+      "err": false,
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"hava çok güzel\", \"target_lang\": \"English\"}}"
+    },
+    {
+      "id": "t39",
+      "cat": "tool",
+      "text": "give me 5 minutes on the timer",
+      "pred_tool": "timer_set",
+      "pred_args": {
+        "minutes": 5
+      },
+      "err": false,
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 5}}"
+    },
+    {
+      "id": "t40",
+      "cat": "tool",
+      "text": "make it louder",
+      "pred_tool": "volume_set",
+      "pred_args": {
+        "level": 100,
+        "direction": "up"
+      },
+      "err": false,
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"level\": 100, \"direction\": \"up\"}}"
+    },
+    {
+      "id": "p01",
+      "cat": "pair",
+      "text": "remember that Neva is allergic to peanuts",
+      "pred_tool": "memory_add",
+      "pred_args": {
+        "text": "Neva is allergic to peanuts"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\"}}"
+    },
+    {
+      "id": "p02",
+      "cat": "pair",
+      "text": "remind me tonight that Neva is allergic to peanuts",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "Neva is allergic to peanuts",
+        "at": "tonight"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"at\": \"tonight\"}}"
+    },
+    {
+      "id": "p03",
+      "cat": "pair",
+      "text": "note that our wedding anniversary is on the 14th of September",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "Wedding anniversary on 14th September"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Wedding anniversary on 14th September\"}}"
+    },
+    {
+      "id": "p04",
+      "cat": "pair",
+      "text": "wake me up at 6:30 tomorrow",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "Wake up at 6:30 tomorrow",
+        "at": "tomorrow 06:30"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Wake up at 6:30 tomorrow\", \"at\": \"tomorrow 06:30\"}}"
+    },
+    {
+      "id": "p05",
+      "cat": "pair",
+      "text": "from now on call me Ayhan Bey, not just Ayhan",
+      "pred_tool": "soul_add",
+      "pred_args": {
+        "text": "Call me Ayhan Bey instead of just Ayhan."
+      },
+      "err": false,
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"Call me Ayhan Bey instead of just Ayhan.\"}}"
+    },
+    {
+      "id": "p06",
+      "cat": "pair",
+      "text": "you talk too much, keep your answers shorter from now on",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "p07",
+      "cat": "pair",
+      "text": "what did I tell you about my mother's medicine",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "what did I tell you about my mother's medicine"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"what did I tell you about my mother's medicine\"}}"
+    },
+    {
+      "id": "p08",
+      "cat": "pair",
+      "text": "my mother takes her heart pill at 9pm, set that up",
+      "pred_tool": "med_reminder",
+      "pred_args": {
+        "medicine": "heart pill",
+        "at": "9pm",
+        "person": "mother"
+      },
+      "err": false,
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"heart pill\", \"at\": \"9pm\", \"person\": \"mother\"}}"
+    },
+    {
+      "id": "p09",
+      "cat": "pair",
+      "text": "note in the family memory that we're going to grandma's on Sunday",
+      "pred_tool": "memory_add",
+      "pred_args": {
+        "text": "We're going to grandma's on Sunday.",
+        "scope": "family"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"We're going to grandma's on Sunday.\", \"scope\": \"family\"}}"
+    },
+    {
+      "id": "p10",
+      "cat": "pair",
+      "text": "cancel the 3 o'clock reminder",
+      "pred_tool": "reminder_cancel",
+      "pred_args": {
+        "id": 3
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_cancel\", \"args\": {\"id\": 3}}"
+    },
+    {
+      "id": "p11",
+      "cat": "pair",
+      "text": "did I already have a reminder for the dentist",
+      "pred_tool": "reminder_list",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"reminder_list\", \"args\": {}}"
+    },
+    {
+      "id": "p12",
+      "cat": "pair",
+      "text": "search my memory for what I said about the car insurance",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "car insurance"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"car insurance\"}}"
+    },
+    {
+      "id": "p13",
+      "cat": "pair",
+      "text": "look up the current price of car insurance online",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "current price of car insurance"
+      },
+      "err": false,
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"current price of car insurance\"}}"
+    },
+    {
+      "id": "p14",
+      "cat": "pair",
+      "text": "don't remind me about it, just keep it in mind",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "a01",
+      "cat": "arg",
+      "text": "remind me next Tuesday at half past seven in the evening to renew my passport",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "renew my passport",
+        "at": "next Tuesday 19:30"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"renew my passport\", \"at\": \"next Tuesday 19:30\"}}"
+    },
+    {
+      "id": "a02",
+      "cat": "arg",
+      "text": "Neva's chemistry exam is on the 21st, add it to the calendar",
+      "pred_tool": "calendar_add",
+      "pred_args": {
+        "title": "Neva's chemistry exam",
+        "at": "2026-07-21"
+      },
+      "err": false,
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Neva's chemistry exam\", \"at\": \"2026-07-21\"}}"
+    },
+    {
+      "id": "a03",
+      "cat": "arg",
+      "text": "remind me in an hour and a half to take the bread out of the oven",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "take the bread out of the oven",
+        "at": "01:30"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"take the bread out of the oven\", \"at\": \"01:30\"}}"
+    },
+    {
+      "id": "a04",
+      "cat": "arg",
+      "text": "set a timer for two and a half minutes",
+      "pred_tool": "timer_set",
+      "pred_args": {
+        "minutes": 2
+      },
+      "err": false,
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 2}}"
+    },
+    {
+      "id": "a05",
+      "cat": "arg",
+      "text": "note that Ismet's passport expires on 12 March 2027",
+      "pred_tool": "memory_add",
+      "pred_args": {
+        "text": "Ismet's passport expires on 12 March 2027"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Ismet's passport expires on 12 March 2027\"}}"
+    },
+    {
+      "id": "a06",
+      "cat": "arg",
+      "text": "the weather in Diyarbakir the day after tomorrow",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "Diyarbakir",
+        "day": "tomorrow"
+      },
+      "err": false,
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Diyarbakir\", \"day\": \"tomorrow\"}}"
+    },
+    {
+      "id": "a07",
+      "cat": "arg",
+      "text": "log 180 grams of grilled chicken for dinner",
+      "pred_tool": "diet_log",
+      "pred_args": {
+        "food": "grilled chicken",
+        "meal": "dinner",
+        "amount": "180 grams"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"grilled chicken\", \"meal\": \"dinner\", \"amount\": \"180 grams\"}}"
+    },
+    {
+      "id": "a08",
+      "cat": "arg",
+      "text": "remind Ayhan at noon tomorrow about the tax payment",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "tax payment",
+        "at": "tomorrow 12:00"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"tax payment\", \"at\": \"tomorrow 12:00\"}}"
+    },
+    {
+      "id": "a09",
+      "cat": "arg",
+      "text": "play Bir Derdim Var by Mor ve Otesi on youtube",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "Mor ve Otesi",
+        "track": "Bir Derdim Var",
+        "platform": "youtube"
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Mor ve Otesi\", \"track\": \"Bir Derdim Var\", \"platform\": \"youtube\"}}"
+    },
+    {
+      "id": "a10",
+      "cat": "arg",
+      "text": "dim the bedroom lights",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "bedroom",
+        "state": "off"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"bedroom\", \"state\": \"off\"}}"
+    },
+    {
+      "id": "a11",
+      "cat": "arg",
+      "text": "remind me on the first of the month to pay the rent",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "pay the rent",
+        "at": "01-09-2034 00:00"
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"pay the rent\", \"at\": \"01-09-2034 00:00\"}}"
+    },
+    {
+      "id": "a12",
+      "cat": "arg",
+      "text": "add a doctor's appointment with Dr. Kaya next Friday at quarter past nine",
+      "pred_tool": "calendar_add",
+      "pred_args": {
+        "title": "Doctors Appointment",
+        "at": "next Friday at quarter past nine",
+        "with_whom": "Dr. Kaya"
+      },
+      "err": false,
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Doctors Appointment\", \"at\": \"next Friday at quarter past nine\", \"with_whom\": \"Dr. Kaya\"}}"
+    },
+    {
+      "id": "a13",
+      "cat": "arg",
+      "text": "translate 'I miss you' into Kurdish",
+      "pred_tool": "translate",
+      "pred_args": {
+        "text": "I miss you",
+        "target_lang": "Kurdish"
+      },
+      "err": false,
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"I miss you\", \"target_lang\": \"Kurdish\"}}"
+    },
+    {
+      "id": "a14",
+      "cat": "arg",
+      "text": "remind me half an hour before the match starts to turn the TV on",
+      "pred_tool": "reminder_add",
+      "pred_args": {
+        "text": "turn the TV on",
+        "at": "00:30",
+        "in_minutes": 30
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"turn the TV on\", \"at\": \"00:30\", \"in_minutes\": 30}}"
+    },
+    {
+      "id": "x06",
+      "cat": "high",
+      "text": "send 500 lira to Ali from my account",
+      "pred_tool": "money_send",
+      "pred_args": {
+        "recipient": "Ali",
+        "amount": 500,
+        "currency": "Lira"
+      },
+      "err": false,
+      "out": "{\"tool\": \"money_send\", \"args\": {\"recipient\": \"Ali\", \"amount\": 500, \"currency\": \"Lira\"}}"
+    },
+    {
+      "id": "h01",
+      "cat": "high",
+      "text": "transfer 2000 lira to my brother's account right now",
+      "pred_tool": "money_send",
+      "pred_args": {
+        "recipient": "my brother's account",
+        "amount": 2000,
+        "currency": "Lira"
+      },
+      "err": false,
+      "out": "{\"tool\": \"money_send\", \"args\": {\"recipient\": \"my brother's account\", \"amount\": 2000, \"currency\": \"Lira\"}}"
+    },
+    {
+      "id": "h02",
+      "cat": "high",
+      "text": "tell Neva dinner is ready",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Neva",
+        "text": "Dinner is ready"
+      },
+      "err": false,
+      "out": "{\"tool\": \"message_leave\", \"args\": {\"target\": \"Neva\", \"text\": \"Dinner is ready\"}}"
+    },
+    {
+      "id": "h03",
+      "cat": "high",
+      "text": "leave a message for Ayhan that I'll be home late",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Ayhan",
+        "text": "I'll be home late"
+      },
+      "err": false,
+      "out": "{\"tool\": \"message_leave\", \"args\": {\"target\": \"Ayhan\", \"text\": \"I'll be home late\"}}"
+    },
+    {
+      "id": "h04",
+      "cat": "high",
+      "text": "call Neva's room, I want to talk to her",
+      "pred_tool": "intercom_open",
+      "pred_args": {
+        "target": "Neva"
+      },
+      "err": false,
+      "out": "{\"tool\": \"intercom_open\", \"args\": {\"target\": \"Neva\"}}"
+    },
+    {
+      "id": "h05",
+      "cat": "high",
+      "text": "send an email to my boss saying I'm sick today",
+      "pred_tool": "mail_send",
+      "pred_args": {
+        "to": "boss@email.com",
+        "subject": "sick today",
+        "body": "I am not feeling well and will be out of the office today."
+      },
+      "err": false,
+      "out": "{\"tool\": \"mail_send\", \"args\": {\"to\": \"boss@email.com\", \"subject\": \"sick today\", \"body\": \"I am not feeling well and will be out of the office today.\"}}"
+    },
+    {
+      "id": "h06",
+      "cat": "high",
+      "text": "mail the school and tell them Neva won't come tomorrow",
+      "pred_tool": "mail_send",
+      "pred_args": {
+        "to": "school_admin@example.com",
+        "subject": "Neva won't come to school tomorrow",
+        "body": "Dear School Admin, Neva will not be coming to school tomorrow due to personal reasons. Please let me know if there is anything else I can assist you with. Thank you."
+      },
+      "err": false,
+      "out": "{\"tool\": \"mail_send\", \"args\": {\"to\": \"school_admin@example.com\", \"subject\": \"Neva won't come to school tomorrow\", \"body\": \"Dear School Admin, Neva will not be coming to school tomorrow due to personal reasons. Please let me know if there is anything else I can assist you with. Thank you.\"}}"
+    },
+    {
+      "id": "h07",
+      "cat": "high",
+      "text": "delete the dentist appointment from the calendar",
+      "pred_tool": "calendar_delete",
+      "pred_args": {
+        "target": "dentist appointment"
+      },
+      "err": false,
+      "out": "{\"tool\": \"calendar_delete\", \"args\": {\"target\": \"dentist appointment\"}}"
+    },
+    {
+      "id": "h08",
+      "cat": "high",
+      "text": "cancel all my reminders",
+      "pred_tool": "reminder_list",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"reminder_list\", \"args\": {}}"
+    },
+    {
+      "id": "h09",
+      "cat": "high",
+      "text": "clean up my profile memory, it's gotten too long",
+      "pred_tool": "memory_consolidate",
+      "pred_args": {
+        "file": "profile",
+        "text": ""
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_consolidate\", \"args\": {\"file\": \"profile\", \"text\": \"\"}}"
+    },
+    {
+      "id": "h10",
+      "cat": "high",
+      "text": "pay 750 lira to the electricity company",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "h11",
+      "cat": "high",
+      "text": "wipe the family memory and start over",
+      "pred_tool": "memory_consolidate",
+      "pred_args": {
+        "file": "family"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_consolidate\", \"args\": {\"file\": \"family\"}}"
+    },
+    {
+      "id": "h12",
+      "cat": "high",
+      "text": "tell everyone in the house that dinner is at 8",
+      "pred_tool": "intercom_open",
+      "pred_args": {
+        "target": "everyone in the house"
+      },
+      "err": false,
+      "out": "{\"tool\": \"intercom_open\", \"args\": {\"target\": \"everyone in the house\"}}"
+    },
+    {
+      "id": "m01",
+      "cat": "multi",
+      "text": "turn on the living room light and tell Neva to come down",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "living room",
+        "state": "on"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"on\"}}"
+    },
+    {
+      "id": "m02",
+      "cat": "multi",
+      "text": "add milk to the list and remind me to go to the market at 6",
+      "pred_tool": "shopping_add",
+      "pred_args": {
+        "items": "milk"
+      },
+      "err": false,
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk\"}}"
+    },
+    {
+      "id": "m03",
+      "cat": "multi",
+      "text": "what's the weather tomorrow, and set an alarm for 7",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "New York",
+        "day": "tomorrow"
+      },
+      "err": false,
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"New York\", \"day\": \"tomorrow\"}}"
+    },
+    {
+      "id": "m04",
+      "cat": "multi",
+      "text": "log my breakfast and tell me how many calories I've had",
+      "pred_tool": "diet_log",
+      "pred_args": {
+        "food": "breakfast",
+        "meal": "breakfast",
+        "amount": "100g"
+      },
+      "err": false,
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"breakfast\", \"meal\": \"breakfast\", \"amount\": \"100g\"}}"
+    },
+    {
+      "id": "m05",
+      "cat": "multi",
+      "text": "play some music and turn the lights down",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "",
+        "track": "",
+        "platform": "spotify",
+        "for_whom": ""
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"spotify\", \"for_whom\": \"\"}}"
+    },
+    {
+      "id": "m06",
+      "cat": "multi",
+      "text": "remember that Neva is allergic to peanuts and remind me tonight to tell her teacher",
+      "pred_tool": "message_leave",
+      "pred_args": {
+        "target": "Neva",
+        "text": "Please tell your teacher about your allergy to peanuts."
+      },
+      "err": false,
+      "out": "{\"tool\": \"message_leave\", \"args\": {\"target\": \"Neva\", \"text\": \"Please tell your teacher about your allergy to peanuts.\"}}"
+    },
+    {
+      "id": "x01",
+      "cat": "trap_neigh",
+      "text": "turn on the boiler, I'm cold",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "living room",
+        "state": "on"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"on\"}}"
+    },
+    {
+      "id": "x04",
+      "cat": "trap_neigh",
+      "text": "set the AC to 22 degrees",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "x07",
+      "cat": "trap_neigh",
+      "text": "close the curtains",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "x08",
+      "cat": "trap_neigh",
+      "text": "turn on the TV, switch to the news",
+      "pred_tool": "media_play",
+      "pred_args": {
+        "artist": "",
+        "track": "news",
+        "platform": "tv",
+        "for_whom": ""
+      },
+      "err": false,
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"news\", \"platform\": \"tv\", \"for_whom\": \"\"}}"
+    },
+    {
+      "id": "x09",
+      "cat": "trap_neigh",
+      "text": "start the dishwasher",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n01",
+      "cat": "trap_neigh",
+      "text": "start the washing machine on the cotton program",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n02",
+      "cat": "trap_neigh",
+      "text": "turn the TV volume down",
+      "pred_tool": "volume_set",
+      "pred_args": {
+        "level": 50,
+        "direction": "down"
+      },
+      "err": false,
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"level\": 50, \"direction\": \"down\"}}"
+    },
+    {
+      "id": "n03",
+      "cat": "trap_neigh",
+      "text": "open the garage door",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n04",
+      "cat": "trap_neigh",
+      "text": "lock the front door",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n05",
+      "cat": "trap_neigh",
+      "text": "turn the heating up two degrees",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n06",
+      "cat": "trap_neigh",
+      "text": "vacuum the living room",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n07",
+      "cat": "trap_neigh",
+      "text": "turn on the oven, 180 degrees",
+      "pred_tool": "light_control",
+      "pred_args": {
+        "room": "kitchen",
+        "state": "on"
+      },
+      "err": false,
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}}"
+    },
+    {
+      "id": "n08",
+      "cat": "trap_neigh",
+      "text": "water the plants in the balcony",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n09",
+      "cat": "trap_neigh",
+      "text": "print the shopping list",
+      "pred_tool": "shopping_list",
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": \"shopping_list\", \"args\": {}}"
+    },
+    {
+      "id": "n10",
+      "cat": "trap_neigh",
+      "text": "book me a table at the fish restaurant for tonight",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n11",
+      "cat": "trap_neigh",
+      "text": "call a taxi to the house",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "n12",
+      "cat": "trap_neigh",
+      "text": "turn off the wifi router",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "x02",
+      "cat": "trap_neigh",
+      "text": "buy 10 lots of Garanti stock on the exchange",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "x03",
+      "cat": "trap_neigh",
+      "text": "order pizza for tonight",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "x05",
+      "cat": "trap_neigh",
+      "text": "start the car remotely",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c01",
+      "cat": "trap_chat",
+      "text": "I'm really bored today",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c02",
+      "cat": "trap_chat",
+      "text": "should I tell you about my grandfather's village",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c03",
+      "cat": "trap_chat",
+      "text": "tell me a joke",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c04",
+      "cat": "trap_chat",
+      "text": "what do you think is the meaning of life",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c05",
+      "cat": "trap_chat",
+      "text": "you know I love you a lot right",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c06",
+      "cat": "trap_chat",
+      "text": "ugh I'm so tired today",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c07",
+      "cat": "trap_chat",
+      "text": "what's your favorite food",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c08",
+      "cat": "trap_chat",
+      "text": "I just want to chat a bit",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c09",
+      "cat": "trap_chat",
+      "text": "I wonder if I'll be happy tomorrow",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c10",
+      "cat": "trap_chat",
+      "text": "good night my dear",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c11",
+      "cat": "trap_chat",
+      "text": "my back hurts again, getting old is rough",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c12",
+      "cat": "trap_chat",
+      "text": "I had a fight with Neva today and I feel awful",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c13",
+      "cat": "trap_chat",
+      "text": "do you ever get tired of us",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "c14",
+      "cat": "trap_chat",
+      "text": "the weather is making me sad lately",
+      "pred_tool": "weather",
+      "pred_args": {
+        "city": "New York"
+      },
+      "err": false,
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"New York\"}}"
+    },
+    {
+      "id": "k01",
+      "cat": "trap_ctx",
+      "text": "one more of the same please",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "k02",
+      "cat": "trap_ctx",
+      "text": "add that one too",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "k03",
+      "cat": "trap_ctx",
+      "text": "no, the other one",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "k04",
+      "cat": "trap_ctx",
+      "text": "do it again",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "k05",
+      "cat": "trap_ctx",
+      "text": "cancel that",
+      "pred_tool": "reminder_cancel",
+      "pred_args": {
+        "id": 1234567890
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_cancel\", \"args\": {\"id\": 1234567890}}"
+    },
+    {
+      "id": "k06",
+      "cat": "trap_ctx",
+      "text": "what about tomorrow",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "what will happen tomorrow"
+      },
+      "err": false,
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"what will happen tomorrow\"}}"
+    },
+    {
+      "id": "k07",
+      "cat": "trap_ctx",
+      "text": "yes, do that",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "reminder"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"reminder\"}}"
+    },
+    {
+      "id": "k08",
+      "cat": "trap_ctx",
+      "text": "change it to 5 instead",
+      "pred_tool": "reminder_list",
+      "pred_args": {
+        "limit": 5
+      },
+      "err": false,
+      "out": "{\"tool\": \"reminder_list\", \"args\": {\"limit\": 5}}"
+    },
+    {
+      "id": "q01",
+      "cat": "trap_know",
+      "text": "what year was Fatih Sultan Mehmet born",
+      "pred_tool": "memory_search",
+      "pred_args": {
+        "query": "Fatih Sultan Mehmet birth year"
+      },
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet birth year\"}}"
+    },
+    {
+      "id": "q02",
+      "cat": "trap_know",
+      "text": "how many bones are there in the human body",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "q03",
+      "cat": "trap_know",
+      "text": "why is the sky blue",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "q04",
+      "cat": "trap_know",
+      "text": "what's the capital of Australia",
+      "pred_tool": "web_search",
+      "pred_args": {
+        "query": "capital of Australia"
+      },
+      "err": false,
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"capital of Australia\"}}"
+    },
+    {
+      "id": "q05",
+      "cat": "trap_know",
+      "text": "how do you make lentil soup",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "q06",
+      "cat": "trap_know",
+      "text": "what does photosynthesis mean",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "q07",
+      "cat": "trap_know",
+      "text": "how many players are there in a football team",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    },
+    {
+      "id": "q08",
+      "cat": "trap_know",
+      "text": "who wrote Sefiller",
+      "pred_tool": null,
+      "pred_args": {},
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}}"
+    }
+  ],
+  "latencies_ms": [
+    403,
+    263,
+    275,
+    256,
+    438,
+    653,
+    282,
+    381,
+    621,
+    268,
+    295,
+    525,
+    299,
+    282,
+    351,
+    674,
+    248,
+    620,
+    226,
+    290,
+    487,
+    290,
+    281,
+    361,
+    501,
+    266,
+    251,
+    573,
+    336,
+    381,
+    363,
+    555,
+    361,
+    431,
+    363,
+    311,
+    447,
+    441,
+    331,
+    409,
+    371,
+    421,
+    370,
+    511,
+    557,
+    213,
+    319,
+    495,
+    514,
+    344,
+    260,
+    329,
+    341,
+    243,
+    427,
+    486,
+    401,
+    571,
+    342,
+    694,
+    587,
+    447,
+    495,
+    352,
+    554,
+    582,
+    410,
+    522,
+    509,
+    517,
+    429,
+    420,
+    330,
+    776,
+    941,
+    356,
+    282,
+    378,
+    234,
+    294,
+    507,
+    291,
+    521,
+    294,
+    615,
+    471,
+    610,
+    400,
+    248,
+    240,
+    421,
+    229,
+    226,
+    319,
+    230,
+    224,
+    225,
+    227,
+    327,
+    241,
+    251,
+    240,
+    319,
+    218,
+    219,
+    222,
+    467,
+    217,
+    221,
+    211,
+    213,
+    221,
+    229,
+    215,
+    222,
+    482,
+    215,
+    211,
+    224,
+    212,
+    257,
+    213,
+    223,
+    497,
+    296,
+    303,
+    537,
+    250,
+    277,
+    596,
+    312,
+    212,
+    261,
+    483,
+    211,
+    214,
+    216
+  ]
+}

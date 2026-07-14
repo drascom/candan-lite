@@ -33,6 +33,13 @@ from name_parser import (
     _is_decline_enroll,
 )
 from log_utils import DedupeFilter
+from router import (  # hızlı tool-router (ROUTER_ENABLED kapalıyken tam no-op)
+    ROUTER_ENABLED,
+    ROUTER_EXECUTE,
+    ROUTER_TIMEOUT_MS,
+    ROUTER_URL,
+    Router,
+)
 
 logger = logging.getLogger("pi_brain")
 logger.addFilter(DedupeFilter())  # tekrarlayan warning/info loglarını seyreltir
@@ -768,6 +775,19 @@ if _HAS_LIVEKIT:
             if scripted is not None:
                 _emit(scripted)
                 return
+
+            # Hızlı tool-router (ROUTER_ENABLED; varsayılan KAPALI → bu blok no-op).
+            # Cümle TEMİZ hâldeyken sorulur: wake ayıklanmış, selam direktifi ve saat
+            # notu HENÜZ eklenmemiş (onlar pi'ya özel; router'ın gördüğü metin
+            # benchmark'takiyle aynı olmalı). Low-tier bir tool doğrudan çalıştıysa
+            # pi'ya HİÇ gitmeyiz. Her başarısızlık (timeout/servis kapalı/abstain/
+            # multi_intent/executor yok) sessizce ana modele düşer — router.py kırmızı
+            # çizgi. `_route` istisna ATMAZ.
+            spoken = await self._brain._route(text)
+            if spoken is not None:
+                _emit(spoken)
+                return
+
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
@@ -900,6 +920,21 @@ if _HAS_LIVEKIT:
             self._wake_task: Optional[asyncio.Task] = None
             # Konsolidasyon: dosya başına son çalıştırma (günde en çok 1 → LLM turu yakma).
             self._consolidated: dict[str, float] = {}
+            # Hızlı tool-router (worker/router.py). ROUTER_ENABLED kapalıyken HİÇ
+            # kurulmaz → ne import maliyeti ne davranış değişikliği (tam no-op).
+            self._router: Any = None
+            if ROUTER_ENABLED:
+                self._router = Router()
+                logger.info("router AÇIK (%s, timeout=%.0fms, execute=%s)",
+                            ROUTER_URL, ROUTER_TIMEOUT_MS, ROUTER_EXECUTE)
+
+        # ── Hızlı tool-router ────────────────────────────────────────────────
+        async def _route(self, text: str) -> Optional[str]:
+            """Cümleyi router'a sor. Tool çalıştıysa sesli cevap metni, aksi hâlde None
+            (= ana modele düş). Router kapalıysa/patlarsa None — akış BOZULMAZ."""
+            if self._router is None:
+                return None
+            return await self._router.route(text)
 
         # ── Wake word gate (konuşma penceresi) ───────────────────────────────
         def set_wake_change(self, cb: Optional[Callable[[bool], None]]) -> None:

@@ -13,7 +13,10 @@
 
 target-version = "py312"
 line-length = 120
-extend-exclude = [".venv", "web", "node_modules", "__pycache__"]
+# experiments/ = araştırma/benchmark scratch kodu (commit'siz, üretimde koşmaz).
+# check.sh'ın işi ÜRETİM worker'ını korumak; tek kullanımlık bench harness'ını
+# linterlemek sadece gürültü üretir ve gerçek bulguyu içinde kaybeder.
+extend-exclude = [".venv", "web", "node_modules", "__pycache__", "experiments"]
 
 [lint]
 select = [
