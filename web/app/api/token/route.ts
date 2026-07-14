@@ -125,26 +125,52 @@ function withAgentDispatch(roomConfig: RoomConfiguration): RoomConfiguration {
 }
 
 /**
+ * Aynı Next.js süreci içinde oda-başına kısa süreli in-flight kilidi (2. savunma hattı).
+ *
+ * YARIŞ: iki token POST'u AYNI ANDA gelirse (StrictMode çift-mount, iki sekme, retry),
+ * ikisi de `listDispatch`/katılımcı kontrolünü dispatch kaydı DAHA GÖRÜNMEDEN geçer ve
+ * İKİSİ de `createDispatch` atar → odaya iki agent → her cevap çift ses (canlıda 23:42:11).
+ * `listDispatch` kaydı yalnız SIRALI (kayıt yayılmışsa) istekleri kapatır; gerçek eşzamanlı
+ * istek için senkron kilit şart. Map get/set await'siz olduğundan JS tek-thread'inde ilk
+ * çağrı damgayı basıp yield eder, sonrakiler damgayı görüp atlar. Pencere dolunca (worker
+ * restart → gerçek yeniden dispatch gereği) tekrar geçer. Dev hot-reload map'i sıfırlar — zararsız.
+ */
+const dispatchInFlight = new Map<string, number>();
+const DISPATCH_LOCK_MS = 8000;
+
+/**
  * Var olan oda için agent'ı server tarafında açıkça dispatch et.
  *
+ * - Kısa süre içinde bu oda için zaten bir dispatch denemesi yapıldıysa: dokunma (kilit).
  * - Oda YOKSA: dokunma — token'a gömülü dispatch oda yaratılırken zaten tetiklenir.
- * - Oda VARSA ama içinde AGENT katılımcı yoksa: `createDispatch` ile agent'ı çağır
- *   (worker restart senaryosu: oda yaşıyor, gömülü davet yok sayılıyor).
- * - Oda VARSA ve agent zaten içindeyse: dokunma (çift dispatch = iki agent istemiyoruz).
+ * - Oda VARSA ve bu agent için DISPATCH KAYDI zaten varsa: dokunma. Kaydı kontrol ediyoruz
+ *   (katılımcı listesini DEĞİL): dispatch verilmiş ama agent henüz KATILMAMIŞken bile kayıt
+ *   görünür → yarış penceresi (worker job başlatma gecikmesi) kapanır.
+ * - Oda VARSA, kayıt yok ama AGENT katılımcı zaten içindeyse: dokunma. Bu, kaydı görünmeden
+ *   düşen gömülü dispatch'i de kapsar (belt-and-suspenders — kayıt VEYA katılımcı yeter).
+ * - Aksi halde: `createDispatch` ile agent'ı çağır (worker restart: oda yaşıyor, gömülü yok sayılıyor).
  *
  * Hata dayanıklılığı: dispatch adımı patlarsa token yine döner (yeni-oda yolu bozulmaz);
  * hata yalnız console'a loglanır.
  */
 async function ensureAgentDispatch(serverUrl: string, roomName: string): Promise<void> {
   if (!AGENT_NAME || !API_KEY || !API_SECRET) return;
+  // 2. savunma: senkron in-flight kilidi (await'ten ÖNCE damga bas → eşzamanlı POST'ları topla)
+  const now = Date.now();
+  const last = dispatchInFlight.get(roomName);
+  if (last && now - last < DISPATCH_LOCK_MS) return; // yakında zaten denendi → atla
+  dispatchInFlight.set(roomName, now);
   try {
     const roomService = new RoomServiceClient(serverUrl, API_KEY, API_SECRET);
     const rooms = await roomService.listRooms([roomName]);
     if (rooms.length === 0) return; // oda yok → gömülü dispatch halleder
-    const participants = await roomService.listParticipants(roomName);
-    const agentPresent = participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT);
-    if (agentPresent) return; // agent zaten odada → çift dispatch yapma
     const dispatchClient = new AgentDispatchClient(serverUrl, API_KEY, API_SECRET);
+    // 1. savunma: dispatch KAYDINA bak (katılımcıya değil) — kayıt agent katılmadan da görünür.
+    const dispatches = await dispatchClient.listDispatch(roomName);
+    if (dispatches.some((d) => d.agentName === AGENT_NAME)) return; // kayıt var → çift dispatch yapma
+    // Kayıt yoksa katılımcıyı da kontrol et: kaydı görünmeden düşen gömülü dispatch'i yakala.
+    const participants = await roomService.listParticipants(roomName);
+    if (participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT)) return; // agent zaten odada
     await dispatchClient.createDispatch(roomName, AGENT_NAME);
     console.log(`[token] var olan oda ${roomName} için agent dispatch edildi (${AGENT_NAME})`);
   } catch (error) {
