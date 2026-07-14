@@ -1910,6 +1910,7 @@ def _proactive_test() -> int:
         def __init__(self, gate: WakeGate):
             self.gate = gate
             self.said: list[str] = []
+            self.interruptible: list[bool] = []   # her say() kesilebilir miydi
             self.replies: list[bool] = []   # wait_reply'ın sırayla döneceği cevaplar
             self.here = True
             self.holds: list[bool] = []
@@ -1941,9 +1942,10 @@ def _proactive_test() -> int:
             self.slept += 1
             self.gate.sleep_now()           # agent.py: brain.proactive_sleep()
 
-        async def say(self, text: str) -> bool:
+        async def say(self, text: str, interruptible: bool = True) -> bool:
             self.said.append(text)
-            return True                     # kesilmedi (barge-in senaryosu: LiveIO)
+            self.interruptible.append(interruptible)
+            return True                     # kesilmedi (barge-in senaryosu: LiveIO/TurnIO)
 
         async def wait_reply(self, timeout: float) -> bool:
             # Kullanıcı tam BURADA cevap veriyor ("efendim"): o an giriş penceresi açık
@@ -2154,9 +2156,10 @@ def _proactive_test() -> int:
                 # ...ve transkript TAM BURADA kapıya çarpar. Kapı kapalı mı?
                 self.at_transcript.append((self.gate.hold, self.gate.decide("dinliyorum")[0]))
 
-            async def say(self, text: str) -> bool:
+            async def say(self, text: str, interruptible: bool = True) -> bool:
                 cut = self.speaking            # kullanıcı konuşurken konuşursak KESİLİRİZ
                 self.said.append(text)
+                self.interruptible.append(interruptible)
                 self.cut.append(cut)
                 if self.answer and text.startswith("Ayhan,"):
                     self.answer = False
@@ -2217,6 +2220,111 @@ def _proactive_test() -> int:
                         "(kaybolmaz)", ok,
                         f"cut={io.cut} status={ev.status} attempts={ev.attempts} "
                         f"log={d.log[-1:]}"))
+
+        # ── (h3) AYNI CANLI BUG, İKİNCİ TUR: aaabb94'ten SONRA da sürdü ─────────────
+        # h1/h1b'nin GÖRMEDİĞİ şey: barge-in'in tek kaynağı kullanıcının VAD'ı DEĞİL.
+        # livekit-agents, kullanıcının turu BİTİNCE (voice/agent_activity.py,
+        # `_user_turn_completed_task`) o an çalan sözü KENDİSİ keser, sonra o cümleye
+        # cevap üretir:
+        #     if (current := self._current_speech) is not None:
+        #         if not current.allow_interruptions: ... return   # cevabı HİÇ ÜRETME
+        #         await current.interrupt()                        # KES → sonra cevap üret
+        # Onay ("efendim, dinliyorum") bir turu BİTİRİR; hatırlatma tam o sırada çalmaya
+        # başlamıştır → KESİLİR. `_deliver` erken çıkıp `hold`u kapatır, hemen ardından
+        # pi turu açılır ve onay cümlesini YENİ SORU sanıp cevaplar. Kullanıcının gördüğü:
+        # "hatırlatmam var" → "efendim" → alakasız cevap, hatırlatma YOK.
+        # TurnIO SADECE bu semantiği modeller (kullanıcı seslenmeyi dinler, sonra cevap
+        # verir; EOU tespiti final transkriptten biraz SONRA gelir — canlıdaki sıra).
+        class TurnIO(FakeIO):
+            class _Speech:
+                def __init__(self, text: str, interruptible: bool):
+                    self.text = text
+                    self.interruptible = interruptible
+                    self.interrupted = False
+                    self.stop = asyncio.Event()   # kesildi → playout erken biter
+                    self.over = asyncio.Event()   # söz gerçekten bitti (say() döndü)
+
+            def __init__(self, gate: WakeGate, *, speech: float = 0.02,
+                         playout: float = 0.30, eou_delay: float = 0.02):
+                super().__init__(gate)
+                self.ack = AckTracker(settle=0.15)
+                self.speech = speech            # onay cümlesinin süresi
+                self.playout = playout          # bizim sözümüzün çalma süresi
+                self.eou_delay = eou_delay      # final transkript → EOU tespiti gecikmesi
+                self.answered = False
+                self.current: object = None     # çalan söz (livekit: _current_speech)
+                self.heard: list[str] = []      # kullanıcının GERÇEKTEN duyduğu sözler
+                self.pi_turns: list[str] = []   # pi'ya DÜŞEN cümleler (olmamalı!)
+
+            async def _user_answers(self, callout: "TurnIO._Speech") -> None:
+                await callout.over.wait()               # önce seslenmeyi dinler
+                self.ack.on_speaking(True)              # agent.py: user_state_changed
+                await asyncio.sleep(self.speech)
+                self.ack.on_transcript(is_final=True)   # agent.py: user_input_transcribed
+                self.ack.on_speaking(False)             # ...ve sustu → onay TAMAM
+                await asyncio.sleep(self.eou_delay)     # EOU tespiti biraz SONRA gelir
+                await self._end_of_turn("efendim, dinliyorum")
+
+            async def _end_of_turn(self, text: str) -> None:
+                """livekit `_user_turn_completed_task`ın DAVRANIŞI (birebir)."""
+                sp = self.current
+                if sp is not None and not sp.stop.is_set():
+                    if not sp.interruptible:
+                        return              # söz kesilemez → bu turu CEVAPLAMA (skip)
+                    sp.interrupted = True
+                    sp.stop.set()
+                    await sp.over.wait()    # `await current_speech.interrupt()`
+                if self.gate.decide(text)[0] == "process":   # pi turu → wake/hold kapısı
+                    self.pi_turns.append(text)
+
+            async def say(self, text: str, interruptible: bool = True) -> bool:
+                sp = TurnIO._Speech(text, interruptible)
+                self.current = sp
+                self.said.append(text)
+                self.interruptible.append(interruptible)
+                if not self.answered and text.startswith("Ayhan,"):
+                    self.answered = True                    # seslenmeyi duydu
+                    self._t = asyncio.create_task(self._user_answers(sp))
+                try:
+                    await asyncio.wait_for(sp.stop.wait(), self.playout)
+                except asyncio.TimeoutError:
+                    pass                                    # sonuna kadar çaldı
+                if not sp.interrupted:
+                    self.heard.append(text)                 # kullanıcı bunu DUYDU
+                self.current = None
+                sp.over.set()
+                return not sp.interrupted
+
+            async def wait_reply(self, timeout: float) -> bool:
+                self.awake_at_reply.append(self.gate.awake)
+                return await self.ack.wait(timeout)
+
+            async def spoke_out(self) -> None:
+                t = getattr(self, "_t", None)
+                if t is not None:
+                    await t
+
+        store = EventStore(Path(tmp) / f"ev-{uuid.uuid4().hex}.db")
+        gate = WakeGate(enabled=True, word="candan", window=15.0)
+        io = TurnIO(gate)
+        d = Deliverer(store, io, reply_timeout=1.0, retry_after=300.0, late_hours=12.0,
+                      now_fn=lambda: T0)
+        eid = store.add("reminder", "ayhan", "saat üçte doktor randevun var",
+                        due_ts=T0 - 60, now=T0 - 120)
+        n = await d.tick("ayhan")
+        await io.spoke_out()
+        ev = store.get(eid)
+        ok = (n == 1 and any("doktor randevun" in s for s in io.heard)   # DUYULDU
+              and io.pi_turns == []                                      # pi'ya düşmedi
+              and ev.status == "delivered")
+        results.append(("(h3) onay TURU BİTİRİNCE hatırlatma KESİLMİYOR + onay cümlesi "
+                        "pi'ya DÜŞMÜYOR (canlı bug, 2. tur)", ok,
+                        f"heard={io.heard} pi_turns={io.pi_turns} status={ev.status}"))
+        # (h3b) sebebi: HATIRLATMA kesilemez söyleniyor; SESLENME kesilebilir kalıyor
+        # (kesilemez sözde livekit STT'ye sessizlik besler → onay hiç transkript olmazdı).
+        ok = io.interruptible == [True, False]
+        results.append(("(h3b) seslenme kesilebilir, HATIRLATMA kesilemez", ok,
+                        f"interruptible={io.interruptible}"))
 
         # (g) profile 2KB'ı aşınca → konsolidasyon TETİKLENİYOR (sessizken; busy'de ASLA)
         MEM = Path(tmp) / "memory"

@@ -392,10 +392,26 @@ async def entrypoint(ctx: JobContext):
         def sleep(self) -> None:
             brain.proactive_sleep()                     # cevap yok → uyandırmayı geri al
 
-        async def say(self, text: str) -> bool:
+        async def say(self, text: str, interruptible: bool = True) -> bool:
             # SpeechHandle → playout'u (ya da KESİLMESİNİ) bekler. False dönersek
             # Deliverer hatırlatmayı teslim SAYMAZ → olay pending kalır, kaybolmaz.
-            handle = await session.say(text)
+            #
+            # interruptible=False (SADECE hatırlatmanın KENDİSİ için) — canlı bug'ın asıl
+            # kökü buydu. livekit-agents, kullanıcının turu BİTİNCE
+            # (voice/agent_activity.py `_user_turn_completed_task`) şunu yapar:
+            #     if (current_speech := self._current_speech) is not None:
+            #         if not current_speech.allow_interruptions: ... return   # cevabı ÜRETME
+            #         await current_speech.interrupt()                        # KES, sonra cevap üret
+            # Yani kullanıcı "efendim, dinliyorum" deyip SUSUNCA framework, o an çalan
+            # sözümüzü (= hatırlatmayı) KESER ve o cümleye cevap üretir. Sonuç canlıdaki
+            # tablo: hatırlatma duyulmaz + `_deliver` erken çıkıp `hold`u kapatır + onay
+            # cümlesi pi'ya düşer ("alakasız cevap"). allow_interruptions=False ile
+            # framework hatırlatmayı KESEMEZ ve o turu cevaplamayı da ATLAR → yarış biter.
+            #
+            # SESLENME (call-out) İSE KESİLEBİLİR KALMALI: kesilemez sözde framework
+            # `discard_audio_if_uninterruptible` (varsayılan True) ile STT'ye SESSİZLİK
+            # besler → kullanıcının onayı ("efendim") hiç transkript olmazdı.
+            handle = await session.say(text, allow_interruptions=interruptible)
             return not bool(getattr(handle, "interrupted", False))
 
         async def wait_reply(self, timeout: float) -> bool:

@@ -234,7 +234,9 @@ class ProactiveIO(Protocol):
     def wake(self) -> bool: ...                # open the conversation window (True = newly)
     def sleep(self) -> None: ...               # close it again (nobody answered)
     # False = the speech was CUT (barge-in) → it was not heard. None/True = fully said.
-    async def say(self, text: str) -> Optional[bool]: ...
+    # `interruptible=False` = this sentence MUST be heard in full; the voice stack may
+    # neither cut it nor answer whatever the user says over it (see `_deliver`).
+    async def say(self, text: str, interruptible: bool = True) -> Optional[bool]: ...
     # True = the user replied AND finished their sentence (see AckTracker).
     async def wait_reply(self, timeout: float) -> bool: ...
 
@@ -308,11 +310,17 @@ class Deliverer:
                 await io.say(self._call_line(ev, name))
                 if await io.wait_reply(self.reply_timeout):
                     io.wake()  # keep the window open (idempotent; ack refreshes it)
-                    # wait_reply returned only once the ack SENTENCE was over, so we are
-                    # not talking over the user and `hold` is still shut while their
-                    # transcript reaches the gate. If the reminder still gets cut, they
-                    # did NOT hear it → do not mark it delivered; retry it later.
-                    if await io.say(self._message(ev, now)) is False:
+                    # THE reminder. `interruptible=False` is the whole ballgame: the ack
+                    # ("efendim, dinliyorum") ENDS a user turn, and a voice stack answers a
+                    # finished turn by CUTTING whatever the agent is saying and replying to
+                    # it. That is us, mid-reminder — the user hears the call-out, then an
+                    # answer to "dinliyorum", and never the reminder. An uninterruptible
+                    # sentence cannot be cut, and the turn that would have cut it is not
+                    # answered at all. (The call-out above stays interruptible: barging in
+                    # on it IS the ack, and it must reach STT.)
+                    # Belt and braces: if it somehow still gets cut, they did NOT hear it →
+                    # do not mark it delivered; retry it later.
+                    if await io.say(self._message(ev, now), interruptible=False) is False:
                         self._retry_later(ev, now)
                         self.log.append(f"cut#{ev.id}: reminder interrupted -> still pending")
                         return False
