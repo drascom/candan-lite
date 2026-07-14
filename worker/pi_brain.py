@@ -1757,7 +1757,7 @@ def _proactive_test() -> int:
         print("[proactive] SKIP: livekit yok (worker/.venv ile çalıştır)")
         return 1
 
-    from reminders import Deliverer, EventStore
+    from reminders import AckTracker, Deliverer, EventStore
 
     results: list[tuple[str, bool, str]] = []
     tmp = tempfile.mkdtemp(prefix="candan-proactive-")
@@ -1801,8 +1801,9 @@ def _proactive_test() -> int:
             self.slept += 1
             self.gate.sleep_now()           # agent.py: brain.proactive_sleep()
 
-        async def say(self, text: str) -> None:
+        async def say(self, text: str) -> bool:
             self.said.append(text)
+            return True                     # kesilmedi (barge-in senaryosu: LiveIO)
 
         async def wait_reply(self, timeout: float) -> bool:
             # Kullanıcı tam BURADA cevap veriyor ("efendim"): o an giriş penceresi açık
@@ -1955,6 +1956,127 @@ def _proactive_test() -> int:
         ok = (noop is False and opened is True and pb._wake.awake is False and closed is True)
         results.append(("(f3) wake_now('') no-op (kök sebep); proactive_wake/sleep çalışıyor",
                         ok, f"wake_now('')={noop} proactive_wake={opened} sleep={closed}"))
+
+        # ── (h) CANLI BUG (olaylar #11 "çay" / #12 "timer", 14.07.2026) ──────────────
+        # "Candan seslendi, kullanıcı 'Dinliyorum.' dedi, Candan hatırlatmayı HİÇ
+        # söylemedi — o cümleye yeni bir soruymuş gibi cevap verdi."
+        # Kök sebep: wait_reply sözün BAŞLAMASINI (VAD 'speaking') onay sayıyordu; final
+        # transkript SANİYELER sonra geliyor. Aradaki boşlukta:
+        #   (a) hatırlatma kullanıcı konuşurken söylenip barge-in ile KESİLİYOR,
+        #   (b) `_deliver` bitip `hold` KAPANIYOR → geciken transkript kapıdan geçip
+        #       pi'ya düşüyor → pi onu yeni soru sanıp cevaplıyor.
+        # (h0) AckTracker sözleşmesi: VAD TEK BAŞINA "bitti" DEMEK DEĞİLDİR.
+        ack = AckTracker(settle=0.05)
+        ack.arm()
+        ack.on_speaking(True)                     # kullanıcı konuşmaya başladı
+        started = ack.seen.is_set() and not ack.done.is_set()
+        ack.on_transcript(is_final=False)         # partial → hâlâ "bitti" değil
+        mid = not ack.done.is_set()
+        ack.on_transcript(is_final=True)          # final geldi ama VAD hâlâ konuşuyor
+        still = not ack.done.is_set()
+        ack.on_speaking(False)                    # ...ve sustu → İŞTE ŞİMDİ bitti
+        ok = started and mid and still and ack.done.is_set()
+        results.append(("(h0) AckTracker: VAD 'konuşuyor' ≠ söz bitti (final + sessizlik "
+                        "şart)", ok, f"started={started} mid={mid} still={still} "
+                                     f"done={ack.done.is_set()}"))
+        # (h0b) hiç karşılık yok → wait() False (mevcut davranış: 2. kez seslen)
+        no_reply = await AckTracker(settle=0.05).wait(0.02)
+        results.append(("(h0b) karşılık yok → wait() False (2. seslenme yolu bozulmadı)",
+                        no_reply is False, f"wait={no_reply}"))
+
+        class LiveIO(FakeIO):
+            """ÜRETİM KABLOLAMASI: agent.py'deki gerçek AckTracker + gerçek WakeGate.
+            Kullanıcı seslenmeyi duyunca cevap verir; VAD ÖNCE, final transkript SONRA
+            gelir (Whisper endpointing) — canlıdaki zamanlamanın aynısı."""
+
+            def __init__(self, gate: WakeGate, *, speech: float = 0.05,
+                         playout: float = 0.05, transcript: bool = True):
+                super().__init__(gate)
+                self.ack = AckTracker(settle=0.15)
+                self.speech = speech          # kullanıcının cümlesi ne kadar sürüyor
+                self.playout = playout        # bizim sözümüzün çalma süresi
+                self.transcript = transcript  # final transkript hiç gelir mi (gürültü?)
+                self.answer = True            # ilk seslenmeye cevap verecek mi
+                self.speaking = False         # kullanıcı ŞU AN konuşuyor mu (barge-in)
+                self.cut: list[bool] = []     # her say() kesildi mi
+                self.at_transcript: list[tuple] = []   # transkript ANINDA (hold, decide)
+
+            async def _answers(self) -> None:
+                self.speaking = True
+                self.ack.on_speaking(True)                  # agent.py: user_state_changed
+                await asyncio.sleep(self.speech)
+                if not self.transcript:
+                    return                                  # gürültü: VAD var, söz yok
+                self.speaking = False
+                self.ack.on_transcript(is_final=True)       # agent.py: user_input_transcribed
+                self.ack.on_speaking(False)
+                await asyncio.sleep(0.01)                   # pi turu birazdan başlar...
+                # ...ve transkript TAM BURADA kapıya çarpar. Kapı kapalı mı?
+                self.at_transcript.append((self.gate.hold, self.gate.decide("dinliyorum")[0]))
+
+            async def say(self, text: str) -> bool:
+                cut = self.speaking            # kullanıcı konuşurken konuşursak KESİLİRİZ
+                self.said.append(text)
+                self.cut.append(cut)
+                if self.answer and text.startswith("Ayhan,"):
+                    self.answer = False
+                    self._t = asyncio.create_task(self._answers())   # seslenmeyi duydu
+                # KESİLEN söz ERKEN biter (SpeechHandle.wait_for_playout interrupt'ta
+                # hemen döner) — canlıda `hold`u transkriptten SANİYELER önce kapatan
+                # şey tam olarak buydu. Kesilmeyen söz sonuna kadar çalar.
+                await asyncio.sleep(0.0 if cut else self.playout)
+                return not cut
+
+            async def wait_reply(self, timeout: float) -> bool:
+                self.awake_at_reply.append(self.gate.awake)
+                return await self.ack.wait(timeout)
+
+            async def spoke_out(self) -> None:
+                """Kullanıcının sözü/transkripti sonuna kadar aksın (test senkronu):
+                bug'lı halde transkript `tick` BİTTİKTEN SONRA gelir — asıl mesele o."""
+                t = getattr(self, "_t", None)
+                if t is not None:
+                    await t
+
+        # (h1) Onay geldi → hatırlatma KESİLMEDEN söylendi VE onay sözü pi'ya GİTMEDİ.
+        store = EventStore(Path(tmp) / f"ev-{uuid.uuid4().hex}.db")
+        gate = WakeGate(enabled=True, word="candan", window=15.0)
+        io = LiveIO(gate)
+        d = Deliverer(store, io, reply_timeout=1.0, retry_after=300.0, late_hours=12.0,
+                      now_fn=lambda: T0)
+        eid = store.add("reminder", "ayhan", "çay içmeyi hatırla",
+                        due_ts=T0 - 60, now=T0 - 120)
+        n = await d.tick("ayhan")
+        await io.spoke_out()          # kullanıcının cümlesi kapıya çarpsın (geç de olsa)
+        ev = store.get(eid)
+        ok = (n == 1 and len(io.said) == 2 and io.cut == [False, False]
+              and "çay içmeyi hatırla" in io.said[1]     # hatırlatma GERÇEKTEN söylendi
+              and ev.status == "delivered")
+        results.append(("(h1) onaydan sonra konuşuluyor → hatırlatma barge-in ile "
+                        "KESİLMİYOR", ok, f"cut={io.cut} said={io.said} status={ev.status}"))
+        # (h1b) ...ve o onay cümlesi ("Dinliyorum.") kapıya çarptığında hold HÂLÂ AÇIK →
+        # pi'ya GİTMİYOR. Canlıda tam tersi olmuştu: hold kapanmış, cümle pi'ya düşmüştü.
+        ok = io.at_transcript == [(True, "silent")]
+        results.append(("(h1b) onay transkripti hold AÇIKKEN geliyor → pi'ya gitmiyor "
+                        "(canlı bug)", ok, f"at_transcript={io.at_transcript}"))
+
+        # (h2) GÜVENLİ BAŞARISIZLIK: VAD tetiklendi ama final transkript HİÇ gelmedi
+        # (gürültü) ve kullanıcı susmuyor → settle penceresi dolar, konuşuruz, barge-in
+        # KESER → teslim SAYILMAZ: olay pending kalır, sonra tekrar denenir. KAYBOLMAZ.
+        store = EventStore(Path(tmp) / f"ev-{uuid.uuid4().hex}.db")
+        gate = WakeGate(enabled=True, word="candan", window=15.0)
+        io = LiveIO(gate, speech=5.0, transcript=False)   # sürekli gürültü, söz yok
+        d = Deliverer(store, io, reply_timeout=1.0, retry_after=300.0, late_hours=12.0,
+                      now_fn=lambda: T0)
+        eid = store.add("reminder", "ayhan", "ilacını al", due_ts=T0 - 60, now=T0 - 120)
+        n = await d.tick("ayhan")
+        ev = store.get(eid)
+        ok = (n == 0 and io.cut[-1] is True and ev.status == "pending" and ev.attempts == 1
+              and any("cut#" in x for x in d.log))
+        results.append(("(h2) hatırlatma kesildiyse teslim SAYILMAZ → pending kalır "
+                        "(kaybolmaz)", ok,
+                        f"cut={io.cut} status={ev.status} attempts={ev.attempts} "
+                        f"log={d.log[-1:]}"))
 
         # (g) profile 2KB'ı aşınca → konsolidasyon TETİKLENİYOR (sessizken; busy'de ASLA)
         MEM = Path(tmp) / "memory"

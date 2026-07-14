@@ -32,6 +32,7 @@ Boundaries:
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
 import time
@@ -47,6 +48,9 @@ HEARTBEAT_SECONDS = float(os.environ.get("PROACTIVE_TICK_SECONDS", "20") or 20)
 REPLY_TIMEOUT = float(os.environ.get("PROACTIVE_REPLY_TIMEOUT", "8") or 8)
 RETRY_AFTER = float(os.environ.get("PROACTIVE_RETRY_SECONDS", "300") or 300)
 LATE_HOURS = float(os.environ.get("PROACTIVE_LATE_HOURS", "12") or 12)
+# Onay sözünün BİTMESİ için üst sınır: VAD "konuşuyor" der demez onay saymak yetmez,
+# cümlenin final transkripti gelene kadar beklenir — ama sonsuza kadar değil.
+ACK_SETTLE_SECONDS = float(os.environ.get("PROACTIVE_ACK_SETTLE_SECONDS", "6") or 6)
 
 
 def events_db_path() -> Path:
@@ -154,6 +158,71 @@ class EventStore:
         return Event(**{k: r[k] for k in Event.__annotations__}) if r else None
 
 
+class AckTracker:
+    """The reply to a call-out — and the difference between "the user STARTED talking"
+    and "the user FINISHED talking".
+
+    Why they must not be conflated (this WAS the bug, seen live on events #11/#12):
+    VAD (`user_state_changed → speaking`) fires on the first syllable; the final
+    transcript lands SECONDS later (Whisper endpointing). Treating the first syllable
+    as the acknowledgement and speaking immediately breaks the delivery TWICE:
+      (a) we talk over the user → barge-in cuts the reminder → they never hear it;
+      (b) `_deliver` finishes and drops `hold` BEFORE that transcript exists, so when
+          it finally arrives the gate is open and pi answers it as if it were a brand
+          new question ("Dinliyorum." → "Senin için yapabileceğim başka bir şey var mı?").
+    So `wait()` waits for the sentence to be OVER: final transcript + VAD gone quiet.
+    LiveKit-free on purpose (asyncio only) → unit-testable with a fake clock.
+    """
+
+    def __init__(self, settle: float = ACK_SETTLE_SECONDS):
+        self.settle = settle
+        self.seen = asyncio.Event()   # a reply exists (VAD, or any transcript)
+        self.done = asyncio.Event()   # ...and the sentence is FINISHED (final + silence)
+        self._final = False
+        self._speaking = False
+
+    def arm(self) -> None:
+        """Reset for a new call-out. If the user is talking RIGHT NOW, that already
+        counts as a reply (they barged into the call-out) — do not lose it."""
+        self.seen.clear()
+        self.done.clear()
+        self._final = False
+        if self._speaking:
+            self.seen.set()
+
+    def on_transcript(self, is_final: bool) -> None:
+        self.seen.set()               # even a partial = they are answering us
+        if is_final:
+            self._final = True
+            self._settle()
+
+    def on_speaking(self, speaking: bool) -> None:
+        self._speaking = bool(speaking)
+        if speaking:
+            self.seen.set()
+        else:
+            self._settle()            # VAD went quiet → maybe the sentence is over
+
+    def _settle(self) -> None:
+        if self._final and not self._speaking:
+            self.done.set()
+
+    async def wait(self, timeout: float) -> bool:
+        """Wait for a reply; if one comes, wait for it to END. No reply at all → False."""
+        self.arm()
+        try:
+            await asyncio.wait_for(self.seen.wait(), timeout)
+        except asyncio.TimeoutError:
+            return False              # silence → the caller calls out once more
+        try:
+            await asyncio.wait_for(self.done.wait(), self.settle)
+        except asyncio.TimeoutError:
+            pass                      # no final transcript (noise / VAD false positive):
+            # speak anyway — if that speech gets cut, `_deliver` does NOT mark it
+            # delivered, so the event stays pending and is retried. Never lost.
+        return True
+
+
 class ProactiveIO(Protocol):
     """The Deliverer's only window to the outside world (LiveKit ⟷ test fake)."""
 
@@ -164,7 +233,9 @@ class ProactiveIO(Protocol):
     def hold(self, v: bool) -> None: ...       # during the exchange, don't route to pi
     def wake(self) -> bool: ...                # open the conversation window (True = newly)
     def sleep(self) -> None: ...               # close it again (nobody answered)
-    async def say(self, text: str) -> None: ...
+    # False = the speech was CUT (barge-in) → it was not heard. None/True = fully said.
+    async def say(self, text: str) -> Optional[bool]: ...
+    # True = the user replied AND finished their sentence (see AckTracker).
     async def wait_reply(self, timeout: float) -> bool: ...
 
 
@@ -237,13 +308,19 @@ class Deliverer:
                 await io.say(self._call_line(ev, name))
                 if await io.wait_reply(self.reply_timeout):
                     io.wake()  # keep the window open (idempotent; ack refreshes it)
-                    await io.say(self._message(ev, now))
+                    # wait_reply returned only once the ack SENTENCE was over, so we are
+                    # not talking over the user and `hold` is still shut while their
+                    # transcript reaches the gate. If the reminder still gets cut, they
+                    # did NOT hear it → do not mark it delivered; retry it later.
+                    if await io.say(self._message(ev, now)) is False:
+                        self._retry_later(ev, now)
+                        self.log.append(f"cut#{ev.id}: reminder interrupted -> still pending")
+                        return False
                     self.store.mark_delivered(ev.id, now)
                     self._backoff.pop(ev.id, None)
                     self.log.append(f"delivered#{ev.id} (attempt {attempt})")
                     return True   # window stays OPEN → the user may just keep talking
-            self.store.bump_attempt(ev.id)  # stays pending → never forgotten
-            self._backoff[ev.id] = now + self.retry_after
+            self._retry_later(ev, now)  # stays pending → never forgotten
             if woke:
                 io.sleep()  # nobody answered → back to sleep (we woke it, we undo it)
             self.log.append(f"no-reply#{ev.id}: back to pending (attempts++)")
@@ -251,6 +328,12 @@ class Deliverer:
         finally:
             io.set_busy(False)
             io.hold(False)
+
+    def _retry_later(self, ev: Event, now: float) -> None:
+        """Not delivered (no reply, or the reminder was cut off) → the event STAYS
+        pending and comes back after the backoff. A reminder is never dropped."""
+        self.store.bump_attempt(ev.id)
+        self._backoff[ev.id] = now + self.retry_after
 
     def _call_line(self, ev: Event, name: str) -> str:
         """The call-out: name + WHAT it is about. Never the content — that is the reward

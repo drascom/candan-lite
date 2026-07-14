@@ -23,7 +23,7 @@ from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsi
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
 from reminders import (                                 # proaktif ajan (hatırlatma/olay)
-    HEARTBEAT_SECONDS, Deliverer, EventStore,
+    HEARTBEAT_SECONDS, AckTracker, Deliverer, EventStore,
 )
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
@@ -294,16 +294,18 @@ async def entrypoint(ctx: JobContext):
     # ── Proaktif ajan: vakti gelen hatırlatmaları KENDİ BAŞLATARAK ilet ──────
     # Veriyi pi extension (family-memory) yazar → memory/events.db; sesi worker verir
     # (AgentSession sadece burada). Sözleşme = paylaşılan SQLite dosyası.
-    reply_seen = asyncio.Event()   # proaktif seslenmeye kullanıcı yanıt verdi mi
+    # Seslenmeye gelen karşılık: söz BAŞLADI (VAD) ≠ söz BİTTİ (final transkript).
+    # AckTracker ikisini ayırır — canlıdaki "hatırlatmayı hiç söylemedi" hatasının
+    # kökü tam buydu (bkz. reminders.AckTracker).
+    ack = AckTracker()
 
     @session.on("user_input_transcribed")
-    def _on_any_transcript(_ev) -> None:
-        reply_seen.set()           # herhangi bir söz = onay ("efendim", "ne var", ...)
+    def _on_any_transcript(ev) -> None:
+        ack.on_transcript(bool(getattr(ev, "is_final", False)))
 
     @session.on("user_state_changed")
     def _on_user_speaking(ev) -> None:
-        if getattr(ev, "new_state", "") == "speaking":
-            reply_seen.set()       # VAD daha hızlı: konuşmaya başlaması bile onaydır
+        ack.on_speaking(getattr(ev, "new_state", "") == "speaking")
 
     class _LiveKitIO:
         """Deliverer'ın dış dünyası (reminders.ProactiveIO). Uyku/kesme/varlık kuralları
@@ -333,16 +335,17 @@ async def entrypoint(ctx: JobContext):
         def sleep(self) -> None:
             brain.proactive_sleep()                     # cevap yok → uyandırmayı geri al
 
-        async def say(self, text: str) -> None:
-            await session.say(text)                     # SpeechHandle → playout'u bekler
+        async def say(self, text: str) -> bool:
+            # SpeechHandle → playout'u (ya da KESİLMESİNİ) bekler. False dönersek
+            # Deliverer hatırlatmayı teslim SAYMAZ → olay pending kalır, kaybolmaz.
+            handle = await session.say(text)
+            return not bool(getattr(handle, "interrupted", False))
 
         async def wait_reply(self, timeout: float) -> bool:
-            reply_seen.clear()
-            try:
-                await asyncio.wait_for(reply_seen.wait(), timeout)
-                return True
-            except asyncio.TimeoutError:
-                return False
+            # Sözün BAŞLAMASINI değil BİTMESİNİ bekler: üstüne konuşmayalım (barge-in
+            # hatırlatmayı kesiyordu) ve onay transkripti `hold` kapalıyken gelsin
+            # (yoksa pi onu yeni bir soru sanıp cevaplıyordu).
+            return await ack.wait(timeout)
 
     # NOT: adı `store` DEĞİL — yukarıdaki `store` SpeakerStore'dur (satır 77). Aynı
     # fonksiyonda tek adı iki farklı tipe bağlamak, `logging` tuzağının kardeşidir:
