@@ -7,18 +7,18 @@
   "tier": "low",
   "catalog_size": 23,
   "n_cases": 139,
-  "vram_model_mib": 5033,
+  "vram_model_mib": 5035,
   "summary": {
     "schema": "flag",
     "n": 139,
-    "recall_pct": 94.1,
-    "arg_ok_pct": 82.4,
-    "arg_ok_given_right_tool_pct": 87.5,
+    "recall_pct": 95.6,
+    "arg_ok_pct": 88.2,
+    "arg_ok_given_right_tool_pct": 92.3,
     "extra_tool_pct": 0.0,
     "extra_tool_n": 0,
     "extra_tool_total": 68,
-    "trap_abstain_pct": 80.8,
-    "trap_wrong_n": 10,
+    "trap_abstain_pct": 84.6,
+    "trap_wrong_n": 8,
     "trap_total": 52,
     "high_abstain_pct": 69.2,
     "high_fired_pct": 30.8,
@@ -63,8 +63,8 @@
       },
       "pair": {
         "n": 16,
-        "ok": 13,
-        "pct": 81.2
+        "ok": 14,
+        "pct": 87.5
       },
       "tool": {
         "n": 35,
@@ -88,25 +88,25 @@
       },
       "trap_neigh": {
         "n": 22,
-        "ok": 16,
-        "pct": 72.7
+        "ok": 18,
+        "pct": 81.8
       }
     },
     "splat_targets": {
-      "light_control": 6,
+      "light_control": 4,
       "translate": 2,
+      "timer_set": 1,
       "mail_check": 1,
       "volume_set": 1,
       "shopping_list": 1,
-      "media_play": 1,
       "clock_now": 1,
       "web_search": 1
     },
-    "old35_pct": 91.4,
-    "old35": "32/35",
-    "lat_p50_ms": 854,
-    "lat_mean_ms": 888,
-    "lat_p95_ms": 1127
+    "old35_pct": 97.1,
+    "old35": "34/35",
+    "lat_p50_ms": 952,
+    "lat_mean_ms": 1034,
+    "lat_p95_ms": 1442
   },
   "errors": [
     {
@@ -120,19 +120,6 @@
       "pred_args": {
         "city": "İzmir",
         "day": "weekend"
-      }
-    },
-    {
-      "id": "t15",
-      "cat": "arg",
-      "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_args": {
-        "text": "Veli toplantısı",
-        "at": "2024-10-17 14:00"
       }
     },
     {
@@ -177,26 +164,8 @@
       "cat": "pair",
       "text": "saat 3'teki hatırlatmayı iptal et",
       "why": "gold=reminder_cancel",
-      "pred_tools": [
-        "reminder_list"
-      ],
-      "pred_args": [
-        {}
-      ]
-    },
-    {
-      "id": "p14",
-      "cat": "pair",
-      "text": "bunu bana hatırlatma, sadece aklında tut",
-      "why": "gold=memory_add",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_args": [
-        {
-          "text": "bunu bana hatırlatma"
-        }
-      ]
+      "pred_tools": [],
+      "pred_args": []
     },
     {
       "id": "a01",
@@ -207,20 +176,8 @@
         "reminder_add"
       ],
       "pred_args": {
-        "text": "Pasaportumu yenile",
+        "text": "Pasaportumu yenilemek",
         "at": "2024-10-29 19:00"
-      }
-    },
-    {
-      "id": "a04",
-      "cat": "arg",
-      "text": "iki buçuk dakikalık zamanlayıcı kur",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "timer_set"
-      ],
-      "pred_args": {
-        "minutes": 1.5
       }
     },
     {
@@ -250,30 +207,16 @@
       }
     },
     {
-      "id": "a13",
-      "cat": "arg",
-      "text": "'seni özledim'i Kürtçe'ye çevir",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "translate"
-      ],
-      "pred_args": {
-        "text": "seni özledim",
-        "target_lang": "kurmanji"
-      }
-    },
-    {
       "id": "h02",
       "cat": "high",
       "text": "Neva'ya yemek hazır de",
       "why": "ABSTAIN bekleniyordu",
       "pred_tools": [
-        "light_control"
+        "timer_set"
       ],
       "pred_args": [
         {
-          "room": "kitchen",
-          "state": "on"
+          "minutes": 15
         }
       ]
     },
@@ -382,21 +325,6 @@
       "pred_args": null
     },
     {
-      "id": "x01",
-      "cat": "trap_neigh",
-      "text": "kombiyi aç, üşüdüm",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "kitchen",
-          "state": "on"
-        }
-      ]
-    },
-    {
       "id": "x07",
       "cat": "trap_neigh",
       "text": "perdeleri kapat",
@@ -453,22 +381,6 @@
       ]
     },
     {
-      "id": "x03",
-      "cat": "trap_neigh",
-      "text": "bu akşam için pizza söyle",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "media_play"
-      ],
-      "pred_args": [
-        {
-          "artist": "Pizza",
-          "track": "Song",
-          "platform": "spotify"
-        }
-      ]
-    },
-    {
       "id": "k06",
       "cat": "trap_ctx",
       "text": "peki ya yarın",
@@ -507,8 +419,7 @@
       ],
       "pred_args": [
         {
-          "query": "Fatih Sultan Mehmet doğum tarihi",
-          "max_results": 1
+          "query": "Fatih Sultan Mehmet doğum tarihi"
         }
       ]
     },
@@ -826,15 +737,15 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Veli toplantısı",
-            "at": "2024-10-17 14:00"
+            "text": "veli toplantısı",
+            "at": "perşembe 14:00"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Veli toplantısı\", \"at\": \"2024-10-17 14:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"veli toplantısı\", \"at\": \"perşembe 14:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "t16",
@@ -987,7 +898,7 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "internette yumurta kaç dakika haşlanır",
+            "query": "yumurta haşlama süresi dakika",
             "max_results": 3
           }
         }
@@ -995,7 +906,7 @@
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"internette yumurta kaç dakika haşlanır\", \"max_results\": 3}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"yumurta haşlama süresi dakika\", \"max_results\": 3}, \"multi_intent\": false}"
     },
     {
       "id": "t24",
@@ -1275,16 +1186,17 @@
         {
           "tool": "media_play",
           "args": {
+            "platform": "spotify",
             "artist": "",
             "track": "",
-            "platform": "spotify"
+            "for_whom": ""
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"spotify\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"platform\": \"spotify\", \"artist\": \"\", \"track\": \"\", \"for_whom\": \"\"}, \"multi_intent\": false}"
     },
     {
       "id": "t38",
@@ -1412,7 +1324,7 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Uyanılma",
+            "text": "Uyandırılma",
             "at": "06:30"
           }
         }
@@ -1420,7 +1332,7 @@
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Uyanılma\", \"at\": \"06:30\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Uyandırılma\", \"at\": \"06:30\"}, \"multi_intent\": false}"
     },
     {
       "id": "p05",
@@ -1433,7 +1345,7 @@
         {
           "tool": "soul_add",
           "args": {
-            "text": "bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+            "text": "call me by my name: Ayhan Bey",
             "scope": "self"
           }
         }
@@ -1441,7 +1353,7 @@
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"bana sadece Ayhan değil, Ayhan Bey diye hitap et\", \"scope\": \"self\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"call me by my name: Ayhan Bey\", \"scope\": \"self\"}, \"multi_intent\": false}"
     },
     {
       "id": "p06",
@@ -1531,19 +1443,12 @@
       "id": "p10",
       "cat": "pair",
       "text": "saat 3'teki hatırlatmayı iptal et",
-      "pred_tools": [
-        "reminder_list"
-      ],
-      "pred_calls": [
-        {
-          "tool": "reminder_list",
-          "args": {}
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "p11",
@@ -1611,20 +1516,21 @@
       "cat": "pair",
       "text": "bunu bana hatırlatma, sadece aklında tut",
       "pred_tools": [
-        "reminder_add"
+        "memory_add"
       ],
       "pred_calls": [
         {
-          "tool": "reminder_add",
+          "tool": "memory_add",
           "args": {
-            "text": "bunu bana hatırlatma"
+            "text": "bunu bana hatırlatma",
+            "scope": "private"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"bunu bana hatırlatma\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"bunu bana hatırlatma\", \"scope\": \"private\"}, \"multi_intent\": false}"
     },
     {
       "id": "a01",
@@ -1637,7 +1543,7 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Pasaportumu yenile",
+            "text": "Pasaportumu yenilemek",
             "at": "2024-10-29 19:00"
           }
         }
@@ -1645,7 +1551,7 @@
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Pasaportumu yenile\", \"at\": \"2024-10-29 19:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Pasaportumu yenilemek\", \"at\": \"2024-10-29 19:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "a02",
@@ -1701,14 +1607,14 @@
         {
           "tool": "timer_set",
           "args": {
-            "minutes": 1.5
+            "minutes": 2.5
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 1.5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 2.5}, \"multi_intent\": false}"
     },
     {
       "id": "a05",
@@ -1829,14 +1735,14 @@
           "tool": "light_control",
           "args": {
             "room": "yatak odası",
-            "state": "dim"
+            "state": "off"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"yatak odası\", \"state\": \"dim\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"yatak odası\", \"state\": \"off\"}, \"multi_intent\": false}"
     },
     {
       "id": "a11",
@@ -1892,14 +1798,14 @@
           "tool": "translate",
           "args": {
             "text": "seni özledim",
-            "target_lang": "kurmanji"
+            "target_lang": "Kurdî"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"seni özledim\", \"target_lang\": \"kurmanji\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"seni özledim\", \"target_lang\": \"Kurdî\"}, \"multi_intent\": false}"
     },
     {
       "id": "a14",
@@ -1912,15 +1818,15 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Maç başlamadan yarım saat önce televizyonu aç",
-            "in_minutes": 30
+            "text": "Open TV",
+            "at": "in 30 minutes"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Maç başlamadan yarım saat önce televizyonu aç\", \"in_minutes\": 30}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Open TV\", \"at\": \"in 30 minutes\"}, \"multi_intent\": false}"
     },
     {
       "id": "x06",
@@ -1949,21 +1855,20 @@
       "cat": "high",
       "text": "Neva'ya yemek hazır de",
       "pred_tools": [
-        "light_control"
+        "timer_set"
       ],
       "pred_calls": [
         {
-          "tool": "light_control",
+          "tool": "timer_set",
           "args": {
-            "room": "kitchen",
-            "state": "on"
+            "minutes": 15
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 15}, \"multi_intent\": false}"
     },
     {
       "id": "h03",
@@ -2231,22 +2136,12 @@
       "id": "x01",
       "cat": "trap_neigh",
       "text": "kombiyi aç, üşüdüm",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "kitchen",
-            "state": "on"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x04",
@@ -2497,23 +2392,12 @@
       "id": "x03",
       "cat": "trap_neigh",
       "text": "bu akşam için pizza söyle",
-      "pred_tools": [
-        "media_play"
-      ],
-      "pred_calls": [
-        {
-          "tool": "media_play",
-          "args": {
-            "artist": "Pizza",
-            "track": "Song",
-            "platform": "spotify"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Pizza\", \"track\": \"Song\", \"platform\": \"spotify\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x05",
@@ -2798,15 +2682,14 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "Fatih Sultan Mehmet doğum tarihi",
-            "max_results": 1
+            "query": "Fatih Sultan Mehmet doğum tarihi"
           }
         }
       ],
       "multi_flag": false,
       "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet doğum tarihi\", \"max_results\": 1}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet doğum tarihi\"}, \"multi_intent\": false}"
     },
     {
       "id": "q02",
@@ -2897,144 +2780,144 @@
     }
   ],
   "latencies_ms": [
-    808,
-    907,
-    795,
-    840,
-    1050,
+    930,
+    841,
     878,
-    877,
-    961,
-    793,
-    856,
-    848,
-    773,
-    1046,
-    910,
-    1107,
-    1066,
-    792,
-    922,
-    802,
-    892,
-    756,
-    839,
-    1013,
-    969,
-    838,
-    724,
-    852,
-    903,
-    1257,
-    913,
-    934,
-    1012,
-    984,
-    977,
-    884,
-    952,
-    917,
-    1034,
-    771,
-    852,
-    932,
-    1209,
-    1041,
-    1046,
-    994,
-    1127,
-    881,
-    1073,
-    1082,
-    787,
-    928,
-    883,
-    1087,
-    783,
-    1446,
-    1127,
-    1069,
-    812,
-    1212,
-    1010,
-    1124,
-    1178,
-    1109,
-    961,
-    1024,
-    1249,
-    1031,
-    1060,
-    787,
-    822,
-    939,
-    757,
     963,
-    845,
-    867,
-    777,
-    758,
-    758,
-    750,
-    780,
-    1010,
-    854,
-    994,
-    842,
-    977,
-    830,
-    936,
+    1312,
+    1144,
+    1021,
+    1087,
+    930,
+    951,
+    1068,
+    935,
+    1162,
+    1039,
+    1117,
+    1207,
+    1182,
+    964,
+    957,
+    1017,
+    906,
+    1030,
+    1074,
+    1091,
+    889,
+    1220,
+    1578,
+    2084,
+    1804,
+    1080,
+    1229,
+    1007,
+    1177,
+    1139,
+    1001,
+    948,
+    1238,
+    1630,
+    1465,
+    837,
+    1276,
+    1204,
+    1224,
+    1126,
+    1301,
+    1136,
+    1115,
+    1285,
+    1211,
+    876,
+    1442,
+    829,
+    1273,
+    1164,
+    1474,
+    1381,
+    1169,
+    1053,
+    1320,
     1122,
-    715,
-    1004,
-    741,
-    731,
-    784,
-    928,
-    608,
-    790,
-    786,
-    756,
-    784,
-    793,
-    706,
-    844,
-    734,
-    967,
-    583,
-    789,
-    826,
-    1018,
-    786,
-    734,
-    791,
-    760,
-    739,
-    793,
-    774,
-    641,
-    915,
-    759,
-    734,
-    734,
-    753,
-    786,
-    752,
-    763,
-    781,
-    729,
-    731,
-    785,
-    878,
-    745,
-    1005,
-    1011,
-    669,
+    1236,
+    1355,
+    1250,
+    1119,
+    1259,
+    1371,
+    1156,
+    1123,
+    884,
+    839,
+    1116,
+    873,
+    1123,
+    847,
+    980,
+    911,
+    890,
+    860,
+    937,
+    810,
+    1438,
+    1294,
+    750,
+    1113,
+    936,
+    913,
+    1283,
+    847,
+    808,
+    1119,
+    873,
+    855,
+    911,
+    931,
+    845,
     886,
-    758,
-    955,
-    1008,
-    797,
-    717
+    826,
+    894,
+    868,
+    827,
+    1032,
+    774,
+    829,
+    908,
+    826,
+    1185,
+    859,
+    780,
+    786,
+    768,
+    952,
+    819,
+    858,
+    864,
+    842,
+    870,
+    769,
+    904,
+    832,
+    863,
+    922,
+    821,
+    829,
+    776,
+    880,
+    913,
+    833,
+    830,
+    942,
+    834,
+    1129,
+    948,
+    906,
+    858,
+    909,
+    895,
+    1028,
+    855,
+    1063
   ]
 }

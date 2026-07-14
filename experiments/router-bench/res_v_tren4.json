@@ -1,0 +1,3313 @@
+{
+ "variant": "tren4",
+ "schema": "flag",
+ "model": "qwen35-4b-q8",
+ "summary": {
+  "schema": "flag",
+  "n": 139,
+  "recall_pct": 98.5,
+  "arg_ok_pct": 92.6,
+  "arg_ok_given_right_tool_pct": 94.0,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 44.2,
+  "trap_wrong_n": 29,
+  "trap_total": 52,
+  "high_abstain_pct": 38.5,
+  "high_fired_pct": 61.5,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 5,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 6,
+  "multi_flag_fn": 0,
+  "multi_flag_fp": 0,
+  "multi_flag_tn": 133,
+  "multi_flag_fp_pct": 0.0,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 0,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 17,
+    "pct": 100.0
+   },
+   "high": {
+    "n": 13,
+    "ok": 5,
+    "pct": 38.5
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 15,
+    "pct": 93.8
+   },
+   "tool": {
+    "n": 35,
+    "ok": 35,
+    "pct": 100.0
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 12,
+    "pct": 85.7
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 1,
+    "pct": 12.5
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 2,
+    "pct": 25.0
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 8,
+    "pct": 36.4
+   }
+  },
+  "splat_targets": {
+   "light_control": 11,
+   "memory_add": 7,
+   "translate": 4,
+   "web_search": 3,
+   "reminder_list": 2,
+   "media_play": 2,
+   "diet_log": 1,
+   "mail_check": 1,
+   "memory_search": 1,
+   "volume_set": 1,
+   "shopping_list": 1,
+   "weather": 1,
+   "clock_now": 1,
+   "match_result": 1
+  },
+  "old35_pct": 88.6,
+  "old35": "31/35",
+  "lat_p50_ms": 1974,
+  "lat_mean_ms": 1967,
+  "lat_p95_ms": 2379
+ },
+ "errors": [
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak\n\n(English translation of the sentence above, to help you understand it: What will the weather be like in Izmir this weekend?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": {
+    "city": "İzmir",
+    "day": "weekend"
+   }
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel reminder at 3 p.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\n\n(English translation of the sentence above, to help you understand it: Note that Ismet's passport expired on March 12, 2027)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": {
+    "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
+    "scope": "private"
+   }
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\n\n(English translation of the sentence above, to help you understand it: Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "title": "Dr. Kaya ile doktor randevusu",
+    "at": "cuma 21:45"
+   }
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir\n\n(English translation of the sentence above, to help you understand it: Turn 'I miss you' into Kurdish)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": {
+    "text": "seni özledim",
+    "target_lang": "kurmanji"
+   }
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Neva'ya yemek hazır de\n\n(English translation of the sentence above, to help you understand it: Say dinner is ready for Neva)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": [
+    {
+     "food": "yemek",
+     "meal": "dinner"
+    }
+   ]
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Ayhan'a mesaj bırak, eve geç geleceğim\n\n(English translation of the sentence above, to help you understand it: Leave a message for Ayhan, I'll be home late)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Ayhan'a mesaj: eve geç geleceğim",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum\n\n(English translation of the sentence above, to help you understand it: Get Neva's room, I want to talk to her.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva'nın odası",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "okula mail at, Neva yarın gelmeyecek de\n\n(English translation of the sentence above, to help you understand it: email the school, say Neva won't be coming tomorrow)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_args": [
+    {
+     "filter": "meeting"
+    }
+   ]
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "bütün hatırlatmalarımı iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel all my reminders)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "profil hafızamı temizle, çok uzadı\n\n(English translation of the sentence above, to help you understand it: Clear my profile memory, it's gone too far)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_args": [
+    {
+     "query": "",
+     "limit": 10
+    }
+   ]
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "aile hafızasını sil, sıfırdan başlayalım\n\n(English translation of the sentence above, to help you understand it: Delete family memory, let's start from scratch)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "",
+     "scope": "family"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle\n\n(English translation of the sentence above, to help you understand it: Tell everyone in the house that the food is at 8 o'clock.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle\n\n(English translation of the sentence above, to help you understand it: Turn on the light of the hall and tell Neva to come down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat\n\n(English translation of the sentence above, to help you understand it: Add milk to the list and remind me to go to the grocery store at 6:00)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur\n\n(English translation of the sentence above, to help you understand it: Tomorrow, the weather is like, and you set an alarm for 7.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle\n\n(English translation of the sentence above, to help you understand it: Write my breakfast and tell me how many calories I've taken today)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs\n\n(English translation of the sentence above, to help you understand it: Play some music and turn the lights down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\n\n(English translation of the sentence above, to help you understand it: Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "YARIM-IS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "kombiyi aç, üşüdüm\n\n(English translation of the sentence above, to help you understand it: Open the boiler, I'm cold)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat\n\n(English translation of the sentence above, to help you understand it: Close curtains)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "odun ocagi",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "televizyonu aç, habere geç\n\n(English translation of the sentence above, to help you understand it: Turn on the TV, get on the news)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "platform": "youtube"
+    }
+   ]
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "televizyonun sesini kıs\n\n(English translation of the sentence above, to help you understand it: Turn the TV down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "direction": "down"
+    }
+   ]
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "ön kapıyı kilitle\n\n(English translation of the sentence above, to help you understand it: Lock the front door)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "front door",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "kaloriferi iki derece aç\n\n(English translation of the sentence above, to help you understand it: Turn the radiator on at two degrees)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kaloriferi",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "salonu süpür\n\n(English translation of the sentence above, to help you understand it: Sweep the hall)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "salon",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "fırını aç, 180 derece\n\n(English translation of the sentence above, to help you understand it: Open the oven, 180 degrees)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır\n\n(English translation of the sentence above, to help you understand it: Print the shopping list)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "eve taksi çağır\n\n(English translation of the sentence above, to help you understand it: Call a taxi home)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "eve taksi çağır",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "wifi modemi kapat\n\n(English translation of the sentence above, to help you understand it: Turn off wifi modem)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "wifi modem",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "kombi aç\n\n(English translation of the sentence above, to help you understand it: open combi)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kombi",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat\n\n(English translation of the sentence above, to help you understand it: Close curtains)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "odun ocagi",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle\n\n(English translation of the sentence above, to help you understand it: Sing pizza for tonight)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "pizza",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum\n\n(English translation of the sentence above, to help you understand it: I argued with Neva today, I feel terrible.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Bugün Neva'yla tartıştım, çok kötü hissediyorum.",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "bu havalar son zamanlarda beni üzüyor\n\n(English translation of the sentence above, to help you understand it: This weather has been upsetting me lately.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": [
+    {
+     "city": "",
+     "day": ""
+    }
+   ]
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "aynısından bir tane daha\n\n(English translation of the sentence above, to help you understand it: another of the same)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "aynısından bir tane daha",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "onu da ekle\n\n(English translation of the sentence above, to help you understand it: Add it)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "onu da ekle",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "hayır, diğeri\n\n(English translation of the sentence above, to help you understand it: No, the other)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "hayır, diğeri",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "bir daha yap\n\n(English translation of the sentence above, to help you understand it: Do it again)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bir daha yap",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "onu iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel it)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "peki ya yarın\n\n(English translation of the sentence above, to help you understand it: And tomorrow?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_args": [
+    {
+     "kind": "date"
+    }
+   ]
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "onu 5'e çevir\n\n(English translation of the sentence above, to help you understand it: Turn it into 5)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "onu 5'e çevir",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet kaç yılında doğdu\n\n(English translation of the sentence above, to help you understand it: Fatih Sultan Mehmet was born in how many years)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Fatih Sultan Mehmet doğum tarihi",
+     "max_results": 3
+    }
+   ]
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "gökyüzü neden mavi\n\n(English translation of the sentence above, to help you understand it: Why the sky is blue)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "gökyüzü neden mavi",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Avustralya'nın başkenti neresi\n\n(English translation of the sentence above, to help you understand it: What is the capital of Australia)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Avustralya başkenti",
+     "max_results": 1
+    }
+   ]
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "fotosentez ne demek\n\n(English translation of the sentence above, to help you understand it: What is photosynthesis)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "fotosentez ne demek",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "bir futbol takımında kaç oyuncu vardır\n\n(English translation of the sentence above, to help you understand it: How many players are in a football team)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_args": [
+    {
+     "team": ""
+    }
+   ]
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Sefiller'i kim yazdı\n\n(English translation of the sentence above, to help you understand it: Who wrote The Miserables?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Sefiller romanı kim yazdı",
+     "max_results": 3
+    }
+   ]
+  }
+ ],
+ "pn": {
+  "n": 20,
+  "tool_ok": 19,
+  "tool_pct": 95.0,
+  "name_ok": 18,
+  "name_pct": 90.0,
+  "rows": [
+   {
+    "id": "pn01",
+    "tr": "Kuzu Kuzu çal",
+    "en": "Play Lamb Lamb",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Kuzu Kuzu",
+     "track": "çal",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn02",
+    "tr": "Tarkan'dan Şımarık çal",
+    "en": "Play Spoiled by Tarkan",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Tarkan",
+     "track": "Şımarık",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn03",
+    "tr": "Sezen Aksu'dan Gülümse çal",
+    "en": "Smile Play from Sezen Aksu",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sezen Aksu",
+     "track": "Gülümse",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn04",
+    "tr": "Duman'dan Her Şeyi Yak çal",
+    "en": "Burn Everything from Smoke Play",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Duman'dan Her Şeyi Yak çal",
+     "scope": "private"
+    },
+    "tool_ok": false,
+    "name_ok": false
+   },
+   {
+    "id": "pn05",
+    "tr": "Sıla'nın Vaziyetler şarkısını aç",
+    "en": "Open Sila's State of the State song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sıla",
+     "track": "Vaziyetler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn06",
+    "tr": "Müslüm Gürses'ten Affet çal",
+    "en": "Forgive from the Musicians",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Müslüm Gürses",
+     "track": "Affet",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn07",
+    "tr": "Ezhel'in Geceler şarkısını çal",
+    "en": "Play Ezhel's Nights song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "",
+     "track": "Ezhel'in Geceleri",
+     "platform": ""
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn08",
+    "tr": "Yüzüklerin Efendisi'ni aç",
+    "en": "Open the Lord of the Rings",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Yüzüklerin Efendisi",
+     "platform": "youtube"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn09",
+    "tr": "Neva'nın doğum günü 12 Mart, aklında tut",
+    "en": "Neva's birthday is March 12, keep it in mind",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Neva'nın doğum günü 12 Mart.",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn10",
+    "tr": "akşam 7'de Ayhan'ı aramamı hatırlat",
+    "en": "Remind me to call Ayhan at 7 p.m.",
+    "gold": [
+     "med_reminder",
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Ayhan'ı ara",
+     "at": "19:00"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn11",
+    "tr": "Neva'nın matematik sınavı ne zaman",
+    "en": "When is Neva's math test",
+    "gold": [
+     "school_exam_schedule"
+    ],
+    "pred_tools": [
+     "school_exam_schedule"
+    ],
+    "args": {
+     "person": "Neva",
+     "subject": "matematik"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn12",
+    "tr": "Ayhan'ın telefon numarası neydi, hafızana bak",
+    "en": "What was Ayhan's phone number, look at your memory",
+    "gold": [
+     "memory_search"
+    ],
+    "pred_tools": [
+     "memory_search"
+    ],
+    "args": {
+     "query": "Ayhan telefon numarası"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn13",
+    "tr": "bundan sonra bana Ayhan Bey diye hitap et",
+    "en": "From now on, call me Mr. Ayhan.",
+    "gold": [
+     "soul_add"
+    ],
+    "pred_tools": [
+     "soul_add"
+    ],
+    "args": {
+     "text": "Ayhan Bey",
+     "scope": "self"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn14",
+    "tr": "Beşiktaş maçı kaç kaç bitti",
+    "en": "How many games are finished",
+    "gold": [
+     "match_result"
+    ],
+    "pred_tools": [
+     "match_result"
+    ],
+    "args": {
+     "team": "Beşiktaş"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn15",
+    "tr": "Şanlıurfa'da hava nasıl",
+    "en": "How is the weather in Şanlıurfa",
+    "gold": [
+     "weather"
+    ],
+    "pred_tools": [
+     "weather"
+    ],
+    "args": {
+     "city": "Şanlıurfa"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn16",
+    "tr": "öğlen İskender yedim, diyetime yaz",
+    "en": "I ate Alexander at noon, write to my diet",
+    "gold": [
+     "diet_log"
+    ],
+    "pred_tools": [
+     "diet_log"
+    ],
+    "args": {
+     "food": "İskender",
+     "meal": "öğlen"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn17",
+    "tr": "alışveriş listesine Torku süt ve Eti bisküvi ekle",
+    "en": "Add Torku milk and meat biscuits to the shopping list",
+    "gold": [
+     "shopping_add"
+    ],
+    "pred_tools": [
+     "shopping_add"
+    ],
+    "args": {
+     "items": "Torku süt ve Eti bisküvi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn18",
+    "tr": "cumartesi Neva'yı Bostancı'dan almam gerek, hatırlat",
+    "en": "I need to get Neva from Bostancı on Saturday, remind me.",
+    "gold": [
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Neva'yı Bostancı'dan almak",
+     "at": "cumartesi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn19",
+    "tr": "Kadıköy'deki dükkanın adı Çiya, unutma",
+    "en": "The shop in Kadıköy is called Chiya, remember",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Kadıköy'deki dükkanın adı Çiya",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn20",
+    "tr": "Atatürk Havalimanı ile ilgili haberleri ara",
+    "en": "Search for news about Atatürk Airport",
+    "gold": [
+     "web_search"
+    ],
+    "pred_tools": [
+     "web_search"
+    ],
+    "args": {
+     "query": "Atatürk Havalimanı haberleri",
+     "max_results": 5
+    },
+    "tool_ok": true,
+    "name_ok": true
+   }
+  ]
+ },
+ "lat_p50_all_ms": 1975,
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "yarın değil, öbür gün sabah 9'a alarm kur\n\n(English translation of the sentence above, to help you understand it: Not tomorrow, but the next day, set an alarm for 9 a.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "",
+      "at": "9:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "Ayşe'nin sınavı ne zaman\n\n(English translation of the sentence above, to help you understand it: When is Ayşe's exam)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Ayşe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Sezen Aksu'dan bir şey çal\n\n(English translation of the sentence above, to help you understand it: Play something from Sezen Aksu)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Sezen Aksu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "mailime bak, bugün toplantı var mı\n\n(English translation of the sentence above, to help you understand it: See my email, is there a meeting today?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "her sabah 8'de tansiyon ilacımı almamı hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me to take my blood pressure medication every morning at 8:00.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "tansiyon ilacı",
+      "at": "08:00",
+      "person": "ben"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak\n\n(English translation of the sentence above, to help you understand it: What will the weather be like in Izmir this weekend?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "İzmir",
+      "day": "weekend"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "alışveriş listesine süt, ekmek ve yumurta ekle\n\n(English translation of the sentence above, to help you understand it: Add milk, bread and eggs to the shopping list)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt, ekmek ve yumurta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "öğlen 3 köfte yedim, diyetime yaz\n\n(English translation of the sentence above, to help you understand it: I had 3 meatballs at noon, write to my diet)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "köfte",
+      "meal": "öğlen",
+      "amount": "3"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "bugün toplam kaç kalori aldım\n\n(English translation of the sentence above, to help you understand it: How many calories did I get today?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "bugün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "Galatasaray dün kaç kaç yaptı\n\n(English translation of the sentence above, to help you understand it: How many did Galatasaray make yesterday?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Galatasaray"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "salondaki ışıkları kapat\n\n(English translation of the sentence above, to help you understand it: Turn off the lights in the hall)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "şu an saat kaç\n\n(English translation of the sentence above, to help you understand it: What time is it now?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "dedemin doğum günü 3 Mayıs, aklında tut\n\n(English translation of the sentence above, to help you understand it: Grandpa's birthday is May 3, keep it in mind)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Dedemin doğum günü 3 Mayıs.",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "annemin doğum gününü sana söylemiştim, ne zamandı\n\n(English translation of the sentence above, to help you understand it: I told you about my mother's birthday, when)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin doğum günü"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat\n\n(English translation of the sentence above, to help you understand it: Parents' meeting at 2:00 p.m. Thursday, remind me)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Veli toplantısı",
+      "at": "perşembe 14:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal\n\n(English translation of the sentence above, to help you understand it: Play Lamb Lamb from Tarkan for my father)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Tarkan",
+      "track": "Kuzu Kuzu",
+      "platform": "spotify",
+      "for_whom": "babam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "bugünün tarihi ne\n\n(English translation of the sentence above, to help you understand it: What is today's date)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "makarna için 12 dakikalık zamanlayıcı kur\n\n(English translation of the sentence above, to help you understand it: Set the 12-minute timer for pasta)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 12,
+      "label": "makarna"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "alışveriş listesini oku bana\n\n(English translation of the sentence above, to help you understand it: Read me the shopping list)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "mutfak ışığını aç\n\n(English translation of the sentence above, to help you understand it: turn on kitchen light)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "mutfak",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "müziği durdur\n\n(English translation of the sentence above, to help you understand it: Stop the music)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "sesini biraz kıs, çok yüksek konuşuyorsun\n\n(English translation of the sentence above, to help you understand it: Turn your voice down a little, you're talking too loud)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "internette yumurta kaç dakika haşlanır diye ara\n\n(English translation of the sentence above, to help you understand it: Search the Internet for how many minutes the egg is boiled)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "yumurta kaç dakika haşlanır",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "'günaydın' kelimesini Almanca'ya çevir\n\n(English translation of the sentence above, to help you understand it: Translate the word 'good morning' into German)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "günaydın",
+      "target_lang": "Almanca"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "hatırlatmalarım neler\n\n(English translation of the sentence above, to help you understand it: What are my reminders)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "Fenerbahçe dün akşam ne yaptı\n\n(English translation of the sentence above, to help you understand it: What Fenerbahçe did last night)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Fenerbahçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "acil mail var mı\n\n(English translation of the sentence above, to help you understand it: Is there an emergency email)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "urgent"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "öğle yemeğine bir kase mercimek çorbası yaz\n\n(English translation of the sentence above, to help you understand it: Write a bowl of lentil soup for lunch)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "mercimek çorbası",
+      "meal": "öğle yemeği"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "takvime ekle: cumartesi 11'de diş hekimi\n\n(English translation of the sentence above, to help you understand it: Add to calendar: dentist on Saturday 11)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Diş hekimi",
+      "at": "cumartesi 11"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "yarın Ankara'da hava nasıl\n\n(English translation of the sentence above, to help you understand it: How is the weather in Ankara tomorrow)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "20 dakika sonra tesisatçıyı aramamı hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me to call the plumber in 20 minutes.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "tesisatçıyı ara",
+      "in_minutes": 20
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "bütün ışıkları kapat, yatıyoruz\n\n(English translation of the sentence above, to help you understand it: Turn off all the lights, we're going to bed)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bütün",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "bu yıl fizik Nobel'ini kim kazandı internetten bak\n\n(English translation of the sentence above, to help you understand it: See who won the physics Nobel this year online)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "physics Nobel prize winner this year",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "Neva'nın matematik sınavı ne zaman\n\n(English translation of the sentence above, to help you understand it: When is Neva's math test)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Neva",
+      "subject": "matematik"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "listeye yoğurt ve domates ekle\n\n(English translation of the sentence above, to help you understand it: Add yogurt and tomatoes to the list)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "yoğurt ve domates"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "dünkü kalori özetimi ver\n\n(English translation of the sentence above, to help you understand it: Give me yesterday's calorie summary)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "dün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "spotify'dan biraz caz çal\n\n(English translation of the sentence above, to help you understand it: Play some jazz from Spotify)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "spotify",
+      "artist": "",
+      "track": "",
+      "for_whom": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel\n\n(English translation of the sentence above, to help you understand it: Translate this sentence into English: the weather is beautiful)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "hava çok güzel",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "5 dakika zamanlayıcı ver\n\n(English translation of the sentence above, to help you understand it: Give me a 5 minute timer)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "sesini aç biraz\n\n(English translation of the sentence above, to help you understand it: Turn it up a bit)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "up"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma\n\n(English translation of the sentence above, to help you understand it: Remember that Neva is a peanut allergy.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi vardır.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me tonight that Neva is allergic to peanuts.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi",
+      "at": "23:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et\n\n(English translation of the sentence above, to help you understand it: Note that our wedding anniversary is September 14th.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Evlilik yıldönümümüz 14 Eylül.",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "yarın 6:30'da beni uyandır\n\n(English translation of the sentence above, to help you understand it: Wake me up tomorrow at 6:30)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Uyanıl",
+      "at": "yarın 06:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et\n\n(English translation of the sentence above, to help you understand it: From now on, call me Mr. Ayhan, not just Ayhan.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "Ayhan Bey",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun\n\n(English translation of the sentence above, to help you understand it: You talk a lot, so your answers are shorter from now on.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "çok konuşma, cevaplar kısa olsun",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "annemin ilacı hakkında sana ne söylemiştim\n\n(English translation of the sentence above, to help you understand it: What did I tell you about my mother's medicine?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin ilacı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "annem kalp hapını akşam 9'da içiyor, bunu kur\n\n(English translation of the sentence above, to help you understand it: My mother drinks her heart pill at 9 p.m., so set it up.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "kalp hapı",
+      "at": "akşam 9'da",
+      "person": "annem"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "aile hafızasına yaz: pazar günü anneanneye gidiyoruz\n\n(English translation of the sentence above, to help you understand it: Write in family memory: we're going to Grandma's on Sunday)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "pazar günü anneanneye gidiyoruz",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel reminder at 3 p.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "diş hekimi için hatırlatmam var mıydı\n\n(English translation of the sentence above, to help you understand it: Do I have a reminder for the dentist?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "araba sigortası hakkında ne dediğimi hafızamda ara\n\n(English translation of the sentence above, to help you understand it: Call me in memory of what I said about car insurance)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "araba sigortası"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "araba sigortasının güncel fiyatını internetten bak\n\n(English translation of the sentence above, to help you understand it: See the current price of car insurance online)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "araba sigortası fiyatı 2024",
+      "max_results": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "bunu bana hatırlatma, sadece aklında tut\n\n(English translation of the sentence above, to help you understand it: Don't remind me of that, just keep it in mind)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Don't remind me of that, just keep it in mind.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me to renew my passport Tuesday at 7:30 p.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "pasaportumu yenile",
+      "at": "haftaya salı 19:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "Neva'nın kimya sınavı 21'inde, takvime ekle\n\n(English translation of the sentence above, to help you understand it: On Neva's chemistry exam 21, add to calendar)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva'nın Kimya Sınavı",
+      "at": "21"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me to remove the bread from the oven in an hour and a half.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "ekmeği fırından çıkarmak",
+      "in_minutes": 90
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "iki buçuk dakikalık zamanlayıcı kur\n\n(English translation of the sentence above, to help you understand it: Set timer of two and a half minutes)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 2.5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\n\n(English translation of the sentence above, to help you understand it: Note that Ismet's passport expired on March 12, 2027)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "öbür gün Diyarbakır'da hava\n\n(English translation of the sentence above, to help you understand it: The next day, the weather in Diyarbakir)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakır",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "akşam yemeğine 180 gram ızgara tavuk yaz\n\n(English translation of the sentence above, to help you understand it: Write 180 grams of grilled chicken for dinner)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "ızgara tavuk",
+      "meal": "akşam yemeği",
+      "amount": "180 gram"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "yarın öğlen Ayhan'a vergi ödemesini hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind Ayhan to pay taxes tomorrow at noon)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Ayhan'a vergi ödemesini hatırlat",
+      "at": "yarın 12:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal\n\n(English translation of the sentence above, to help you understand it: Play Purple and Beyond from YouTube Have a Problem)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Mor ve Ötesi",
+      "track": "Bir Derdim Var",
+      "platform": "youtube"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "yatak odası ışıklarını kıs\n\n(English translation of the sentence above, to help you understand it: Turn down the bedroom lights)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "yatak odası",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "ayın birinde kirayı ödemeyi hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind to pay the rent on one month)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Kirayı ödemek",
+      "at": "ayın birinde"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\n\n(English translation of the sentence above, to help you understand it: Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Dr. Kaya ile doktor randevusu",
+      "at": "cuma 21:45"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir\n\n(English translation of the sentence above, to help you understand it: Turn 'I miss you' into Kurdish)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "seni özledim",
+      "target_lang": "kurmanji"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "maç başlamadan yarım saat önce televizyonu açmamı hatırlat\n\n(English translation of the sentence above, to help you understand it: Remind me to turn on the TV half an hour before the game starts.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "televizyonu aç",
+      "at": "yarım saat önce"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "hesabımdan Ali'ye 500 lira gönder\n\n(English translation of the sentence above, to help you understand it: Send $500 from my account to Ali)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "kardeşimin hesabına şimdi 2000 lira gönder\n\n(English translation of the sentence above, to help you understand it: Send $2,000 to my brother's account now)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Neva'ya yemek hazır de\n\n(English translation of the sentence above, to help you understand it: Say dinner is ready for Neva)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "yemek",
+      "meal": "dinner"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Ayhan'a mesaj bırak, eve geç geleceğim\n\n(English translation of the sentence above, to help you understand it: Leave a message for Ayhan, I'll be home late)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Ayhan'a mesaj: eve geç geleceğim",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum\n\n(English translation of the sentence above, to help you understand it: Get Neva's room, I want to talk to her.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva'nın odası",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "patronuma bugün hasta olduğumu yazan bir mail gönder\n\n(English translation of the sentence above, to help you understand it: Send an email to my boss saying I'm sick today.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "okula mail at, Neva yarın gelmeyecek de\n\n(English translation of the sentence above, to help you understand it: email the school, say Neva won't be coming tomorrow)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "diş hekimi randevusunu takvimden sil\n\n(English translation of the sentence above, to help you understand it: Delete the dentist appointment from the calendar)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "bütün hatırlatmalarımı iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel all my reminders)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "profil hafızamı temizle, çok uzadı\n\n(English translation of the sentence above, to help you understand it: Clear my profile memory, it's gone too far)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "",
+      "limit": 10
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "elektrik şirketine 750 lira öde\n\n(English translation of the sentence above, to help you understand it: Pay $750 to the electricity company)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "aile hafızasını sil, sıfırdan başlayalım\n\n(English translation of the sentence above, to help you understand it: Delete family memory, let's start from scratch)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle\n\n(English translation of the sentence above, to help you understand it: Tell everyone in the house that the food is at 8 o'clock.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle\n\n(English translation of the sentence above, to help you understand it: Turn on the light of the hall and tell Neva to come down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat\n\n(English translation of the sentence above, to help you understand it: Add milk to the list and remind me to go to the grocery store at 6:00)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur\n\n(English translation of the sentence above, to help you understand it: Tomorrow, the weather is like, and you set an alarm for 7.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "",
+      "day": "yarın"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle\n\n(English translation of the sentence above, to help you understand it: Write my breakfast and tell me how many calories I've taken today)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "kahvaltı"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs\n\n(English translation of the sentence above, to help you understand it: Play some music and turn the lights down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {}
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\n\n(English translation of the sentence above, to help you understand it: Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi var.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "kombiyi aç, üşüdüm\n\n(English translation of the sentence above, to help you understand it: Open the boiler, I'm cold)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "klimayı 22 dereceye ayarla\n\n(English translation of the sentence above, to help you understand it: Set air conditioning to 22 degrees)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat\n\n(English translation of the sentence above, to help you understand it: Close curtains)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "odun ocagi",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "televizyonu aç, habere geç\n\n(English translation of the sentence above, to help you understand it: Turn on the TV, get on the news)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "youtube"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "bulaşık makinesini başlat\n\n(English translation of the sentence above, to help you understand it: Start the dishwasher)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "çamaşır makinesini pamuklu programında başlat\n\n(English translation of the sentence above, to help you understand it: Start the washing machine in the cotton program)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "televizyonun sesini kıs\n\n(English translation of the sentence above, to help you understand it: Turn the TV down)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "garaj kapısını aç\n\n(English translation of the sentence above, to help you understand it: Open the garage door)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "ön kapıyı kilitle\n\n(English translation of the sentence above, to help you understand it: Lock the front door)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "front door",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "kaloriferi iki derece aç\n\n(English translation of the sentence above, to help you understand it: Turn the radiator on at two degrees)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kaloriferi",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "salonu süpür\n\n(English translation of the sentence above, to help you understand it: Sweep the hall)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "fırını aç, 180 derece\n\n(English translation of the sentence above, to help you understand it: Open the oven, 180 degrees)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "balkondaki çiçekleri sula\n\n(English translation of the sentence above, to help you understand it: water the flowers on the balcony)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır\n\n(English translation of the sentence above, to help you understand it: Print the shopping list)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "bu akşam için balık restoranından masa ayırt\n\n(English translation of the sentence above, to help you understand it: Book a table at a fish restaurant for tonight)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "eve taksi çağır\n\n(English translation of the sentence above, to help you understand it: Call a taxi home)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "eve taksi çağır",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "wifi modemi kapat\n\n(English translation of the sentence above, to help you understand it: Turn off wifi modem)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "wifi modem",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "kombi aç\n\n(English translation of the sentence above, to help you understand it: open combi)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kombi",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat\n\n(English translation of the sentence above, to help you understand it: Close curtains)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "odun ocagi",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "borsadan 10 lot Garanti hissesi al\n\n(English translation of the sentence above, to help you understand it: Get 10 lot Guarantee shares from the stock exchange)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle\n\n(English translation of the sentence above, to help you understand it: Sing pizza for tonight)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "pizza",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "arabayı uzaktan çalıştır\n\n(English translation of the sentence above, to help you understand it: Start the car remotely)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "bugün çok sıkıldım\n\n(English translation of the sentence above, to help you understand it: I'm bored today.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "sana dedemin köyünü anlatayım mı\n\n(English translation of the sentence above, to help you understand it: Shall I tell you about my grandfather's village?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "bana bir fıkra anlat\n\n(English translation of the sentence above, to help you understand it: Tell me a joke)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "sence hayatın anlamı ne\n\n(English translation of the sentence above, to help you understand it: What do you think life means)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "seni çok sevdiğimi biliyorsun değil mi\n\n(English translation of the sentence above, to help you understand it: You know I love you a lot, don't you?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "of, bugün çok yorgunum\n\n(English translation of the sentence above, to help you understand it: Oh, I'm so tired today)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "en sevdiğin yemek ne\n\n(English translation of the sentence above, to help you understand it: What is your favorite food)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "biraz sohbet etmek istiyorum\n\n(English translation of the sentence above, to help you understand it: I want to have a little chat)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "acaba yarın mutlu olacak mıyım\n\n(English translation of the sentence above, to help you understand it: Will I be happy tomorrow?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "iyi geceler canım\n\n(English translation of the sentence above, to help you understand it: Good night, my dear.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "sırtım yine ağrıyor, yaşlanmak zor\n\n(English translation of the sentence above, to help you understand it: My back hurts again, it's hard to age)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum\n\n(English translation of the sentence above, to help you understand it: I argued with Neva today, I feel terrible.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Bugün Neva'yla tartıştım, çok kötü hissediyorum.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "bizden hiç sıkılıyor musun\n\n(English translation of the sentence above, to help you understand it: Do you ever get bored of us?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "bu havalar son zamanlarda beni üzüyor\n\n(English translation of the sentence above, to help you understand it: This weather has been upsetting me lately.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "",
+      "day": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "aynısından bir tane daha\n\n(English translation of the sentence above, to help you understand it: another of the same)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "aynısından bir tane daha",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "onu da ekle\n\n(English translation of the sentence above, to help you understand it: Add it)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "onu da ekle",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "hayır, diğeri\n\n(English translation of the sentence above, to help you understand it: No, the other)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "hayır, diğeri",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "bir daha yap\n\n(English translation of the sentence above, to help you understand it: Do it again)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bir daha yap",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "onu iptal et\n\n(English translation of the sentence above, to help you understand it: Cancel it)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "peki ya yarın\n\n(English translation of the sentence above, to help you understand it: And tomorrow?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "evet, öyle yap\n\n(English translation of the sentence above, to help you understand it: Yes, do so.)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "onu 5'e çevir\n\n(English translation of the sentence above, to help you understand it: Turn it into 5)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "onu 5'e çevir",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet kaç yılında doğdu\n\n(English translation of the sentence above, to help you understand it: Fatih Sultan Mehmet was born in how many years)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Fatih Sultan Mehmet doğum tarihi",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "insan vücudunda kaç kemik var\n\n(English translation of the sentence above, to help you understand it: How many bones are in the human body)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "gökyüzü neden mavi\n\n(English translation of the sentence above, to help you understand it: Why the sky is blue)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "gökyüzü neden mavi",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Avustralya'nın başkenti neresi\n\n(English translation of the sentence above, to help you understand it: What is the capital of Australia)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Avustralya başkenti",
+      "max_results": 1
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "mercimek çorbası nasıl yapılır\n\n(English translation of the sentence above, to help you understand it: How to make lentil soup)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "fotosentez ne demek\n\n(English translation of the sentence above, to help you understand it: What is photosynthesis)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "fotosentez ne demek",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "bir futbol takımında kaç oyuncu vardır\n\n(English translation of the sentence above, to help you understand it: How many players are in a football team)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Sefiller'i kim yazdı\n\n(English translation of the sentence above, to help you understand it: Who wrote The Miserables?)\nThe translation is only an aid; it may mangle names. IF you call a tool, copy the argument values from the Turkish sentence, not from the translation.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Sefiller romanı kim yazdı",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  }
+ ]
+}

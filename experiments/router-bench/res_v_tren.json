@@ -1,0 +1,3504 @@
+{
+ "variant": "tren",
+ "schema": "flag",
+ "model": "qwen35-4b-q8",
+ "summary": {
+  "schema": "flag",
+  "n": 139,
+  "recall_pct": 98.5,
+  "arg_ok_pct": 91.2,
+  "arg_ok_given_right_tool_pct": 92.5,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 34.6,
+  "trap_wrong_n": 34,
+  "trap_total": 52,
+  "high_abstain_pct": 23.1,
+  "high_fired_pct": 76.9,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 5,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 5,
+  "multi_flag_fn": 1,
+  "multi_flag_fp": 1,
+  "multi_flag_tn": 132,
+  "multi_flag_fp_pct": 0.8,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 0,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 17,
+    "pct": 100.0
+   },
+   "high": {
+    "n": 13,
+    "ok": 3,
+    "pct": 23.1
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 15,
+    "pct": 93.8
+   },
+   "tool": {
+    "n": 35,
+    "ok": 35,
+    "pct": 100.0
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 10,
+    "pct": 71.4
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 4,
+    "pct": 50.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 2,
+    "pct": 25.0
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 2,
+    "pct": 9.1
+   }
+  },
+  "splat_targets": {
+   "light_control": 18,
+   "memory_add": 11,
+   "calendar_add": 2,
+   "translate": 2,
+   "web_search": 2,
+   "mail_check": 1,
+   "reminder_list": 1,
+   "volume_set": 1,
+   "shopping_list": 1,
+   "media_play": 1,
+   "diet_log": 1,
+   "weather": 1,
+   "match_result": 1,
+   "memory_search": 1
+  },
+  "old35_pct": 77.1,
+  "old35": "27/35",
+  "lat_p50_ms": 1058,
+  "lat_mean_ms": 1129,
+  "lat_p95_ms": 1821
+ },
+ "errors": [
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu hafta sonu İzmir'de hava nasıl olacak\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat will the weather be like in Izmir this weekend?",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": {
+    "city": "İzmir",
+    "day": "weekend"
+   }
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsaat 3'teki hatırlatmayı iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel reminder at 3 p.m.",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nhaftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to renew my passport Tuesday at 7:30 p.m.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "text": "pasaportumu yenilemeyi hatırlat",
+    "at": "haftaya salı akşam yedi buçukta"
+   }
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nİsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nNote that Ismet's passport expired on March 12, 2027",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": {
+    "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+    "scope": "private"
+   }
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nayın birinde kirayı ödemeyi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind to pay the rent on one month",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "text": "kirayı ödemeyi hatırlat",
+    "in_minutes": 30
+   }
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ngelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "title": "Doktor Randevusu - Dr. Kaya",
+    "at": "2023-10-27 21:45"
+   }
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'ya yemek hazır de\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSay dinner is ready for Neva",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nAyhan'a mesaj bırak, eve geç geleceğim\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nLeave a message for Ayhan, I'll be home late",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Ayhan'a mesaj bırak, eve geç geleceğim",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın odasını bağla, onunla konuşmak istiyorum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGet Neva's room, I want to talk to her.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva'nın odası",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nokula mail at, Neva yarın gelmeyecek de\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nemail the school, say Neva won't be coming tomorrow",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_args": [
+    {
+     "filter": "meeting"
+    }
+   ]
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ndiş hekimi randevusunu takvimden sil\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDelete the dentist appointment from the calendar",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "title": "diş hekimi randevusu",
+     "at": "sil"
+    }
+   ]
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbütün hatırlatmalarımı iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel all my reminders",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nprofil hafızamı temizle, çok uzadı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClear my profile memory, it's gone too far",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "",
+     "scope": ""
+    }
+   ]
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nelektrik şirketine 750 lira öde\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPay $750 to the electricity company",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "elektrik şirketine 750 lira öde",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naile hafızasını sil, sıfırdan başlayalım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDelete family memory, let's start from scratch",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "",
+     "scope": "family"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nevdeki herkese yemeğin 8'de olduğunu söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTell everyone in the house that the food is at 8 o'clock.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsalonun ışığını aç ve Neva'ya aşağı gelmesini söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn on the light of the hall and tell Neva to come down",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nlisteye süt ekle ve saat 6'da markete gitmemi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd milk to the list and remind me to go to the grocery store at 6:00",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın hava nasıl, bir de 7'ye alarm kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTomorrow, the weather is like, and you set an alarm for 7.",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkahvaltımı yaz ve bugün kaç kalori aldığımı söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWrite my breakfast and tell me how many calories I've taken today",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbiraz müzik çal ve ışıkları kıs\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay some music and turn the lights down",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "why": "YARIM-IS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkombiyi aç, üşüdüm\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the boiler, I'm cold",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living_room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nperdeleri kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClose curtains",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living room",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ntelevizyonu aç, habere geç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn on the TV, get on the news",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living_room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbulaşık makinesini başlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStart the dishwasher",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nçamaşır makinesini pamuklu programında başlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStart the washing machine in the cotton program",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "bathroom",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ntelevizyonun sesini kıs\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn the TV down",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "direction": "down"
+    }
+   ]
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ngaraj kapısını aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the garage door",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "garage",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nön kapıyı kilitle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nLock the front door",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "front door",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkaloriferi iki derece aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn the radiator on at two degrees",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "bathroom",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsalonu süpür\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSweep the hall",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "salon",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nfırını aç, 180 derece\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the oven, 180 degrees",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbalkondaki çiçekleri sula\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nwater the flowers on the balcony",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "balkon",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nalışveriş listesini yazdır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPrint the shopping list",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu akşam için balık restoranından masa ayırt\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nBook a table at a fish restaurant for tonight",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "title": "Balık Restoranı Masa Ayırma",
+     "at": "bu akşam"
+    }
+   ]
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\neve taksi çağır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCall a taxi home",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "eve",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nwifi modemi kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn off wifi modem",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "wifi modemi kapat",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkombi aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nopen combi",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nperdeleri kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClose curtains",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living room",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nborsadan 10 lot Garanti hissesi al\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGet 10 lot Guarantee shares from the stock exchange",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "borsadan 10 lot Garanti hissesi al",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu akşam için pizza söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSing pizza for tonight",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "pizza",
+     "track": "söyle",
+     "platform": "spotify"
+    }
+   ]
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nen sevdiğin yemek ne\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is your favorite food",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": [
+    {
+     "food": "en sevdiğin yemek"
+    }
+   ]
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\niyi geceler canım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGood night, my dear.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "iyi geceler canım",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbugün Neva'yla tartıştım, çok kötü hissediyorum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI argued with Neva today, I feel terrible.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu havalar son zamanlarda beni üzüyor\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nThis weather has been upsetting me lately.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": [
+    {
+     "city": "bu havalar"
+    }
+   ]
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu da ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd it",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "onu da ekle",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbir daha yap\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDo it again",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bir daha yap",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel it",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "onu iptal et",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu 5'e çevir\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn it into 5",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "onu 5'e çevir",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nFatih Sultan Mehmet kaç yılında doğdu\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nFatih Sultan Mehmet was born in how many years",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Fatih Sultan Mehmet doğum yılı"
+    }
+   ]
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nAvustralya'nın başkenti neresi\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is the capital of Australia",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Avustralya'nın başkenti neresi",
+     "max_results": 3
+    }
+   ]
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmercimek çorbası nasıl yapılır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow to make lentil soup",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "mercimek çorbası nasıl yapılır",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nfotosentez ne demek\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is photosynthesis",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "fotosentez ne demek",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbir futbol takımında kaç oyuncu vardır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow many players are in a football team",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_args": [
+    {
+     "team": "bir futbol takımı"
+    }
+   ]
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nSefiller'i kim yazdı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWho wrote The Miserables?",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Sefiller'i kim yazdı"
+    }
+   ]
+  }
+ ],
+ "pn": {
+  "n": 20,
+  "tool_ok": 20,
+  "tool_pct": 100.0,
+  "name_ok": 18,
+  "name_pct": 90.0,
+  "rows": [
+   {
+    "id": "pn01",
+    "tr": "Kuzu Kuzu çal",
+    "en": "Play Lamb Lamb",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Kuzu Kuzu",
+     "track": "çal",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn02",
+    "tr": "Tarkan'dan Şımarık çal",
+    "en": "Play Spoiled by Tarkan",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Tarkan",
+     "track": "Şımarık",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn03",
+    "tr": "Sezen Aksu'dan Gülümse çal",
+    "en": "Smile Play from Sezen Aksu",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sezen Aksu",
+     "track": "Gülümse",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn04",
+    "tr": "Duman'dan Her Şeyi Yak çal",
+    "en": "Burn Everything from Smoke Play",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Duman",
+     "track": "Her Şeyi Yak",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn05",
+    "tr": "Sıla'nın Vaziyetler şarkısını aç",
+    "en": "Open Sila's State of the State song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sıla",
+     "track": "Vaziyetler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn06",
+    "tr": "Müslüm Gürses'ten Affet çal",
+    "en": "Forgive from the Musicians",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Müslüm Gürses",
+     "track": "Affet",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn07",
+    "tr": "Ezhel'in Geceler şarkısını çal",
+    "en": "Play Ezhel's Nights song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Ezhel",
+     "track": "Geceler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn08",
+    "tr": "Yüzüklerin Efendisi'ni aç",
+    "en": "Open the Lord of the Rings",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "",
+     "track": "Yüzüklerin Efendisi",
+     "platform": ""
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn09",
+    "tr": "Neva'nın doğum günü 12 Mart, aklında tut",
+    "en": "Neva's birthday is March 12, keep it in mind",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Neva'nın doğum günü 12 Mart",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn10",
+    "tr": "akşam 7'de Ayhan'ı aramamı hatırlat",
+    "en": "Remind me to call Ayhan at 7 p.m.",
+    "gold": [
+     "med_reminder",
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Ayhan'ı ara",
+     "at": "20:00"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn11",
+    "tr": "Neva'nın matematik sınavı ne zaman",
+    "en": "When is Neva's math test",
+    "gold": [
+     "school_exam_schedule"
+    ],
+    "pred_tools": [
+     "school_exam_schedule"
+    ],
+    "args": {
+     "person": "Neva",
+     "subject": "math"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn12",
+    "tr": "Ayhan'ın telefon numarası neydi, hafızana bak",
+    "en": "What was Ayhan's phone number, look at your memory",
+    "gold": [
+     "memory_search"
+    ],
+    "pred_tools": [
+     "memory_search"
+    ],
+    "args": {
+     "query": "Ayhan telefon numarası"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn13",
+    "tr": "bundan sonra bana Ayhan Bey diye hitap et",
+    "en": "From now on, call me Mr. Ayhan.",
+    "gold": [
+     "soul_add"
+    ],
+    "pred_tools": [
+     "soul_add"
+    ],
+    "args": {
+     "text": "Call me Mr. Ayhan.",
+     "scope": "self"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn14",
+    "tr": "Beşiktaş maçı kaç kaç bitti",
+    "en": "How many games are finished",
+    "gold": [
+     "match_result"
+    ],
+    "pred_tools": [
+     "match_result"
+    ],
+    "args": {
+     "team": "Beşiktaş"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn15",
+    "tr": "Şanlıurfa'da hava nasıl",
+    "en": "How is the weather in Şanlıurfa",
+    "gold": [
+     "weather"
+    ],
+    "pred_tools": [
+     "weather"
+    ],
+    "args": {
+     "city": "Şanlıurfa"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn16",
+    "tr": "öğlen İskender yedim, diyetime yaz",
+    "en": "I ate Alexander at noon, write to my diet",
+    "gold": [
+     "diet_log"
+    ],
+    "pred_tools": [
+     "diet_log"
+    ],
+    "args": {
+     "food": "İskender",
+     "meal": "öğlen"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn17",
+    "tr": "alışveriş listesine Torku süt ve Eti bisküvi ekle",
+    "en": "Add Torku milk and meat biscuits to the shopping list",
+    "gold": [
+     "shopping_add"
+    ],
+    "pred_tools": [
+     "shopping_add"
+    ],
+    "args": {
+     "items": "Torku süt ve Eti bisküvi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn18",
+    "tr": "cumartesi Neva'yı Bostancı'dan almam gerek, hatırlat",
+    "en": "I need to get Neva from Bostancı on Saturday, remind me.",
+    "gold": [
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Neva'yı Bostancı'dan al",
+     "at": "cumartesi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn19",
+    "tr": "Kadıköy'deki dükkanın adı Çiya, unutma",
+    "en": "The shop in Kadıköy is called Chiya, remember",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Kadıköy'deki dükkanın adı Çiya",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn20",
+    "tr": "Atatürk Havalimanı ile ilgili haberleri ara",
+    "en": "Search for news about Atatürk Airport",
+    "gold": [
+     "web_search"
+    ],
+    "pred_tools": [
+     "web_search"
+    ],
+    "args": {
+     "query": "Atatürk Havalimanı haberleri",
+     "max_results": 3
+    },
+    "tool_ok": true,
+    "name_ok": true
+   }
+  ]
+ },
+ "lat_p50_all_ms": 1080,
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın değil, öbür gün sabah 9'a alarm kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nNot tomorrow, but the next day, set an alarm for 9 a.m.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "alarm for 9 a.m.",
+      "at": "tomorrow 09:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nAyşe'nin sınavı ne zaman\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhen is Ayşe's exam",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Ayşe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nSezen Aksu'dan bir şey çal\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay something from Sezen Aksu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Sezen Aksu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmailime bak, bugün toplantı var mı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSee my email, is there a meeting today?",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nher sabah 8'de tansiyon ilacımı almamı hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to take my blood pressure medication every morning at 8:00.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "tansiyon ilacı",
+      "at": "her sabah 8'de"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu hafta sonu İzmir'de hava nasıl olacak\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat will the weather be like in Izmir this weekend?",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "İzmir",
+      "day": "weekend"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nalışveriş listesine süt, ekmek ve yumurta ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd milk, bread and eggs to the shopping list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt, ekmek ve yumurta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nöğlen 3 köfte yedim, diyetime yaz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI had 3 meatballs at noon, write to my diet",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "köfte",
+      "meal": "öğlen",
+      "amount": "3"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbugün toplam kaç kalori aldım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow many calories did I get today?",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "today"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nGalatasaray dün kaç kaç yaptı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow many did Galatasaray make yesterday?",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Galatasaray"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsalondaki ışıkları kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn off the lights in the hall",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nşu an saat kaç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat time is it now?",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ndedemin doğum günü 3 Mayıs, aklında tut\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGrandpa's birthday is May 3, keep it in mind",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "dedemin doğum günü 3 Mayıs",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nannemin doğum gününü sana söylemiştim, ne zamandı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI told you about my mother's birthday, when",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin doğum günü"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nperşembe saat 2'de veli toplantısı var, bana hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nParents' meeting at 2:00 p.m. Thursday, remind me",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "veli toplantısı",
+      "at": "perşembe saat 2'de"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbabam için Tarkan'dan Kuzu Kuzu'yu çal\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay Lamb Lamb from Tarkan for my father",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Tarkan",
+      "track": "Kuzu Kuzu",
+      "for_whom": "babam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbugünün tarihi ne\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is today's date",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmakarna için 12 dakikalık zamanlayıcı kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSet the 12-minute timer for pasta",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 12,
+      "label": "makarna"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nalışveriş listesini oku bana\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRead me the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmutfak ışığını aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nturn on kitchen light",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "mutfak",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmüziği durdur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStop the music",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsesini biraz kıs, çok yüksek konuşuyorsun\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn your voice down a little, you're talking too loud",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ninternette yumurta kaç dakika haşlanır diye ara\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSearch the Internet for how many minutes the egg is boiled",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "internette yumurta kaç dakika haşlanır"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\n'günaydın' kelimesini Almanca'ya çevir\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTranslate the word 'good morning' into German",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "'günaydın' kelimesini Almanca'ya çevir",
+      "target_lang": "German"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nhatırlatmalarım neler\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat are my reminders",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nFenerbahçe dün akşam ne yaptı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat Fenerbahçe did last night",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Fenerbahçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nacil mail var mı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nIs there an emergency email",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "urgent"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nöğle yemeğine bir kase mercimek çorbası yaz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWrite a bowl of lentil soup for lunch",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "mercimek çorbası",
+      "meal": "öğle yemeği"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ntakvime ekle: cumartesi 11'de diş hekimi\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd to calendar: dentist on Saturday 11",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "diş hekimi",
+      "at": "cumartesi 11"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın Ankara'da hava nasıl\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow is the weather in Ankara tomorrow",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\n20 dakika sonra tesisatçıyı aramamı hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to call the plumber in 20 minutes.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "tesisatçıyı ara",
+      "in_minutes": 20
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbütün ışıkları kapat, yatıyoruz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn off all the lights, we're going to bed",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "all",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu yıl fizik Nobel'ini kim kazandı internetten bak\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSee who won the physics Nobel this year online",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "physics Nobel prize winner this year"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın matematik sınavı ne zaman\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhen is Neva's math test",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Neva",
+      "subject": "math"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nlisteye yoğurt ve domates ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd yogurt and tomatoes to the list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "yoğurt ve domates"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ndünkü kalori özetimi ver\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGive me yesterday's calorie summary",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "yesterday"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nspotify'dan biraz caz çal\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay some jazz from Spotify",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "spotify",
+      "artist": "",
+      "track": "",
+      "for_whom": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nşu cümleyi İngilizce'ye çevir: hava çok güzel\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTranslate this sentence into English: the weather is beautiful",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\n5 dakika zamanlayıcı ver\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGive me a 5 minute timer",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsesini aç biraz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn it up a bit",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "up"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın fıstık alerjisi olduğunu unutma\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemember that Neva is a peanut allergy.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me tonight that Neva is allergic to peanuts.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi olduğunu hatırlat",
+      "at": "bu akşam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nevlilik yıldönümümüzün 14 Eylül olduğunu not et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nNote that our wedding anniversary is September 14th.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Evlilik yıldönümümüz 14 Eylül.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın 6:30'da beni uyandır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWake me up tomorrow at 6:30",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "beni uyandır",
+      "at": "yarın 6:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nFrom now on, call me Mr. Ayhan, not just Ayhan.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "From now on, call me Mr. Ayhan, not just Ayhan.",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nçok konuşuyorsun, bundan sonra cevapların daha kısa olsun\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nYou talk a lot, so your answers are shorter from now on.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nannemin ilacı hakkında sana ne söylemiştim\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat did I tell you about my mother's medicine?",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin ilacı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nannem kalp hapını akşam 9'da içiyor, bunu kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nMy mother drinks her heart pill at 9 p.m., so set it up.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "kalp hapı",
+      "at": "akşam 9'da"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naile hafızasına yaz: pazar günü anneanneye gidiyoruz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWrite in family memory: we're going to Grandma's on Sunday",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "pazar günü anneanneye gidiyoruz",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsaat 3'teki hatırlatmayı iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel reminder at 3 p.m.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ndiş hekimi için hatırlatmam var mıydı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDo I have a reminder for the dentist?",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naraba sigortası hakkında ne dediğimi hafızamda ara\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCall me in memory of what I said about car insurance",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "araba sigortası"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naraba sigortasının güncel fiyatını internetten bak\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSee the current price of car insurance online",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "araba sigortası fiyatı",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbunu bana hatırlatma, sadece aklında tut\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDon't remind me of that, just keep it in mind",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bunu bana hatırlatma, sadece aklında tut",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nhaftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to renew my passport Tuesday at 7:30 p.m.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "pasaportumu yenilemeyi hatırlat",
+      "at": "haftaya salı akşam yedi buçukta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın kimya sınavı 21'inde, takvime ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOn Neva's chemistry exam 21, add to calendar",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva'nın kimya sınavı 21'i",
+      "at": "21"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to remove the bread from the oven in an hour and a half.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "ekmeği fırından çıkarmak",
+      "at": "bir buçuk saat sonra"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\niki buçuk dakikalık zamanlayıcı kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSet timer of two and a half minutes",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 2.5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nİsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nNote that Ismet's passport expired on March 12, 2027",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nöbür gün Diyarbakır'da hava\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nThe next day, the weather in Diyarbakir",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakır",
+      "day": "öbür gün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nakşam yemeğine 180 gram ızgara tavuk yaz\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWrite 180 grams of grilled chicken for dinner",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "ızgara tavuk",
+      "meal": "akşam yemeği",
+      "amount": "180 gram"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın öğlen Ayhan'a vergi ödemesini hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind Ayhan to pay taxes tomorrow at noon",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Ayhan'a vergi ödemesini hatırlat",
+      "at": "yarın öğlen"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyoutube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay Purple and Beyond from YouTube Have a Problem",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "youtube",
+      "artist": "Mor ve Ötesi",
+      "track": "Bir Derdim Var"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyatak odası ışıklarını kıs\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn down the bedroom lights",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "yatak odası",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nayın birinde kirayı ödemeyi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind to pay the rent on one month",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "kirayı ödemeyi hatırlat",
+      "in_minutes": 30
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ngelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Doktor Randevusu - Dr. Kaya",
+      "at": "2023-10-27 21:45"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\n'seni özledim'i Kürtçe'ye çevir\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn 'I miss you' into Kurdish",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "seni özledim",
+      "target_lang": "Kürtçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmaç başlamadan yarım saat önce televizyonu açmamı hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemind me to turn on the TV half an hour before the game starts.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "televizyonu aç",
+      "at": "yarım saat önce maç başlamadan"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nhesabımdan Ali'ye 500 lira gönder\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSend $500 from my account to Ali",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkardeşimin hesabına şimdi 2000 lira gönder\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSend $2,000 to my brother's account now",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'ya yemek hazır de\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSay dinner is ready for Neva",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nAyhan'a mesaj bırak, eve geç geleceğim\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nLeave a message for Ayhan, I'll be home late",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Ayhan'a mesaj bırak, eve geç geleceğim",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın odasını bağla, onunla konuşmak istiyorum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGet Neva's room, I want to talk to her.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva'nın odası",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\npatronuma bugün hasta olduğumu yazan bir mail gönder\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSend an email to my boss saying I'm sick today.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nokula mail at, Neva yarın gelmeyecek de\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nemail the school, say Neva won't be coming tomorrow",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ndiş hekimi randevusunu takvimden sil\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDelete the dentist appointment from the calendar",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "diş hekimi randevusu",
+      "at": "sil"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbütün hatırlatmalarımı iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel all my reminders",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nprofil hafızamı temizle, çok uzadı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClear my profile memory, it's gone too far",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "",
+      "scope": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nelektrik şirketine 750 lira öde\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPay $750 to the electricity company",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "elektrik şirketine 750 lira öde",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naile hafızasını sil, sıfırdan başlayalım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDelete family memory, let's start from scratch",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nevdeki herkese yemeğin 8'de olduğunu söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTell everyone in the house that the food is at 8 o'clock.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsalonun ışığını aç ve Neva'ya aşağı gelmesini söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn on the light of the hall and tell Neva to come down",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nlisteye süt ekle ve saat 6'da markete gitmemi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd milk to the list and remind me to go to the grocery store at 6:00",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nyarın hava nasıl, bir de 7'ye alarm kur\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTomorrow, the weather is like, and you set an alarm for 7.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "istanbul"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkahvaltımı yaz ve bugün kaç kalori aldığımı söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWrite my breakfast and tell me how many calories I've taken today",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "kahvaltı",
+      "meal": "breakfast"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbiraz müzik çal ve ışıkları kıs\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPlay some music and turn the lights down",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nNeva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nRemember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkombiyi aç, üşüdüm\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the boiler, I'm cold",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living_room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nklimayı 22 dereceye ayarla\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSet air conditioning to 22 degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nperdeleri kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClose curtains",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living room",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ntelevizyonu aç, habere geç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn on the TV, get on the news",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living_room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbulaşık makinesini başlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStart the dishwasher",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nçamaşır makinesini pamuklu programında başlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStart the washing machine in the cotton program",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bathroom",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ntelevizyonun sesini kıs\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn the TV down",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ngaraj kapısını aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the garage door",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "garage",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nön kapıyı kilitle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nLock the front door",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "front door",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkaloriferi iki derece aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn the radiator on at two degrees",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bathroom",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsalonu süpür\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSweep the hall",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nfırını aç, 180 derece\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOpen the oven, 180 degrees",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbalkondaki çiçekleri sula\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nwater the flowers on the balcony",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "balkon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nalışveriş listesini yazdır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nPrint the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu akşam için balık restoranından masa ayırt\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nBook a table at a fish restaurant for tonight",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Balık Restoranı Masa Ayırma",
+      "at": "bu akşam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\neve taksi çağır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCall a taxi home",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "eve",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nwifi modemi kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn off wifi modem",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "wifi modemi kapat",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nkombi aç\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nopen combi",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nperdeleri kapat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nClose curtains",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living room",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nborsadan 10 lot Garanti hissesi al\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGet 10 lot Guarantee shares from the stock exchange",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "borsadan 10 lot Garanti hissesi al",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu akşam için pizza söyle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nSing pizza for tonight",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "pizza",
+      "track": "söyle",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\narabayı uzaktan çalıştır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nStart the car remotely",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbugün çok sıkıldım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI'm bored today.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsana dedemin köyünü anlatayım mı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nShall I tell you about my grandfather's village?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbana bir fıkra anlat\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTell me a joke",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsence hayatın anlamı ne\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat do you think life means",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nseni çok sevdiğimi biliyorsun değil mi\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nYou know I love you a lot, don't you?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nof, bugün çok yorgunum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nOh, I'm so tired today",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nen sevdiğin yemek ne\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is your favorite food",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "en sevdiğin yemek"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbiraz sohbet etmek istiyorum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI want to have a little chat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nacaba yarın mutlu olacak mıyım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWill I be happy tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\niyi geceler canım\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nGood night, my dear.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "iyi geceler canım",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nsırtım yine ağrıyor, yaşlanmak zor\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nMy back hurts again, it's hard to age",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbugün Neva'yla tartıştım, çok kötü hissediyorum\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nI argued with Neva today, I feel terrible.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbizden hiç sıkılıyor musun\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDo you ever get bored of us?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbu havalar son zamanlarda beni üzüyor\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nThis weather has been upsetting me lately.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "bu havalar"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\naynısından bir tane daha\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nanother of the same",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu da ekle\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAdd it",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "onu da ekle",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nhayır, diğeri\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nNo, the other",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbir daha yap\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nDo it again",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bir daha yap",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu iptal et\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nCancel it",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "onu iptal et",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\npeki ya yarın\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nAnd tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nevet, öyle yap\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nYes, do so.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nonu 5'e çevir\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nTurn it into 5",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "onu 5'e çevir",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nFatih Sultan Mehmet kaç yılında doğdu\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nFatih Sultan Mehmet was born in how many years",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Fatih Sultan Mehmet doğum yılı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ninsan vücudunda kaç kemik var\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow many bones are in the human body",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\ngökyüzü neden mavi\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhy the sky is blue",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nAvustralya'nın başkenti neresi\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is the capital of Australia",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Avustralya'nın başkenti neresi",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nmercimek çorbası nasıl yapılır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow to make lentil soup",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "mercimek çorbası nasıl yapılır",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nfotosentez ne demek\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWhat is photosynthesis",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "fotosentez ne demek",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nbir futbol takımında kaç oyuncu vardır\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nHow many players are in a football team",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "bir futbol takımı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "User said (Turkish — ORIGINAL). Take ALL argument values from THIS text and copy names, song titles, places and brands EXACTLY as written here; never translate them:\nSefiller'i kim yazdı\n\nEnglish translation (use this ONLY to understand WHICH tool is needed):\nWho wrote The Miserables?",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "Sefiller'i kim yazdı"
+     }
+    }
+   ],
+   "multi_flag": false
+  }
+ ]
+}

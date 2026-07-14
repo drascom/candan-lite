@@ -2,14 +2,14 @@
   "model": "qwen35-4b-q8",
   "model_id": "qwen35-4b-q8",
   "quant": "Q8_0",
-  "schema": "flag",
+  "schema": "flag2",
   "lang": "en",
   "tier": "low",
   "catalog_size": 23,
   "n_cases": 139,
-  "vram_model_mib": 5033,
+  "vram_model_mib": 2,
   "summary": {
-    "schema": "flag",
+    "schema": "flag2",
     "n": 139,
     "recall_pct": 97.1,
     "arg_ok_pct": 95.6,
@@ -17,17 +17,17 @@
     "extra_tool_pct": 0.0,
     "extra_tool_n": 0,
     "extra_tool_total": 68,
-    "trap_abstain_pct": 90.4,
-    "trap_wrong_n": 5,
+    "trap_abstain_pct": 96.2,
+    "trap_wrong_n": 2,
     "trap_total": 52,
-    "high_abstain_pct": 84.6,
-    "high_fired_pct": 15.4,
+    "high_abstain_pct": 100.0,
+    "high_fired_pct": 0.0,
     "high_fired_hightool_n": 0,
     "multi_ok_pct": 0.0,
-    "multi_abstain_n": 0,
+    "multi_abstain_n": 1,
     "multi_full_n": 0,
-    "multi_partial_n": 5,
-    "multi_none_n": 0,
+    "multi_partial_n": 4,
+    "multi_none_n": 1,
     "m01_abstain": false,
     "m01_half_job": true,
     "multi_flag_tp": 6,
@@ -35,15 +35,43 @@
     "multi_flag_fp": 0,
     "multi_flag_tn": 133,
     "multi_flag_fp_pct": 0.0,
-    "unsup_escape_pct": 0.0,
-    "unsup_escape_n": 0,
-    "unsup_escape_total": 0,
-    "unsup_escape_ids": [],
-    "unsup_escape_detail": [],
-    "unsup_rescue_n": 0,
-    "unsup_rescue": [],
-    "unsup_by_cat": {},
-    "raw_recall_pct": null,
+    "unsup_escape_pct": 1.5,
+    "unsup_escape_n": 1,
+    "unsup_escape_total": 68,
+    "unsup_escape_ids": [
+      "p10"
+    ],
+    "unsup_escape_detail": [
+      [
+        "p10",
+        "cancel the 3 o'clock reminder",
+        [
+          "reminder_list"
+        ]
+      ]
+    ],
+    "unsup_rescue_n": 1,
+    "unsup_rescue": [
+      [
+        "m05",
+        "multi",
+        [
+          "media_play"
+        ]
+      ]
+    ],
+    "unsup_by_cat": {
+      "arg": 0,
+      "tool": 0,
+      "pair": 1,
+      "high": 13,
+      "multi": 1,
+      "trap_neigh": 21,
+      "trap_chat": 1,
+      "trap_ctx": 4,
+      "trap_know": 5
+    },
+    "raw_recall_pct": 97.1,
     "parse_errors": 0,
     "by_cat": {
       "arg": {
@@ -53,8 +81,8 @@
       },
       "high": {
         "n": 13,
-        "ok": 11,
-        "pct": 84.6
+        "ok": 13,
+        "pct": 100.0
       },
       "multi": {
         "n": 6,
@@ -83,57 +111,48 @@
       },
       "trap_know": {
         "n": 8,
-        "ok": 6,
-        "pct": 75.0
+        "ok": 8,
+        "pct": 100.0
       },
       "trap_neigh": {
         "n": 22,
-        "ok": 20,
-        "pct": 90.9
+        "ok": 21,
+        "pct": 95.5
       }
     },
     "splat_targets": {
-      "volume_set": 2,
-      "web_search": 2,
-      "light_control": 1,
-      "memory_add": 1,
-      "shopping_list": 1
+      "shopping_list": 1,
+      "volume_set": 1
     },
     "old35_pct": 100.0,
     "old35": "35/35",
-    "lat_p50_ms": 877,
-    "lat_mean_ms": 884,
-    "lat_p95_ms": 1193
+    "lat_p50_ms": 1078,
+    "lat_mean_ms": 1287,
+    "lat_p95_ms": 2465
   },
   "errors": [
+    {
+      "id": "p02",
+      "cat": "pair",
+      "text": "remind me tonight that Neva is allergic to peanuts",
+      "why": "gold=reminder_add",
+      "pred_tools": [
+        "memory_add"
+      ],
+      "pred_args": [
+        {
+          "text": "Neva is allergic to peanuts",
+          "scope": "private"
+        }
+      ]
+    },
     {
       "id": "p10",
       "cat": "pair",
       "text": "cancel the 3 o'clock reminder",
       "why": "gold=reminder_cancel",
-      "pred_tools": [
-        "reminder_list"
-      ],
-      "pred_args": [
-        {
-          "limit": 10
-        }
-      ]
-    },
-    {
-      "id": "p14",
-      "cat": "pair",
-      "text": "don't remind me about it, just keep it in mind",
-      "why": "gold=memory_add",
-      "pred_tools": [
-        "soul_add"
-      ],
-      "pred_args": [
-        {
-          "text": "don't remind me about it, just keep it in mind",
-          "scope": "self"
-        }
-      ]
+      "pred_tools": [],
+      "pred_args": []
     },
     {
       "id": "a08",
@@ -147,36 +166,6 @@
         "text": "tax payment",
         "at": "tomorrow 12:00"
       }
-    },
-    {
-      "id": "h02",
-      "cat": "high",
-      "text": "tell Neva dinner is ready",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "dining room",
-          "state": "on"
-        }
-      ]
-    },
-    {
-      "id": "h03",
-      "cat": "high",
-      "text": "leave a message for Ayhan that I'll be home late",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_args": [
-        {
-          "text": "Message left for Ayhan: I'll be home late.",
-          "scope": "private"
-        }
-      ]
     },
     {
       "id": "m01",
@@ -222,10 +211,8 @@
       "id": "m05",
       "cat": "multi",
       "text": "play some music and turn the lights down",
-      "why": "YARIM-IS (need=light_control+media_play)",
-      "pred_tools": [
-        "media_play"
-      ],
+      "why": "ABSTAIN (need=light_control+media_play)",
+      "pred_tools": [],
       "pred_args": null
     },
     {
@@ -237,20 +224,6 @@
         "memory_add"
       ],
       "pred_args": null
-    },
-    {
-      "id": "n02",
-      "cat": "trap_neigh",
-      "text": "turn the TV volume down",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "volume_set"
-      ],
-      "pred_args": [
-        {
-          "direction": "down"
-        }
-      ]
     },
     {
       "id": "n09",
@@ -277,35 +250,6 @@
           "level": 5
         }
       ]
-    },
-    {
-      "id": "q01",
-      "cat": "trap_know",
-      "text": "what year was Fatih Sultan Mehmet born",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "web_search"
-      ],
-      "pred_args": [
-        {
-          "query": "Fatih Sultan Mehmet birth year"
-        }
-      ]
-    },
-    {
-      "id": "q08",
-      "cat": "trap_know",
-      "text": "who wrote Sefiller",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "web_search"
-      ],
-      "pred_args": [
-        {
-          "query": "who wrote Sefiller",
-          "max_results": 3
-        }
-      ]
     }
   ],
   "raw": [
@@ -320,15 +264,15 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "9am alarm",
+            "text": "Alarm for 9am",
             "at": "tomorrow 09:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"9am alarm\", \"at\": \"tomorrow 09:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Alarm for 9am\", \"at\": \"tomorrow 09:00\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t02",
@@ -346,9 +290,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Ayse\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Ayse\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t03",
@@ -366,9 +310,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Sezen Aksu\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Sezen Aksu\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t04",
@@ -386,9 +330,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"meeting\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"meeting\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t05",
@@ -408,9 +352,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"blood pressure medicine\", \"at\": \"08:00\", \"person\": \"me\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"blood pressure medicine\", \"at\": \"08:00\", \"person\": \"me\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t06",
@@ -429,9 +373,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Izmir\", \"day\": \"weekend\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Izmir\", \"day\": \"weekend\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t07",
@@ -449,9 +393,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk, bread and eggs\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk, bread and eggs\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t08",
@@ -471,9 +415,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"meatballs\", \"meal\": \"lunch\", \"amount\": \"3\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"meatballs\", \"meal\": \"lunch\", \"amount\": \"3\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t09",
@@ -491,9 +435,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"today\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"today\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t10",
@@ -511,9 +455,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Galatasaray\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Galatasaray\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t11",
@@ -532,9 +476,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"off\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"off\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t12",
@@ -552,9 +496,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"time\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"time\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t13",
@@ -567,15 +511,15 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "Grandfather's birthday: May 3rd",
-            "scope": "family"
+            "text": "my grandfather's birthday is May 3rd",
+            "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Grandfather's birthday: May 3rd\", \"scope\": \"family\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"my grandfather's birthday is May 3rd\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t14",
@@ -593,9 +537,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mom's birthday\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mom's birthday\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t15",
@@ -608,15 +552,15 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Parent-teacher meeting Thursday at 2",
+            "text": "parent-teacher meeting Thursday at 2",
             "at": "Thursday 14:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Parent-teacher meeting Thursday at 2\", \"at\": \"Thursday 14:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"parent-teacher meeting Thursday at 2\", \"at\": \"Thursday 14:00\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t16",
@@ -637,9 +581,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Tarkan\", \"track\": \"Kuzu Kuzu\", \"platform\": \"spotify\", \"for_whom\": \"dad\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Tarkan\", \"track\": \"Kuzu Kuzu\", \"platform\": \"spotify\", \"for_whom\": \"dad\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t17",
@@ -657,9 +601,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"date\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"date\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t18",
@@ -678,9 +622,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 12, \"label\": \"pasta\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 12, \"label\": \"pasta\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t19",
@@ -696,9 +640,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t20",
@@ -717,9 +661,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t21",
@@ -735,9 +679,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"media_stop\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_stop\", \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t22",
@@ -755,9 +699,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"down\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"down\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t23",
@@ -775,9 +719,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"how long to boil an egg\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"how long to boil an egg\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t24",
@@ -796,9 +740,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"good morning\", \"target_lang\": \"German\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"good morning\", \"target_lang\": \"German\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t25",
@@ -810,13 +754,15 @@
       "pred_calls": [
         {
           "tool": "reminder_list",
-          "args": {}
+          "args": {
+            "limit": 10
+          }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_list\", \"args\": {\"limit\": 10}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t26",
@@ -834,9 +780,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Fenerbahce\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Fenerbahce\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t27",
@@ -854,9 +800,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"urgent\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"urgent\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t28",
@@ -875,9 +821,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"lentil soup\", \"meal\": \"lunch\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"lentil soup\", \"meal\": \"lunch\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t29",
@@ -890,15 +836,15 @@
         {
           "tool": "calendar_add",
           "args": {
-            "title": "dentist appointment",
-            "at": "Saturday 11:00"
+            "title": "dentist",
+            "at": "Saturday at 11"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"dentist appointment\", \"at\": \"Saturday 11:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"dentist\", \"at\": \"Saturday at 11\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t30",
@@ -917,9 +863,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Ankara\", \"day\": \"tomorrow\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Ankara\", \"day\": \"tomorrow\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t31",
@@ -938,9 +884,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"call the plumber\", \"in_minutes\": 20}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"call the plumber\", \"in_minutes\": 20}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t32",
@@ -959,9 +905,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"all\", \"state\": \"off\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"all\", \"state\": \"off\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t33",
@@ -974,15 +920,15 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "Nobel prize in physics this year winner",
+            "query": "Nobel prize physics winner 2024",
             "max_results": 3
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Nobel prize in physics this year winner\", \"max_results\": 3}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Nobel prize physics winner 2024\", \"max_results\": 3}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t34",
@@ -1001,9 +947,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Neva\", \"subject\": \"math\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Neva\", \"subject\": \"math\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t35",
@@ -1021,9 +967,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"yogurt and tomatoes\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"yogurt and tomatoes\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t36",
@@ -1041,9 +987,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"yesterday\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"yesterday\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t37",
@@ -1062,9 +1008,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"platform\": \"spotify\", \"artist\": \"jazz\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"platform\": \"spotify\", \"artist\": \"jazz\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t38",
@@ -1083,9 +1029,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"hava çok güzel\", \"target_lang\": \"English\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"hava çok güzel\", \"target_lang\": \"English\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t39",
@@ -1103,9 +1049,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 5}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "t40",
@@ -1123,9 +1069,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"up\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"up\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p01",
@@ -1144,30 +1090,30 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p02",
       "cat": "pair",
       "text": "remind me tonight that Neva is allergic to peanuts",
       "pred_tools": [
-        "reminder_add"
+        "memory_add"
       ],
       "pred_calls": [
         {
-          "tool": "reminder_add",
+          "tool": "memory_add",
           "args": {
             "text": "Neva is allergic to peanuts",
-            "at": "tonight"
+            "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"at\": \"tonight\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p03",
@@ -1180,15 +1126,15 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "Wedding anniversary: September 14th",
-            "scope": "family"
+            "text": "wedding anniversary on September 14th",
+            "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Wedding anniversary: September 14th\", \"scope\": \"family\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"wedding anniversary on September 14th\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p04",
@@ -1201,15 +1147,15 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Wake up call",
+            "text": "wake me up",
             "at": "tomorrow 06:30"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Wake up call\", \"at\": \"tomorrow 06:30\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"wake me up\", \"at\": \"tomorrow 06:30\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p05",
@@ -1222,15 +1168,15 @@
         {
           "tool": "soul_add",
           "args": {
-            "text": "call me Ayhan Bey, not just Ayhan",
+            "text": "Call me Ayhan Bey, not just Ayhan.",
             "scope": "self"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"call me Ayhan Bey, not just Ayhan\", \"scope\": \"self\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"Call me Ayhan Bey, not just Ayhan.\", \"scope\": \"self\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p06",
@@ -1249,9 +1195,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"talk less and keep answers shorter\", \"scope\": \"self\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"talk less and keep answers shorter\", \"scope\": \"self\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p07",
@@ -1269,9 +1215,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mother's medicine\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mother's medicine\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p08",
@@ -1291,9 +1237,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"heart pill\", \"at\": \"21:00\", \"person\": \"mother\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"heart pill\", \"at\": \"21:00\", \"person\": \"mother\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p09",
@@ -1312,14 +1258,32 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"We're going to grandma's on Sunday.\", \"scope\": \"family\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"We're going to grandma's on Sunday.\", \"scope\": \"family\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p10",
       "cat": "pair",
       "text": "cancel the 3 o'clock reminder",
+      "pred_tools": [
+        "reminder_list"
+      ],
+      "pred_calls": [
+        {
+          "tool": "reminder_list",
+          "args": {}
+        }
+      ],
+      "multi_flag": false,
+      "unsupported": true,
+      "err": false,
+      "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
+    },
+    {
+      "id": "p11",
+      "cat": "pair",
+      "text": "did I already have a reminder for the dentist",
       "pred_tools": [
         "reminder_list"
       ],
@@ -1332,27 +1296,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_list\", \"args\": {\"limit\": 10}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p11",
-      "cat": "pair",
-      "text": "did I already have a reminder for the dentist",
-      "pred_tools": [
-        "reminder_list"
-      ],
-      "pred_calls": [
-        {
-          "tool": "reminder_list",
-          "args": {}
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_list\", \"args\": {\"limit\": 10}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p12",
@@ -1370,9 +1316,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"car insurance\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"car insurance\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p13",
@@ -1391,30 +1337,30 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"car insurance price\", \"max_results\": 5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"car insurance price\", \"max_results\": 5}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "p14",
       "cat": "pair",
       "text": "don't remind me about it, just keep it in mind",
       "pred_tools": [
-        "soul_add"
+        "memory_add"
       ],
       "pred_calls": [
         {
-          "tool": "soul_add",
+          "tool": "memory_add",
           "args": {
             "text": "don't remind me about it, just keep it in mind",
-            "scope": "self"
+            "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"don't remind me about it, just keep it in mind\", \"scope\": \"self\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"don't remind me about it, just keep it in mind\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a01",
@@ -1433,9 +1379,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"renew my passport\", \"at\": \"next Tuesday 19:30\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"renew my passport\", \"at\": \"next Tuesday 19:30\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a02",
@@ -1448,15 +1394,15 @@
         {
           "tool": "calendar_add",
           "args": {
-            "title": "Neva's Chemistry Exam",
+            "title": "Neva's chemistry exam",
             "at": "21st"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Neva's Chemistry Exam\", \"at\": \"21st\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Neva's chemistry exam\", \"at\": \"21st\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a03",
@@ -1470,14 +1416,14 @@
           "tool": "reminder_add",
           "args": {
             "text": "take the bread out of the oven",
-            "at": 90
+            "at": "in 90 minutes"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"take the bread out of the oven\", \"at\": 90}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"take the bread out of the oven\", \"at\": \"in 90 minutes\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a04",
@@ -1495,9 +1441,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 2.5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 2.5}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a05",
@@ -1516,9 +1462,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Ismet's passport expires on 12 March 2027\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Ismet's passport expires on 12 March 2027\", \"scope\": \"private\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a06",
@@ -1537,9 +1483,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Diyarbakir\", \"day\": \"tomorrow\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Diyarbakir\", \"day\": \"tomorrow\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a07",
@@ -1559,9 +1505,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"grilled chicken\", \"meal\": \"dinner\", \"amount\": \"180 grams\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"grilled chicken\", \"meal\": \"dinner\", \"amount\": \"180 grams\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a08",
@@ -1580,9 +1526,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"tax payment\", \"at\": \"tomorrow 12:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"tax payment\", \"at\": \"tomorrow 12:00\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a09",
@@ -1602,9 +1548,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Mor ve Otesi\", \"track\": \"Bir Derdim Var\", \"platform\": \"youtube\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Mor ve Otesi\", \"track\": \"Bir Derdim Var\", \"platform\": \"youtube\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a10",
@@ -1623,9 +1569,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"bedroom\", \"state\": \"off\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"bedroom\", \"state\": \"off\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a11",
@@ -1639,14 +1585,14 @@
           "tool": "reminder_add",
           "args": {
             "text": "pay the rent",
-            "at": "1st of the month"
+            "at": "first of the month"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"pay the rent\", \"at\": \"1st of the month\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"pay the rent\", \"at\": \"first of the month\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a12",
@@ -1665,9 +1611,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Doctor's appointment with Dr. Kaya\", \"at\": \"next Friday 09:15\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Doctor's appointment with Dr. Kaya\", \"at\": \"next Friday 09:15\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a13",
@@ -1686,9 +1632,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"I miss you\", \"target_lang\": \"Kurdish\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"I miss you\", \"target_lang\": \"Kurdish\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "a14",
@@ -1702,14 +1648,14 @@
           "tool": "reminder_add",
           "args": {
             "text": "Turn on TV for match",
-            "at": "30 minutes before match start"
+            "at": "half an hour before the match starts"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Turn on TV for match\", \"at\": \"30 minutes before match start\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Turn on TV for match\", \"at\": \"half an hour before the match starts\"}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "x06",
@@ -1718,9 +1664,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h01",
@@ -1729,51 +1675,31 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h02",
       "cat": "high",
       "text": "tell Neva dinner is ready",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "dining room",
-            "state": "on"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"dining room\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h03",
       "cat": "high",
       "text": "leave a message for Ayhan that I'll be home late",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "memory_add",
-          "args": {
-            "text": "Message left for Ayhan: I'll be home late.",
-            "scope": "private"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Message left for Ayhan: I'll be home late.\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h04",
@@ -1782,9 +1708,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h05",
@@ -1793,9 +1719,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h06",
@@ -1804,9 +1730,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h07",
@@ -1815,9 +1741,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h08",
@@ -1826,9 +1752,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h09",
@@ -1837,9 +1763,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h10",
@@ -1848,9 +1774,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h11",
@@ -1859,9 +1785,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "h12",
@@ -1870,9 +1796,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "m01",
@@ -1891,9 +1817,9 @@
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"on\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"on\"}, \"multi_intent\": true, \"unsupported_request\": false}"
     },
     {
       "id": "m02",
@@ -1911,9 +1837,9 @@
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk\"}, \"multi_intent\": true, \"unsupported_request\": false}"
     },
     {
       "id": "m03",
@@ -1926,15 +1852,15 @@
         {
           "tool": "weather",
           "args": {
-            "city": "New York",
+            "city": "",
             "day": "tomorrow"
           }
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"New York\", \"day\": \"tomorrow\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"\", \"day\": \"tomorrow\"}, \"multi_intent\": true, \"unsupported_request\": false}"
     },
     {
       "id": "m04",
@@ -1952,9 +1878,9 @@
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"breakfast\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"breakfast\"}, \"multi_intent\": true, \"unsupported_request\": false}"
     },
     {
       "id": "m05",
@@ -1974,9 +1900,9 @@
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"\"}, \"multi_intent\": true, \"unsupported_request\": true}"
     },
     {
       "id": "m06",
@@ -1989,15 +1915,15 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "Neva is allergic to peanuts.",
+            "text": "Neva is allergic to peanuts. Remind me tonight to tell her teacher.",
             "scope": "private"
           }
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts.\", \"scope\": \"private\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts. Remind me tonight to tell her teacher.\", \"scope\": \"private\"}, \"multi_intent\": true, \"unsupported_request\": false}"
     },
     {
       "id": "x01",
@@ -2006,9 +1932,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x04",
@@ -2017,9 +1943,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x07",
@@ -2028,9 +1954,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x08",
@@ -2039,9 +1965,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x09",
@@ -2050,9 +1976,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n01",
@@ -2061,29 +1987,20 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n02",
       "cat": "trap_neigh",
       "text": "turn the TV volume down",
-      "pred_tools": [
-        "volume_set"
-      ],
-      "pred_calls": [
-        {
-          "tool": "volume_set",
-          "args": {
-            "direction": "down"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"down\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n03",
@@ -2092,9 +2009,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n04",
@@ -2103,9 +2020,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n05",
@@ -2114,9 +2031,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n06",
@@ -2125,9 +2042,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n07",
@@ -2136,9 +2053,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n08",
@@ -2147,9 +2064,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n09",
@@ -2165,9 +2082,9 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "n10",
@@ -2176,9 +2093,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n11",
@@ -2187,9 +2104,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n12",
@@ -2198,9 +2115,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n13",
@@ -2209,9 +2126,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "n14",
@@ -2220,9 +2137,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x02",
@@ -2231,9 +2148,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x03",
@@ -2242,9 +2159,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "x05",
@@ -2253,9 +2170,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "c01",
@@ -2264,9 +2181,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c02",
@@ -2275,9 +2192,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c03",
@@ -2286,9 +2203,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "c04",
@@ -2297,9 +2214,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c05",
@@ -2308,9 +2225,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c06",
@@ -2319,9 +2236,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c07",
@@ -2330,9 +2247,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c08",
@@ -2341,9 +2258,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c09",
@@ -2352,9 +2269,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c10",
@@ -2363,9 +2280,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c11",
@@ -2374,9 +2291,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c12",
@@ -2385,9 +2302,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c13",
@@ -2396,9 +2313,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "c14",
@@ -2407,9 +2324,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "k01",
@@ -2418,9 +2335,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "k02",
@@ -2429,9 +2346,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "k03",
@@ -2440,9 +2357,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "k04",
@@ -2451,9 +2368,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "k05",
@@ -2462,9 +2379,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "k06",
@@ -2473,9 +2390,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "k07",
@@ -2484,9 +2401,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "k08",
@@ -2504,29 +2421,20 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"volume_set\", \"args\": {\"level\": 5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"level\": 5}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "q01",
       "cat": "trap_know",
       "text": "what year was Fatih Sultan Mehmet born",
-      "pred_tools": [
-        "web_search"
-      ],
-      "pred_calls": [
-        {
-          "tool": "web_search",
-          "args": {
-            "query": "Fatih Sultan Mehmet birth year"
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet birth year\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "q02",
@@ -2535,9 +2443,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "q03",
@@ -2546,9 +2454,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "q04",
@@ -2557,9 +2465,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "q05",
@@ -2568,9 +2476,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "q06",
@@ -2579,9 +2487,9 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     },
     {
       "id": "q07",
@@ -2590,171 +2498,161 @@
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": true,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": true}"
     },
     {
       "id": "q08",
       "cat": "trap_know",
       "text": "who wrote Sefiller",
-      "pred_tools": [
-        "web_search"
-      ],
-      "pred_calls": [
-        {
-          "tool": "web_search",
-          "args": {
-            "query": "who wrote Sefiller",
-            "max_results": 3
-          }
-        }
-      ],
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
+      "unsupported": false,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"who wrote Sefiller\", \"max_results\": 3}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false, \"unsupported_request\": false}"
     }
   ],
   "latencies_ms": [
-    755,
-    816,
-    911,
-    835,
-    1135,
-    1054,
-    915,
-    1078,
-    948,
-    908,
-    995,
-    837,
-    1197,
-    739,
-    1401,
-    1161,
-    1200,
-    734,
-    930,
-    887,
-    914,
-    831,
-    1032,
-    1193,
-    818,
-    809,
-    880,
-    1034,
-    1080,
-    882,
-    1126,
-    898,
-    1175,
-    935,
-    877,
-    873,
-    962,
-    1037,
-    768,
-    905,
-    983,
-    1014,
-    1072,
-    916,
-    1219,
-    999,
-    925,
-    1084,
+    980,
+    1025,
     1033,
-    821,
-    924,
-    791,
-    1008,
-    1130,
-    1042,
-    994,
-    1047,
-    859,
-    1142,
-    945,
-    1089,
-    1029,
-    1139,
-    946,
-    1153,
-    1072,
-    797,
-    1226,
-    640,
-    835,
-    939,
-    1030,
-    778,
-    724,
-    747,
-    715,
-    952,
-    818,
-    748,
-    895,
-    715,
-    1042,
-    748,
-    869,
-    877,
-    919,
-    1052,
-    774,
-    605,
+    929,
+    1387,
+    1187,
+    1120,
+    1271,
+    972,
+    1216,
+    1079,
+    1096,
+    1251,
+    1118,
+    1334,
+    1479,
+    1017,
+    1197,
+    988,
+    1181,
+    926,
+    1033,
+    1193,
+    1120,
+    1062,
+    1078,
+    1081,
+    1164,
+    1494,
+    2252,
+    2305,
+    2149,
+    2473,
+    2294,
+    2000,
+    2065,
+    2035,
+    2255,
+    1889,
+    1872,
+    2401,
+    2235,
+    2513,
+    2536,
+    2535,
+    2452,
+    2100,
+    2542,
+    2465,
+    1871,
+    2084,
+    2001,
+    2353,
+    2529,
+    1981,
+    1299,
+    1448,
+    1120,
+    1424,
+    1338,
+    1449,
+    1316,
+    1393,
+    1227,
+    1323,
+    1422,
+    1338,
+    1305,
+    1011,
+    983,
     942,
-    784,
-    687,
-    760,
-    827,
-    735,
-    732,
-    737,
-    732,
-    765,
-    741,
-    755,
-    670,
-    858,
-    728,
-    612,
-    1041,
-    581,
-    616,
-    1067,
-    574,
-    989,
-    735,
-    935,
+    1008,
+    1022,
+    1202,
+    1098,
     816,
-    611,
-    882,
-    588,
-    855,
-    623,
-    862,
-    766,
+    1087,
+    891,
+    1133,
+    900,
+    973,
+    1190,
+    1101,
+    1128,
+    1079,
+    1234,
+    1366,
+    953,
+    935,
+    984,
+    982,
+    904,
+    986,
+    978,
+    1216,
+    1054,
+    860,
+    1044,
+    952,
+    1011,
+    874,
+    990,
+    951,
+    961,
+    973,
     931,
-    600,
-    690,
-    744,
-    764,
-    734,
-    790,
-    601,
-    621,
+    920,
     931,
-    908,
-    727,
-    748,
-    732,
-    727,
-    732,
-    700,
-    1275
+    986,
+    910,
+    883,
+    1011,
+    947,
+    906,
+    968,
+    1180,
+    876,
+    990,
+    919,
+    1028,
+    911,
+    942,
+    969,
+    932,
+    938,
+    976,
+    999,
+    799,
+    874,
+    1061,
+    1021,
+    971,
+    940,
+    952,
+    928,
+    963,
+    1017,
+    942,
+    937
   ]
 }

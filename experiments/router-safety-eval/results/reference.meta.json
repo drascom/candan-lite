@@ -1,0 +1,40 @@
+{
+  "created_at": "2026-07-14T18:41:28.588809+00:00",
+  "base_url": "http://192.168.0.25:8080",
+  "conditions": [
+    "reference_flag2",
+    "reference_combo"
+  ],
+  "languages": [
+    "en",
+    "tr"
+  ],
+  "critical_repeats": 1,
+  "cases": 72,
+  "production_catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+  "production_catalog_size": 23,
+  "repeat_penalty": 1.1,
+  "repeat_last_n": 64,
+  "temperature": 0.0,
+  "seed": 42,
+  "condition_meta": {
+    "reference_flag2": {
+      "flag2": true,
+      "negscope": false,
+      "decision_first": false,
+      "catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+      "prefix_chars": 8676,
+      "instruction_chars": 1011,
+      "representative_prompt_tokens": 2568
+    },
+    "reference_combo": {
+      "flag2": true,
+      "negscope": true,
+      "decision_first": false,
+      "catalog_hash": "1f6bc5c6fa28c786603ad5632cfd7f9ba3b25cb249939c92176c12aaa9526ea3",
+      "prefix_chars": 9764,
+      "instruction_chars": 1011,
+      "representative_prompt_tokens": 2800
+    }
+  }
+}

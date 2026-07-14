@@ -27,6 +27,22 @@ web/ (Next.js, LiveKit agent-starter) ──ses+metin──► LiveKit (oracle-s
 - [ ] tool + hafıza
 - [ ] deploy / cutover
 
+## Pano (yerel, tarayıcıdan)
+```
+python3 tools/dashboard.py      →  http://127.0.0.1:8765
+```
+Bağımlılık YOK (yalnız Python stdlib), real-time değil — **sayfayı yenile**, veri yenilenir.
+Port meşgulse: `DASHBOARD_PORT=8766 python3 tools/dashboard.py`. Yalnız `127.0.0.1`'e bağlanır.
+
+- **Router kararları** — `logs/router-decisions.jsonl` (gölge modda router'ın tek ürünü).
+  Özet (abstain oranı, tool dağılımı, p50/p95), filtreler ve **şüpheli kararlar**: hata/timeout,
+  yavaşlar ve **mıknatıs tool'lar** — kararların oransız büyük kısmını kapan tool'a düşen cümleleri
+  yan yana listeler (semantik komşu tuzağı: "Kombi aç" → `light_control`). Defter tek tıkla silinir.
+- **Oturumlar** — `sessions/*.jsonl` pi transkriptleri; salt-okunur döküm. Silme YOK: onaylı
+  şekilde `sessions/.trash/` içine **taşınır**.
+- **Hafıza** — `memory/` (family.md, users/*, policy.json, events.db) + `worker/data/speakers.db`.
+  **SALT-OKUNUR**: bu sayfada yazma/silme yolu YOKTUR (SQLite'lar `mode=ro` ile açılır).
+
 ## Faz kaynak referansları (candan/hermes-livekit'ten taşınacak)
 - Wyoming STT: `hermes-livekit/adapter.py` ~satır 1399-1543 (`WhisperSession`, wyoming Event)
 - OmniVoice TTS: `hermes-livekit/voice/tts.py` + adapter OmniVoice etiket mantığı (~satır 207-221)

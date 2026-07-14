@@ -1,0 +1,3978 @@
+{
+ "variant": "tren2",
+ "schema": "flag",
+ "model": "qwen35-4b-q8",
+ "summary": {
+  "schema": "flag",
+  "n": 139,
+  "recall_pct": 95.6,
+  "arg_ok_pct": 91.2,
+  "arg_ok_given_right_tool_pct": 95.4,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 1.9,
+  "trap_wrong_n": 51,
+  "trap_total": 52,
+  "high_abstain_pct": 15.4,
+  "high_fired_pct": 84.6,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 5,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 4,
+  "multi_flag_fn": 2,
+  "multi_flag_fp": 0,
+  "multi_flag_tn": 133,
+  "multi_flag_fp_pct": 0.0,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 0,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 17,
+    "pct": 100.0
+   },
+   "high": {
+    "n": 13,
+    "ok": 2,
+    "pct": 15.4
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 13,
+    "pct": 81.2
+   },
+   "tool": {
+    "n": 35,
+    "ok": 35,
+    "pct": 100.0
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 1,
+    "pct": 4.5
+   }
+  },
+  "splat_targets": {
+   "light_control": 17,
+   "media_play": 15,
+   "translate": 13,
+   "memory_add": 8,
+   "calendar_add": 2,
+   "mail_check": 1,
+   "reminder_list": 1,
+   "volume_set": 1,
+   "shopping_list": 1,
+   "weather": 1,
+   "media_stop": 1,
+   "match_result": 1
+  },
+  "old35_pct": 48.6,
+  "old35": "17/35",
+  "lat_p50_ms": 1877,
+  "lat_mean_ms": 2150,
+  "lat_p95_ms": 5649
+ },
+ "errors": [
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "Turkish (original): bu hafta sonu İzmir'de hava nasıl olacak\nEnglish (machine translation): What will the weather be like in Izmir this weekend?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": {
+    "city": "İzmir",
+    "day": "weekend"
+   }
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "Turkish (original): annemin doğum gününü sana söylemiştim, ne zamandı\nEnglish (machine translation): I told you about my mother's birthday, when\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "gold=memory_search",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+     "target_lang": "Turkish"
+    }
+   ]
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "Turkish (original): annemin ilacı hakkında sana ne söylemiştim\nEnglish (machine translation): What did I tell you about my mother's medicine?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "gold=memory_search",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_args": [
+    {
+     "medicine": "annemin ilacı",
+     "at": ""
+    }
+   ]
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Turkish (original): saat 3'teki hatırlatmayı iptal et\nEnglish (machine translation): Cancel reminder at 3 p.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "Turkish (original): İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\nEnglish (machine translation): Note that Ismet's passport expired on March 12, 2027\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": {
+    "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+    "scope": "private"
+   }
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Turkish (original): gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\nEnglish (machine translation): Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "at": "gelecek cuma 21:45",
+    "title": "Dr. Kaya ile doktor randevusu"
+   }
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "Turkish (original): kardeşimin hesabına şimdi 2000 lira gönder\nEnglish (machine translation): Send $2,000 to my brother's account now\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Send $2,000 to my brother's account now",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Turkish (original): Neva'ya yemek hazır de\nEnglish (machine translation): Say dinner is ready for Neva\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "Neva'ya yemek hazır de",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Turkish (original): Ayhan'a mesaj bırak, eve geç geleceğim\nEnglish (machine translation): Leave a message for Ayhan, I'll be home late\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "Ayhan'a mesaj bırak, eve geç geleceğim",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Turkish (original): Neva'nın odasını bağla, onunla konuşmak istiyorum\nEnglish (machine translation): Get Neva's room, I want to talk to her.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva'nın odası",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "Turkish (original): patronuma bugün hasta olduğumu yazan bir mail gönder\nEnglish (machine translation): Send an email to my boss saying I'm sick today.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_args": [
+    {
+     "filter": ""
+    }
+   ]
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "Turkish (original): okula mail at, Neva yarın gelmeyecek de\nEnglish (machine translation): email the school, say Neva won't be coming tomorrow\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "title": "Neva not coming to school",
+     "at": "tomorrow"
+    }
+   ]
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "Turkish (original): bütün hatırlatmalarımı iptal et\nEnglish (machine translation): Cancel all my reminders\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "Turkish (original): profil hafızamı temizle, çok uzadı\nEnglish (machine translation): Clear my profile memory, it's gone too far\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "profil hafızamı temizle, çok uzadı",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "Turkish (original): elektrik şirketine 750 lira öde\nEnglish (machine translation): Pay $750 to the electricity company\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "elektrik şirketine 750 lira öde",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "Turkish (original): aile hafızasını sil, sıfırdan başlayalım\nEnglish (machine translation): Delete family memory, let's start from scratch\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "aile hafızasını sil, sıfırdan başlayalım",
+     "scope": "family"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Turkish (original): evdeki herkese yemeğin 8'de olduğunu söyle\nEnglish (machine translation): Tell everyone in the house that the food is at 8 o'clock.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "evdeki herkese yemeğin 8'de olduğunu söyle",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turkish (original): salonun ışığını aç ve Neva'ya aşağı gelmesini söyle\nEnglish (machine translation): Turn on the light of the hall and tell Neva to come down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Turkish (original): listeye süt ekle ve saat 6'da markete gitmemi hatırlat\nEnglish (machine translation): Add milk to the list and remind me to go to the grocery store at 6:00\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Turkish (original): yarın hava nasıl, bir de 7'ye alarm kur\nEnglish (machine translation): Tomorrow, the weather is like, and you set an alarm for 7.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Turkish (original): kahvaltımı yaz ve bugün kaç kalori aldığımı söyle\nEnglish (machine translation): Write my breakfast and tell me how many calories I've taken today\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Turkish (original): biraz müzik çal ve ışıkları kıs\nEnglish (machine translation): Play some music and turn the lights down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Turkish (original): Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\nEnglish (machine translation): Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "YARIM-IS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kombiyi aç, üşüdüm\nEnglish (machine translation): Open the boiler, I'm cold\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): perdeleri kapat\nEnglish (machine translation): Close curtains\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): televizyonu aç, habere geç\nEnglish (machine translation): Turn on the TV, get on the news\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "living room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bulaşık makinesini başlat\nEnglish (machine translation): Start the dishwasher\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "",
+     "state": ""
+    }
+   ]
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): çamaşır makinesini pamuklu programında başlat\nEnglish (machine translation): Start the washing machine in the cotton program\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "bathroom",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): televizyonun sesini kıs\nEnglish (machine translation): Turn the TV down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "level": 50
+    }
+   ]
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): garaj kapısını aç\nEnglish (machine translation): Open the garage door\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "garaj",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): ön kapıyı kilitle\nEnglish (machine translation): Lock the front door\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "ön kapı",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kaloriferi iki derece aç\nEnglish (machine translation): Turn the radiator on at two degrees\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "bathroom",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): salonu süpür\nEnglish (machine translation): Sweep the hall\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "salon",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): fırını aç, 180 derece\nEnglish (machine translation): Open the oven, 180 degrees\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): balkondaki çiçekleri sula\nEnglish (machine translation): water the flowers on the balcony\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "balkon",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): alışveriş listesini yazdır\nEnglish (machine translation): Print the shopping list\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bu akşam için balık restoranından masa ayırt\nEnglish (machine translation): Book a table at a fish restaurant for tonight\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "bu akşam",
+     "title": "balık restoranından masa ayırt"
+    }
+   ]
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): eve taksi çağır\nEnglish (machine translation): Call a taxi home\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "eve",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): wifi modemi kapat\nEnglish (machine translation): Turn off wifi modem\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kombi aç\nEnglish (machine translation): open combi\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): perdeleri kapat\nEnglish (machine translation): Close curtains\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): borsadan 10 lot Garanti hissesi al\nEnglish (machine translation): Get 10 lot Guarantee shares from the stock exchange\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "borsadan 10 lot Garanti hissesi al",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bu akşam için pizza söyle\nEnglish (machine translation): Sing pizza for tonight\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "pizza",
+     "track": "bu akşam için",
+     "platform": "spotify"
+    }
+   ]
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): arabayı uzaktan çalıştır\nEnglish (machine translation): Start the car remotely\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "",
+     "state": ""
+    }
+   ]
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bugün çok sıkıldım\nEnglish (machine translation): I'm bored today.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "bugün çok sıkıldım",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sana dedemin köyünü anlatayım mı\nEnglish (machine translation): Shall I tell you about my grandfather's village?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "sana dedemin köyünü anlatayım mı",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bana bir fıkra anlat\nEnglish (machine translation): Tell me a joke\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bana bir fıkra anlat",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sence hayatın anlamı ne\nEnglish (machine translation): What do you think life means\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "sence hayatın anlamı ne",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "Turkish (original): seni çok sevdiğimi biliyorsun değil mi\nEnglish (machine translation): You know I love you a lot, don't you?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "seni çok sevdiğimi biliyorsun değil mi",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "Turkish (original): of, bugün çok yorgunum\nEnglish (machine translation): Oh, I'm so tired today\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "of",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "Turkish (original): en sevdiğin yemek ne\nEnglish (machine translation): What is your favorite food\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "en sevdiğin yemek ne",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "Turkish (original): biraz sohbet etmek istiyorum\nEnglish (machine translation): I want to have a little chat\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "Turkish (original): acaba yarın mutlu olacak mıyım\nEnglish (machine translation): Will I be happy tomorrow?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "acaba yarın mutlu olacak mıyım",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "Turkish (original): iyi geceler canım\nEnglish (machine translation): Good night, my dear.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "iyi geceler canım",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sırtım yine ağrıyor, yaşlanmak zor\nEnglish (machine translation): My back hurts again, it's hard to age\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "sırtım yine ağrıyor, yaşlanmak zor",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bugün Neva'yla tartıştım, çok kötü hissediyorum\nEnglish (machine translation): I argued with Neva today, I feel terrible.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bizden hiç sıkılıyor musun\nEnglish (machine translation): Do you ever get bored of us?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "bizden hiç sıkılıyor musun",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bu havalar son zamanlarda beni üzüyor\nEnglish (machine translation): This weather has been upsetting me lately.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": [
+    {
+     "city": "beni üzüyor"
+    }
+   ]
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): aynısından bir tane daha\nEnglish (machine translation): another of the same\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "aynsından bir tane daha",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu da ekle\nEnglish (machine translation): Add it\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "onu da ekle",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): hayır, diğeri\nEnglish (machine translation): No, the other\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "hayır",
+     "track": "diğeri",
+     "platform": "spotify"
+    }
+   ]
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): bir daha yap\nEnglish (machine translation): Do it again\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "bir daha yap",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu iptal et\nEnglish (machine translation): Cancel it\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): peki ya yarın\nEnglish (machine translation): And tomorrow?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "peki ya yarın",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): evet, öyle yap\nEnglish (machine translation): Yes, do so.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "",
+     "track": "evet, öyle yap",
+     "platform": ""
+    }
+   ]
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu 5'e çevir\nEnglish (machine translation): Turn it into 5\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "onu 5'e çevir",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Turkish (original): Fatih Sultan Mehmet kaç yılında doğdu\nEnglish (machine translation): Fatih Sultan Mehmet was born in how many years\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+     "target_lang": "Turkish"
+    }
+   ]
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "Turkish (original): insan vücudunda kaç kemik var\nEnglish (machine translation): How many bones are in the human body\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "insan vücudunda kaç kemik var",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "Turkish (original): gökyüzü neden mavi\nEnglish (machine translation): Why the sky is blue\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "gökyüzü neden mavi",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Turkish (original): Avustralya'nın başkenti neresi\nEnglish (machine translation): What is the capital of Australia\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "Avustralya'nın başkenti neresi",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "Turkish (original): mercimek çorbası nasıl yapılır\nEnglish (machine translation): How to make lentil soup\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "mercimek çorbası nasıl yapılır",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "Turkish (original): fotosentez ne demek\nEnglish (machine translation): What is photosynthesis\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "fotosentez ne demek",
+     "target_lang": "English"
+    }
+   ]
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "Turkish (original): bir futbol takımında kaç oyuncu vardır\nEnglish (machine translation): How many players are in a football team\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_args": [
+    {
+     "team": "bir futbol takımı"
+    }
+   ]
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Turkish (original): Sefiller'i kim yazdı\nEnglish (machine translation): Who wrote The Miserables?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "Sefiller'i kim yazdı",
+     "target_lang": "English"
+    }
+   ]
+  }
+ ],
+ "pn": {
+  "n": 20,
+  "tool_ok": 20,
+  "tool_pct": 100.0,
+  "name_ok": 19,
+  "name_pct": 95.0,
+  "rows": [
+   {
+    "id": "pn01",
+    "tr": "Kuzu Kuzu çal",
+    "en": "Play Lamb Lamb",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Kuzu Kuzu",
+     "track": "çal",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn02",
+    "tr": "Tarkan'dan Şımarık çal",
+    "en": "Play Spoiled by Tarkan",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Tarkan",
+     "track": "Şımarık"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn03",
+    "tr": "Sezen Aksu'dan Gülümse çal",
+    "en": "Smile Play from Sezen Aksu",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sezen Aksu",
+     "track": "Gülümse"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn04",
+    "tr": "Duman'dan Her Şeyi Yak çal",
+    "en": "Burn Everything from Smoke Play",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Duman",
+     "track": "Her Şeyi Yak",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn05",
+    "tr": "Sıla'nın Vaziyetler şarkısını aç",
+    "en": "Open Sila's State of the State song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sıla",
+     "track": "Vaziyetler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn06",
+    "tr": "Müslüm Gürses'ten Affet çal",
+    "en": "Forgive from the Musicians",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Müslüm Gürses",
+     "track": "Affet",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn07",
+    "tr": "Ezhel'in Geceler şarkısını çal",
+    "en": "Play Ezhel's Nights song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Ezhel",
+     "track": "Geceler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn08",
+    "tr": "Yüzüklerin Efendisi'ni aç",
+    "en": "Open the Lord of the Rings",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "",
+     "track": "Yüzüklerin Efendisi'ni aç",
+     "platform": ""
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn09",
+    "tr": "Neva'nın doğum günü 12 Mart, aklında tut",
+    "en": "Neva's birthday is March 12, keep it in mind",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Neva'nın doğum günü 12 Mart",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn10",
+    "tr": "akşam 7'de Ayhan'ı aramamı hatırlat",
+    "en": "Remind me to call Ayhan at 7 p.m.",
+    "gold": [
+     "med_reminder",
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Ayhan'ı ara",
+     "at": "19:00"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn11",
+    "tr": "Neva'nın matematik sınavı ne zaman",
+    "en": "When is Neva's math test",
+    "gold": [
+     "school_exam_schedule"
+    ],
+    "pred_tools": [
+     "school_exam_schedule"
+    ],
+    "args": {
+     "person": "Neva",
+     "subject": "matematik"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn12",
+    "tr": "Ayhan'ın telefon numarası neydi, hafızana bak",
+    "en": "What was Ayhan's phone number, look at your memory",
+    "gold": [
+     "memory_search"
+    ],
+    "pred_tools": [
+     "memory_search"
+    ],
+    "args": {
+     "query": "Ayhan telefon numarası"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn13",
+    "tr": "bundan sonra bana Ayhan Bey diye hitap et",
+    "en": "From now on, call me Mr. Ayhan.",
+    "gold": [
+     "soul_add"
+    ],
+    "pred_tools": [
+     "soul_add"
+    ],
+    "args": {
+     "text": "bundan sonra bana Ayhan Bey diye hitap et",
+     "scope": "self"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn14",
+    "tr": "Beşiktaş maçı kaç kaç bitti",
+    "en": "How many games are finished",
+    "gold": [
+     "match_result"
+    ],
+    "pred_tools": [
+     "match_result"
+    ],
+    "args": {
+     "team": "Beşiktaş"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn15",
+    "tr": "Şanlıurfa'da hava nasıl",
+    "en": "How is the weather in Şanlıurfa",
+    "gold": [
+     "weather"
+    ],
+    "pred_tools": [
+     "weather"
+    ],
+    "args": {
+     "city": "Şanlıurfa"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn16",
+    "tr": "öğlen İskender yedim, diyetime yaz",
+    "en": "I ate Alexander at noon, write to my diet",
+    "gold": [
+     "diet_log"
+    ],
+    "pred_tools": [
+     "diet_log"
+    ],
+    "args": {
+     "food": "İskender",
+     "meal": "öğlen"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn17",
+    "tr": "alışveriş listesine Torku süt ve Eti bisküvi ekle",
+    "en": "Add Torku milk and meat biscuits to the shopping list",
+    "gold": [
+     "shopping_add"
+    ],
+    "pred_tools": [
+     "shopping_add"
+    ],
+    "args": {
+     "items": "Torku süt ve Eti bisküvi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn18",
+    "tr": "cumartesi Neva'yı Bostancı'dan almam gerek, hatırlat",
+    "en": "I need to get Neva from Bostancı on Saturday, remind me.",
+    "gold": [
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Neva'yı Bostancı'dan al",
+     "at": "cumartesi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn19",
+    "tr": "Kadıköy'deki dükkanın adı Çiya, unutma",
+    "en": "The shop in Kadıköy is called Chiya, remember",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Kadıköy'deki dükkanın adı Çiya",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn20",
+    "tr": "Atatürk Havalimanı ile ilgili haberleri ara",
+    "en": "Search for news about Atatürk Airport",
+    "gold": [
+     "web_search"
+    ],
+    "pred_tools": [
+     "web_search"
+    ],
+    "args": {
+     "query": "Atatürk Havalimanı haberleri"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   }
+  ]
+ },
+ "lat_p50_all_ms": 1946,
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "Turkish (original): yarın değil, öbür gün sabah 9'a alarm kur\nEnglish (machine translation): Not tomorrow, but the next day, set an alarm for 9 a.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Sabah 9'a alarm kur",
+      "at": "09:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "Turkish (original): Ayşe'nin sınavı ne zaman\nEnglish (machine translation): When is Ayşe's exam\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Ayşe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Turkish (original): Sezen Aksu'dan bir şey çal\nEnglish (machine translation): Play something from Sezen Aksu\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Sezen Aksu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "Turkish (original): mailime bak, bugün toplantı var mı\nEnglish (machine translation): See my email, is there a meeting today?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "Turkish (original): her sabah 8'de tansiyon ilacımı almamı hatırlat\nEnglish (machine translation): Remind me to take my blood pressure medication every morning at 8:00.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "tansiyon ilacı",
+      "at": "her sabah 8:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "Turkish (original): bu hafta sonu İzmir'de hava nasıl olacak\nEnglish (machine translation): What will the weather be like in Izmir this weekend?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "İzmir",
+      "day": "weekend"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "Turkish (original): alışveriş listesine süt, ekmek ve yumurta ekle\nEnglish (machine translation): Add milk, bread and eggs to the shopping list\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt, ekmek ve yumurta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "Turkish (original): öğlen 3 köfte yedim, diyetime yaz\nEnglish (machine translation): I had 3 meatballs at noon, write to my diet\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "köfte",
+      "meal": "öğlen",
+      "amount": "3"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "Turkish (original): bugün toplam kaç kalori aldım\nEnglish (machine translation): How many calories did I get today?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "bugün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "Turkish (original): Galatasaray dün kaç kaç yaptı\nEnglish (machine translation): How many did Galatasaray make yesterday?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Galatasaray"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "Turkish (original): salondaki ışıkları kapat\nEnglish (machine translation): Turn off the lights in the hall\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "Turkish (original): şu an saat kaç\nEnglish (machine translation): What time is it now?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "Turkish (original): dedemin doğum günü 3 Mayıs, aklında tut\nEnglish (machine translation): Grandpa's birthday is May 3, keep it in mind\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "dedemin doğum günü 3 Mayıs",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "Turkish (original): annemin doğum gününü sana söylemiştim, ne zamandı\nEnglish (machine translation): I told you about my mother's birthday, when\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+      "target_lang": "Turkish"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "Turkish (original): perşembe saat 2'de veli toplantısı var, bana hatırlat\nEnglish (machine translation): Parents' meeting at 2:00 p.m. Thursday, remind me\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "veli toplantısı",
+      "at": "perşembe saat 2"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "Turkish (original): babam için Tarkan'dan Kuzu Kuzu'yu çal\nEnglish (machine translation): Play Lamb Lamb from Tarkan for my father\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Tarkan",
+      "track": "Kuzu Kuzu",
+      "for_whom": "babam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "Turkish (original): bugünün tarihi ne\nEnglish (machine translation): What is today's date\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "Turkish (original): makarna için 12 dakikalık zamanlayıcı kur\nEnglish (machine translation): Set the 12-minute timer for pasta\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 12,
+      "label": "makarna"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "Turkish (original): alışveriş listesini oku bana\nEnglish (machine translation): Read me the shopping list\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "Turkish (original): mutfak ışığını aç\nEnglish (machine translation): turn on kitchen light\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "mutfak",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "Turkish (original): müziği durdur\nEnglish (machine translation): Stop the music\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "Turkish (original): sesini biraz kıs, çok yüksek konuşuyorsun\nEnglish (machine translation): Turn your voice down a little, you're talking too loud\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "level": 50
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "Turkish (original): internette yumurta kaç dakika haşlanır diye ara\nEnglish (machine translation): Search the Internet for how many minutes the egg is boiled\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "internette yumurta kaç dakika haşlanır"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "Turkish (original): 'günaydın' kelimesini Almanca'ya çevir\nEnglish (machine translation): Translate the word 'good morning' into German\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "günaydın",
+      "target_lang": "Almanca"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "Turkish (original): hatırlatmalarım neler\nEnglish (machine translation): What are my reminders\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "Turkish (original): Fenerbahçe dün akşam ne yaptı\nEnglish (machine translation): What Fenerbahçe did last night\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Fenerbahçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "Turkish (original): acil mail var mı\nEnglish (machine translation): Is there an emergency email\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "acil"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "Turkish (original): öğle yemeğine bir kase mercimek çorbası yaz\nEnglish (machine translation): Write a bowl of lentil soup for lunch\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "mercimek çorbası",
+      "meal": "öğle yemeği"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "Turkish (original): takvime ekle: cumartesi 11'de diş hekimi\nEnglish (machine translation): Add to calendar: dentist on Saturday 11\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "diş hekimi",
+      "at": "cumartesi 11"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "Turkish (original): yarın Ankara'da hava nasıl\nEnglish (machine translation): How is the weather in Ankara tomorrow\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "Turkish (original): 20 dakika sonra tesisatçıyı aramamı hatırlat\nEnglish (machine translation): Remind me to call the plumber in 20 minutes.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "teslatıcıyı ara",
+      "at": "2024-10-09 15:20"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "Turkish (original): bütün ışıkları kapat, yatıyoruz\nEnglish (machine translation): Turn off all the lights, we're going to bed\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bütün",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "Turkish (original): bu yıl fizik Nobel'ini kim kazandı internetten bak\nEnglish (machine translation): See who won the physics Nobel this year online\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "bu yıl fizik Nobel'ini kim kazandı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "Turkish (original): Neva'nın matematik sınavı ne zaman\nEnglish (machine translation): When is Neva's math test\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Neva",
+      "subject": "matematik"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "Turkish (original): listeye yoğurt ve domates ekle\nEnglish (machine translation): Add yogurt and tomatoes to the list\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "yoğurt ve domates"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "Turkish (original): dünkü kalori özetimi ver\nEnglish (machine translation): Give me yesterday's calorie summary\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "dün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "Turkish (original): spotify'dan biraz caz çal\nEnglish (machine translation): Play some jazz from Spotify\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "Turkish (original): şu cümleyi İngilizce'ye çevir: hava çok güzel\nEnglish (machine translation): Translate this sentence into English: the weather is beautiful\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "hava çok güzel",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "Turkish (original): 5 dakika zamanlayıcı ver\nEnglish (machine translation): Give me a 5 minute timer\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "Turkish (original): sesini aç biraz\nEnglish (machine translation): Turn it up a bit\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "up"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Turkish (original): Neva'nın fıstık alerjisi olduğunu unutma\nEnglish (machine translation): Remember that Neva is a peanut allergy.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "Turkish (original): bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat\nEnglish (machine translation): Remind me tonight that Neva is allergic to peanuts.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi",
+      "at": "bu akşam"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "Turkish (original): evlilik yıldönümümüzün 14 Eylül olduğunu not et\nEnglish (machine translation): Note that our wedding anniversary is September 14th.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "Turkish (original): yarın 6:30'da beni uyandır\nEnglish (machine translation): Wake me up tomorrow at 6:30\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Beni uyandır",
+      "at": "yarın 06:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "Turkish (original): bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et\nEnglish (machine translation): From now on, call me Mr. Ayhan, not just Ayhan.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "Turkish (original): çok konuşuyorsun, bundan sonra cevapların daha kısa olsun\nEnglish (machine translation): You talk a lot, so your answers are shorter from now on.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "Turkish (original): annemin ilacı hakkında sana ne söylemiştim\nEnglish (machine translation): What did I tell you about my mother's medicine?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "annemin ilacı",
+      "at": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "Turkish (original): annem kalp hapını akşam 9'da içiyor, bunu kur\nEnglish (machine translation): My mother drinks her heart pill at 9 p.m., so set it up.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "kalp hapı",
+      "at": "akşam 9'da"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "Turkish (original): aile hafızasına yaz: pazar günü anneanneye gidiyoruz\nEnglish (machine translation): Write in family memory: we're going to Grandma's on Sunday\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "pazar günü anneanneye gidiyoruz",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Turkish (original): saat 3'teki hatırlatmayı iptal et\nEnglish (machine translation): Cancel reminder at 3 p.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "Turkish (original): diş hekimi için hatırlatmam var mıydı\nEnglish (machine translation): Do I have a reminder for the dentist?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "Turkish (original): araba sigortası hakkında ne dediğimi hafızamda ara\nEnglish (machine translation): Call me in memory of what I said about car insurance\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "araba sigortası"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "Turkish (original): araba sigortasının güncel fiyatını internetten bak\nEnglish (machine translation): See the current price of car insurance online\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "araba sigortasının güncel fiyatı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "Turkish (original): bunu bana hatırlatma, sadece aklında tut\nEnglish (machine translation): Don't remind me of that, just keep it in mind\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bunu bana hatırlatma, sadece aklında tut",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "Turkish (original): haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat\nEnglish (machine translation): Remind me to renew my passport Tuesday at 7:30 p.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "pasaportumu yenilemeyi hatırlat",
+      "at": "haftaya salı 19:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "Turkish (original): Neva'nın kimya sınavı 21'inde, takvime ekle\nEnglish (machine translation): On Neva's chemistry exam 21, add to calendar\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva'nın kimya sınavı",
+      "at": "21"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "Turkish (original): bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat\nEnglish (machine translation): Remind me to remove the bread from the oven in an hour and a half.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "ekmeği fırından çıkarmak",
+      "at": "1.5 saat sonra"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "Turkish (original): iki buçuk dakikalık zamanlayıcı kur\nEnglish (machine translation): Set timer of two and a half minutes\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 2.5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "Turkish (original): İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et\nEnglish (machine translation): Note that Ismet's passport expired on March 12, 2027\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "Turkish (original): öbür gün Diyarbakır'da hava\nEnglish (machine translation): The next day, the weather in Diyarbakir\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakır",
+      "day": "öbür gün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "Turkish (original): akşam yemeğine 180 gram ızgara tavuk yaz\nEnglish (machine translation): Write 180 grams of grilled chicken for dinner\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "ızgara tavuk",
+      "meal": "akşam yemeği",
+      "amount": "180 gram"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "Turkish (original): yarın öğlen Ayhan'a vergi ödemesini hatırlat\nEnglish (machine translation): Remind Ayhan to pay taxes tomorrow at noon\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Ayhan'a vergi ödemesini hatırlat",
+      "at": "yarın 12:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "Turkish (original): youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal\nEnglish (machine translation): Play Purple and Beyond from YouTube Have a Problem\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "youtube",
+      "artist": "Mor ve Ötesi",
+      "track": "Bir Derdim Var"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "Turkish (original): yatak odası ışıklarını kıs\nEnglish (machine translation): Turn down the bedroom lights\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "yatak odası",
+      "state": "kıs"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "Turkish (original): ayın birinde kirayı ödemeyi hatırlat\nEnglish (machine translation): Remind to pay the rent on one month\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "kirayı ödemeyi hatırlat",
+      "at": "ayın birinde"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Turkish (original): gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle\nEnglish (machine translation): Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "gelecek cuma 21:45",
+      "title": "Dr. Kaya ile doktor randevusu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "Turkish (original): 'seni özledim'i Kürtçe'ye çevir\nEnglish (machine translation): Turn 'I miss you' into Kurdish\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "seni özledim",
+      "target_lang": "Kurdî"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "Turkish (original): maç başlamadan yarım saat önce televizyonu açmamı hatırlat\nEnglish (machine translation): Remind me to turn on the TV half an hour before the game starts.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Maç başlamadan yarım saat önce televizyonu aç",
+      "at": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "Turkish (original): hesabımdan Ali'ye 500 lira gönder\nEnglish (machine translation): Send $500 from my account to Ali\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "Turkish (original): kardeşimin hesabına şimdi 2000 lira gönder\nEnglish (machine translation): Send $2,000 to my brother's account now\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Send $2,000 to my brother's account now",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Turkish (original): Neva'ya yemek hazır de\nEnglish (machine translation): Say dinner is ready for Neva\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "Neva'ya yemek hazır de",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Turkish (original): Ayhan'a mesaj bırak, eve geç geleceğim\nEnglish (machine translation): Leave a message for Ayhan, I'll be home late\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "Ayhan'a mesaj bırak, eve geç geleceğim",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Turkish (original): Neva'nın odasını bağla, onunla konuşmak istiyorum\nEnglish (machine translation): Get Neva's room, I want to talk to her.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva'nın odası",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "Turkish (original): patronuma bugün hasta olduğumu yazan bir mail gönder\nEnglish (machine translation): Send an email to my boss saying I'm sick today.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "Turkish (original): okula mail at, Neva yarın gelmeyecek de\nEnglish (machine translation): email the school, say Neva won't be coming tomorrow\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva not coming to school",
+      "at": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "Turkish (original): diş hekimi randevusunu takvimden sil\nEnglish (machine translation): Delete the dentist appointment from the calendar\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "Turkish (original): bütün hatırlatmalarımı iptal et\nEnglish (machine translation): Cancel all my reminders\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "Turkish (original): profil hafızamı temizle, çok uzadı\nEnglish (machine translation): Clear my profile memory, it's gone too far\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "profil hafızamı temizle, çok uzadı",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "Turkish (original): elektrik şirketine 750 lira öde\nEnglish (machine translation): Pay $750 to the electricity company\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "elektrik şirketine 750 lira öde",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "Turkish (original): aile hafızasını sil, sıfırdan başlayalım\nEnglish (machine translation): Delete family memory, let's start from scratch\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "aile hafızasını sil, sıfırdan başlayalım",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Turkish (original): evdeki herkese yemeğin 8'de olduğunu söyle\nEnglish (machine translation): Tell everyone in the house that the food is at 8 o'clock.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "evdeki herkese yemeğin 8'de olduğunu söyle",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turkish (original): salonun ışığını aç ve Neva'ya aşağı gelmesini söyle\nEnglish (machine translation): Turn on the light of the hall and tell Neva to come down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Turkish (original): listeye süt ekle ve saat 6'da markete gitmemi hatırlat\nEnglish (machine translation): Add milk to the list and remind me to go to the grocery store at 6:00\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Turkish (original): yarın hava nasıl, bir de 7'ye alarm kur\nEnglish (machine translation): Tomorrow, the weather is like, and you set an alarm for 7.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "",
+      "day": "yarın"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Turkish (original): kahvaltımı yaz ve bugün kaç kalori aldığımı söyle\nEnglish (machine translation): Write my breakfast and tell me how many calories I've taken today\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "yaz"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Turkish (original): biraz müzik çal ve ışıkları kıs\nEnglish (machine translation): Play some music and turn the lights down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": "dim"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Turkish (original): Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat\nEnglish (machine translation): Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi olduğunu öğretmenine söyle",
+      "at": "this evening"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kombiyi aç, üşüdüm\nEnglish (machine translation): Open the boiler, I'm cold\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): klimayı 22 dereceye ayarla\nEnglish (machine translation): Set air conditioning to 22 degrees\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): perdeleri kapat\nEnglish (machine translation): Close curtains\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): televizyonu aç, habere geç\nEnglish (machine translation): Turn on the TV, get on the news\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "living room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bulaşık makinesini başlat\nEnglish (machine translation): Start the dishwasher\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): çamaşır makinesini pamuklu programında başlat\nEnglish (machine translation): Start the washing machine in the cotton program\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bathroom",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): televizyonun sesini kıs\nEnglish (machine translation): Turn the TV down\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "level": 50
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): garaj kapısını aç\nEnglish (machine translation): Open the garage door\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "garaj",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): ön kapıyı kilitle\nEnglish (machine translation): Lock the front door\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "ön kapı",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kaloriferi iki derece aç\nEnglish (machine translation): Turn the radiator on at two degrees\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bathroom",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): salonu süpür\nEnglish (machine translation): Sweep the hall\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): fırını aç, 180 derece\nEnglish (machine translation): Open the oven, 180 degrees\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): balkondaki çiçekleri sula\nEnglish (machine translation): water the flowers on the balcony\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "balkon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): alışveriş listesini yazdır\nEnglish (machine translation): Print the shopping list\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bu akşam için balık restoranından masa ayırt\nEnglish (machine translation): Book a table at a fish restaurant for tonight\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "bu akşam",
+      "title": "balık restoranından masa ayırt"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): eve taksi çağır\nEnglish (machine translation): Call a taxi home\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "eve",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): wifi modemi kapat\nEnglish (machine translation): Turn off wifi modem\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): kombi aç\nEnglish (machine translation): open combi\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): perdeleri kapat\nEnglish (machine translation): Close curtains\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): borsadan 10 lot Garanti hissesi al\nEnglish (machine translation): Get 10 lot Guarantee shares from the stock exchange\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "borsadan 10 lot Garanti hissesi al",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): bu akşam için pizza söyle\nEnglish (machine translation): Sing pizza for tonight\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "pizza",
+      "track": "bu akşam için",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "Turkish (original): arabayı uzaktan çalıştır\nEnglish (machine translation): Start the car remotely\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "",
+      "state": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bugün çok sıkıldım\nEnglish (machine translation): I'm bored today.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "bugün çok sıkıldım",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sana dedemin köyünü anlatayım mı\nEnglish (machine translation): Shall I tell you about my grandfather's village?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "sana dedemin köyünü anlatayım mı",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bana bir fıkra anlat\nEnglish (machine translation): Tell me a joke\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bana bir fıkra anlat",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sence hayatın anlamı ne\nEnglish (machine translation): What do you think life means\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "sence hayatın anlamı ne",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "Turkish (original): seni çok sevdiğimi biliyorsun değil mi\nEnglish (machine translation): You know I love you a lot, don't you?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "seni çok sevdiğimi biliyorsun değil mi",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "Turkish (original): of, bugün çok yorgunum\nEnglish (machine translation): Oh, I'm so tired today\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "of",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "Turkish (original): en sevdiğin yemek ne\nEnglish (machine translation): What is your favorite food\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "en sevdiğin yemek ne",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "Turkish (original): biraz sohbet etmek istiyorum\nEnglish (machine translation): I want to have a little chat\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "Turkish (original): acaba yarın mutlu olacak mıyım\nEnglish (machine translation): Will I be happy tomorrow?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "acaba yarın mutlu olacak mıyım",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "Turkish (original): iyi geceler canım\nEnglish (machine translation): Good night, my dear.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "iyi geceler canım",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "Turkish (original): sırtım yine ağrıyor, yaşlanmak zor\nEnglish (machine translation): My back hurts again, it's hard to age\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "sırtım yine ağrıyor, yaşlanmak zor",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bugün Neva'yla tartıştım, çok kötü hissediyorum\nEnglish (machine translation): I argued with Neva today, I feel terrible.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bizden hiç sıkılıyor musun\nEnglish (machine translation): Do you ever get bored of us?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "bizden hiç sıkılıyor musun",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "Turkish (original): bu havalar son zamanlarda beni üzüyor\nEnglish (machine translation): This weather has been upsetting me lately.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "beni üzüyor"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): aynısından bir tane daha\nEnglish (machine translation): another of the same\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "aynsından bir tane daha",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu da ekle\nEnglish (machine translation): Add it\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "onu da ekle",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): hayır, diğeri\nEnglish (machine translation): No, the other\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "hayır",
+      "track": "diğeri",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): bir daha yap\nEnglish (machine translation): Do it again\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "bir daha yap",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu iptal et\nEnglish (machine translation): Cancel it\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): peki ya yarın\nEnglish (machine translation): And tomorrow?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "peki ya yarın",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): evet, öyle yap\nEnglish (machine translation): Yes, do so.\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "evet, öyle yap",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "Turkish (original): onu 5'e çevir\nEnglish (machine translation): Turn it into 5\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "onu 5'e çevir",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Turkish (original): Fatih Sultan Mehmet kaç yılında doğdu\nEnglish (machine translation): Fatih Sultan Mehmet was born in how many years\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+      "target_lang": "Turkish"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "Turkish (original): insan vücudunda kaç kemik var\nEnglish (machine translation): How many bones are in the human body\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "insan vücudunda kaç kemik var",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "Turkish (original): gökyüzü neden mavi\nEnglish (machine translation): Why the sky is blue\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "gökyüzü neden mavi",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Turkish (original): Avustralya'nın başkenti neresi\nEnglish (machine translation): What is the capital of Australia\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "Avustralya'nın başkenti neresi",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "Turkish (original): mercimek çorbası nasıl yapılır\nEnglish (machine translation): How to make lentil soup\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "mercimek çorbası nasıl yapılır",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "Turkish (original): fotosentez ne demek\nEnglish (machine translation): What is photosynthesis\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "fotosentez ne demek",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "Turkish (original): bir futbol takımında kaç oyuncu vardır\nEnglish (machine translation): How many players are in a football team\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "bir futbol takımı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Turkish (original): Sefiller'i kim yazdı\nEnglish (machine translation): Who wrote The Miserables?\n\nPick the tool using the English translation. Fill the arguments from the Turkish original — names, song titles, places and brands must stay in Turkish, exactly as the user said them.",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "Sefiller'i kim yazdı",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  }
+ ]
+}

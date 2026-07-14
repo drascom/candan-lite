@@ -1,0 +1,46 @@
+{
+  "created_at": "2026-07-14T18:21:17.659484+00:00",
+  "base_url": "http://192.168.0.25:8080",
+  "conditions": [
+    "baseline",
+    "flag2_short",
+    "flag2"
+  ],
+  "languages": [
+    "en"
+  ],
+  "critical_repeats": 1,
+  "cases": 30,
+  "production_catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+  "production_catalog_size": 23,
+  "repeat_penalty": 1.1,
+  "repeat_last_n": 64,
+  "temperature": 0.0,
+  "seed": 42,
+  "condition_meta": {
+    "baseline": {
+      "flag2": false,
+      "negscope": false,
+      "catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+      "prefix_chars": 8676,
+      "instruction_chars": 468,
+      "representative_prompt_tokens": 2450
+    },
+    "flag2_short": {
+      "flag2": true,
+      "negscope": false,
+      "catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+      "prefix_chars": 8676,
+      "instruction_chars": 400,
+      "representative_prompt_tokens": 2424
+    },
+    "flag2": {
+      "flag2": true,
+      "negscope": false,
+      "catalog_hash": "17d6fffc4d97f8a249d80789d99a74f2a7bb622e42f49942d42ff69459db54b7",
+      "prefix_chars": 8676,
+      "instruction_chars": 1022,
+      "representative_prompt_tokens": 2551
+    }
+  }
+}

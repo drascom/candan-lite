@@ -1,0 +1,2713 @@
+{
+ "variant": "en",
+ "schema": "flag",
+ "model": "qwen35-4b-q8",
+ "summary": {
+  "schema": "flag",
+  "n": 139,
+  "recall_pct": 92.6,
+  "arg_ok_pct": 83.8,
+  "arg_ok_given_right_tool_pct": 90.5,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 86.5,
+  "trap_wrong_n": 7,
+  "trap_total": 52,
+  "high_abstain_pct": 69.2,
+  "high_fired_pct": 30.8,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 5,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 6,
+  "multi_flag_fn": 0,
+  "multi_flag_fp": 1,
+  "multi_flag_tn": 132,
+  "multi_flag_fp_pct": 0.8,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 0,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 17,
+    "pct": 100.0
+   },
+   "high": {
+    "n": 13,
+    "ok": 9,
+    "pct": 69.2
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 12,
+    "pct": 75.0
+   },
+   "tool": {
+    "n": 35,
+    "ok": 34,
+    "pct": 97.1
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 13,
+    "pct": 92.9
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 6,
+    "pct": 75.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 7,
+    "pct": 87.5
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 19,
+    "pct": 86.4
+   }
+  },
+  "splat_targets": {
+   "light_control": 2,
+   "volume_set": 2,
+   "media_play": 2,
+   "memory_add": 1,
+   "reminder_add": 1,
+   "shopping_list": 1,
+   "reminder_list": 1,
+   "web_search": 1
+  },
+  "old35_pct": 94.3,
+  "old35": "33/35",
+  "lat_p50_ms": 1826,
+  "lat_mean_ms": 1843,
+  "lat_p95_ms": 2277
+ },
+ "errors": [
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "Turn off the lights in the hall",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": {
+    "room": "hall",
+    "state": "off"
+   }
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "Grandpa's birthday is May 3, keep it in mind",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": {
+    "text": "Grandpa's birthday is May 3",
+    "scope": "private"
+   }
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "Play Lamb Lamb from Tarkan for my father",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": {
+    "artist": "Tarkan",
+    "track": "Lamb Lamb",
+    "platform": "spotify",
+    "for_whom": "father"
+   }
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "Write a bowl of lentil soup for lunch",
+   "why": "gold=diet_log",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "Remind me tonight that Neva is allergic to peanuts.",
+   "why": "gold=reminder_add",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Neva is allergic to peanuts.",
+     "scope": "family"
+    }
+   ]
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Cancel reminder at 3 p.m.",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "See the current price of car insurance online",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "Don't remind me of that, just keep it in mind",
+   "why": "gold=memory_add",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Don't remind me of that, just keep it in mind",
+     "scope": "self"
+    }
+   ]
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "Play Purple and Beyond from YouTube Have a Problem",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": {
+    "artist": "Purple and Beyond",
+    "track": "Have a Problem",
+    "platform": "youtube"
+   }
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "Remind to pay the rent on one month",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "text": "Pay rent",
+    "at": "tomorrow 09:00"
+   }
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "title": "Doctor's appointment with Dr. Kaya",
+    "at": "next Friday 21:15"
+   }
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Say dinner is ready for Neva",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "dining room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Leave a message for Ayhan, I'll be home late",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "I'll be home late for Ayhan.",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Get Neva's room, I want to talk to her.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva's room",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Tell everyone in the house that the food is at 8 o'clock.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Food at 8 o'clock",
+     "at": "08:00"
+    }
+   ]
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turn on the light of the hall and tell Neva to come down",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Add milk to the list and remind me to go to the grocery store at 6:00",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Tomorrow, the weather is like, and you set an alarm for 7.",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Write my breakfast and tell me how many calories I've taken today",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Play some music and turn the lights down",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "why": "YARIM-IS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turn the TV down",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "direction": "down"
+    }
+   ]
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Print the shopping list",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "Sing pizza for tonight",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "Pizza",
+     "track": "Sing Pizza",
+     "platform": "youtube"
+    }
+   ]
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "I'm bored today.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "The Weeknd",
+     "track": "Blinding Lights",
+     "platform": "spotify"
+    }
+   ]
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "Cancel it",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "Turn it into 5",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "level": 5
+    }
+   ]
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet was born in how many years",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Fatih Sultan Mehmet birth year"
+    }
+   ]
+  }
+ ],
+ "pn": {
+  "n": 20,
+  "tool_ok": 18,
+  "tool_pct": 90.0,
+  "name_ok": 8,
+  "name_pct": 40.0,
+  "rows": [
+   {
+    "id": "pn01",
+    "tr": "Kuzu Kuzu çal",
+    "en": "Play Lamb Lamb",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Lamb Lamb"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn02",
+    "tr": "Tarkan'dan Şımarık çal",
+    "en": "Play Spoiled by Tarkan",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Tarkan",
+     "track": "Spoiled",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn03",
+    "tr": "Sezen Aksu'dan Gülümse çal",
+    "en": "Smile Play from Sezen Aksu",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sezen Aksu",
+     "track": "Smile Play",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn04",
+    "tr": "Duman'dan Her Şeyi Yak çal",
+    "en": "Burn Everything from Smoke Play",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Burn Everything from Smoke Play",
+     "track": "Burn Everything from Smoke Play",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn05",
+    "tr": "Sıla'nın Vaziyetler şarkısını aç",
+    "en": "Open Sila's State of the State song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sila",
+     "track": "State of the State",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn06",
+    "tr": "Müslüm Gürses'ten Affet çal",
+    "en": "Forgive from the Musicians",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Forgive from the Musicians",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn07",
+    "tr": "Ezhel'in Geceler şarkısını çal",
+    "en": "Play Ezhel's Nights song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Ezhel",
+     "track": "Nights",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn08",
+    "tr": "Yüzüklerin Efendisi'ni aç",
+    "en": "Open the Lord of the Rings",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [],
+    "args": {},
+    "tool_ok": false,
+    "name_ok": false
+   },
+   {
+    "id": "pn09",
+    "tr": "Neva'nın doğum günü 12 Mart, aklında tut",
+    "en": "Neva's birthday is March 12, keep it in mind",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Neva's birthday is March 12",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn10",
+    "tr": "akşam 7'de Ayhan'ı aramamı hatırlat",
+    "en": "Remind me to call Ayhan at 7 p.m.",
+    "gold": [
+     "med_reminder",
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "call Ayhan",
+     "at": "19:00"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn11",
+    "tr": "Neva'nın matematik sınavı ne zaman",
+    "en": "When is Neva's math test",
+    "gold": [
+     "school_exam_schedule"
+    ],
+    "pred_tools": [
+     "school_exam_schedule"
+    ],
+    "args": {
+     "person": "Neva",
+     "subject": "math"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn12",
+    "tr": "Ayhan'ın telefon numarası neydi, hafızana bak",
+    "en": "What was Ayhan's phone number, look at your memory",
+    "gold": [
+     "memory_search"
+    ],
+    "pred_tools": [
+     "memory_search"
+    ],
+    "args": {
+     "query": "Ayhan phone number"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn13",
+    "tr": "bundan sonra bana Ayhan Bey diye hitap et",
+    "en": "From now on, call me Mr. Ayhan.",
+    "gold": [
+     "soul_add"
+    ],
+    "pred_tools": [
+     "soul_add"
+    ],
+    "args": {
+     "text": "call me Mr. Ayhan",
+     "scope": "self"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn14",
+    "tr": "Beşiktaş maçı kaç kaç bitti",
+    "en": "How many games are finished",
+    "gold": [
+     "match_result"
+    ],
+    "pred_tools": [],
+    "args": {},
+    "tool_ok": false,
+    "name_ok": false
+   },
+   {
+    "id": "pn15",
+    "tr": "Şanlıurfa'da hava nasıl",
+    "en": "How is the weather in Şanlıurfa",
+    "gold": [
+     "weather"
+    ],
+    "pred_tools": [
+     "weather"
+    ],
+    "args": {
+     "city": "Şanlıurfa"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn16",
+    "tr": "öğlen İskender yedim, diyetime yaz",
+    "en": "I ate Alexander at noon, write to my diet",
+    "gold": [
+     "diet_log"
+    ],
+    "pred_tools": [
+     "diet_log"
+    ],
+    "args": {
+     "food": "Alexander",
+     "meal": "lunch"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn17",
+    "tr": "alışveriş listesine Torku süt ve Eti bisküvi ekle",
+    "en": "Add Torku milk and meat biscuits to the shopping list",
+    "gold": [
+     "shopping_add"
+    ],
+    "pred_tools": [
+     "shopping_add"
+    ],
+    "args": {
+     "items": "Torku milk and meat biscuits"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn18",
+    "tr": "cumartesi Neva'yı Bostancı'dan almam gerek, hatırlat",
+    "en": "I need to get Neva from Bostancı on Saturday, remind me.",
+    "gold": [
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Get Neva from Bostancı",
+     "at": "Saturday"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn19",
+    "tr": "Kadıköy'deki dükkanın adı Çiya, unutma",
+    "en": "The shop in Kadıköy is called Chiya, remember",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "The shop in Kadıköy is called Chiya.",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn20",
+    "tr": "Atatürk Havalimanı ile ilgili haberleri ara",
+    "en": "Search for news about Atatürk Airport",
+    "gold": [
+     "web_search"
+    ],
+    "pred_tools": [
+     "web_search"
+    ],
+    "args": {
+     "query": "news about Atatürk Airport",
+     "max_results": 5
+    },
+    "tool_ok": true,
+    "name_ok": true
+   }
+  ]
+ },
+ "lat_p50_all_ms": 1826,
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "Not tomorrow, but the next day, set an alarm for 9 a.m.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Alarm for 9 a.m.",
+      "at": "tomorrow 09:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "When is Ayşe's exam",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Ayşe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Play something from Sezen Aksu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Sezen Aksu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "See my email, is there a meeting today?",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "Remind me to take my blood pressure medication every morning at 8:00.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "blood pressure medication",
+      "at": "08:00",
+      "person": "me"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "What will the weather be like in Izmir this weekend?",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Izmir",
+      "day": "weekend"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "Add milk, bread and eggs to the shopping list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "milk, bread and eggs"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "I had 3 meatballs at noon, write to my diet",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "3 meatballs",
+      "meal": "lunch"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "How many calories did I get today?",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "today"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "How many did Galatasaray make yesterday?",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Galatasaray"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "Turn off the lights in the hall",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "hall",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "What time is it now?",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "Grandpa's birthday is May 3, keep it in mind",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Grandpa's birthday is May 3",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "I told you about my mother's birthday, when",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "mother's birthday"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "Parents' meeting at 2:00 p.m. Thursday, remind me",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Parents' meeting",
+      "at": "Thursday 14:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "Play Lamb Lamb from Tarkan for my father",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Tarkan",
+      "track": "Lamb Lamb",
+      "platform": "spotify",
+      "for_whom": "father"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "What is today's date",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "Set the 12-minute timer for pasta",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 12,
+      "label": "pasta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "Read me the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "turn on kitchen light",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "Stop the music",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "Turn your voice down a little, you're talking too loud",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "Search the Internet for how many minutes the egg is boiled",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "how many minutes to boil an egg",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "Translate the word 'good morning' into German",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "good morning",
+      "target_lang": "German"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "What are my reminders",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "What Fenerbahçe did last night",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Fenerbahçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "Is there an emergency email",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "urgent"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "Write a bowl of lentil soup for lunch",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "Add to calendar: dentist on Saturday 11",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "dentist",
+      "at": "Saturday 11"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "How is the weather in Ankara tomorrow",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "Remind me to call the plumber in 20 minutes.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "call the plumber",
+      "in_minutes": 20
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "Turn off all the lights, we're going to bed",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "all",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "See who won the physics Nobel this year online",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "physics Nobel prize winner this year",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "When is Neva's math test",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Neva",
+      "subject": "math"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "Add yogurt and tomatoes to the list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "yogurt, tomatoes"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "Give me yesterday's calorie summary",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "yesterday"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "Play some jazz from Spotify",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "spotify",
+      "artist": "jazz"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "Translate this sentence into English: the weather is beautiful",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "the weather is beautiful",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "Give me a 5 minute timer",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "Turn it up a bit",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "up"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Remember that Neva is a peanut allergy.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva has a peanut allergy.",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "Remind me tonight that Neva is allergic to peanuts.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva is allergic to peanuts.",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "Note that our wedding anniversary is September 14th.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Wedding anniversary: September 14th",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "Wake me up tomorrow at 6:30",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Wake up",
+      "at": "tomorrow 06:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "From now on, call me Mr. Ayhan, not just Ayhan.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "Call Mr. Ayhan instead of just Ayhan.",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "You talk a lot, so your answers are shorter from now on.",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "talk less",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "What did I tell you about my mother's medicine?",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "mother medicine"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "My mother drinks her heart pill at 9 p.m., so set it up.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "heart pill",
+      "at": "21:00",
+      "person": "mother"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "Write in family memory: we're going to Grandma's on Sunday",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "we're going to Grandma's on Sunday",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Cancel reminder at 3 p.m.",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "Do I have a reminder for the dentist?",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "Call me in memory of what I said about car insurance",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "car insurance"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "See the current price of car insurance online",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "Don't remind me of that, just keep it in mind",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "Don't remind me of that, just keep it in mind",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "Remind me to renew my passport Tuesday at 7:30 p.m.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "renew passport",
+      "at": "Tuesday 19:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "On Neva's chemistry exam 21, add to calendar",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva's chemistry exam 21",
+      "at": "2023-11-21"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "Remind me to remove the bread from the oven in an hour and a half.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Remove bread from oven",
+      "at": 90
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "Set timer of two and a half minutes",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 2.5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "Note that Ismet's passport expired on March 12, 2027",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Ismet's passport expired on March 12, 2027",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "The next day, the weather in Diyarbakir",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakir",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "Write 180 grams of grilled chicken for dinner",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "grilled chicken",
+      "meal": "dinner",
+      "amount": "180 grams"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "Remind Ayhan to pay taxes tomorrow at noon",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Ayhan to pay taxes",
+      "at": "tomorrow 12:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "Play Purple and Beyond from YouTube Have a Problem",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Purple and Beyond",
+      "track": "Have a Problem",
+      "platform": "youtube"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "Turn down the bedroom lights",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "bedroom",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "Remind to pay the rent on one month",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Pay rent",
+      "at": "tomorrow 09:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Doctor's appointment with Dr. Kaya",
+      "at": "next Friday 21:15"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "Turn 'I miss you' into Kurdish",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "I miss you",
+      "target_lang": "kurdish"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "Remind me to turn on the TV half an hour before the game starts.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Turn on the TV",
+      "at": "30 minutes before game starts"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "Send $500 from my account to Ali",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "Send $2,000 to my brother's account now",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Say dinner is ready for Neva",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "dining room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Leave a message for Ayhan, I'll be home late",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "I'll be home late for Ayhan.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Get Neva's room, I want to talk to her.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva's room",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "Send an email to my boss saying I'm sick today.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "email the school, say Neva won't be coming tomorrow",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "Delete the dentist appointment from the calendar",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "Cancel all my reminders",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "Clear my profile memory, it's gone too far",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "Pay $750 to the electricity company",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "Delete family memory, let's start from scratch",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Tell everyone in the house that the food is at 8 o'clock.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Food at 8 o'clock",
+      "at": "08:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turn on the light of the hall and tell Neva to come down",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "hall",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Add milk to the list and remind me to go to the grocery store at 6:00",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "milk"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Tomorrow, the weather is like, and you set an alarm for 7.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "unknown"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Write my breakfast and tell me how many calories I've taken today",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "breakfast"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Play some music and turn the lights down",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "",
+      "platform": ""
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva is allergic to peanuts. Remind me to tell my teacher tonight.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "Open the boiler, I'm cold",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "Set air conditioning to 22 degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "Close curtains",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "Turn on the TV, get on the news",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": true
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "Start the dishwasher",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "Start the washing machine in the cotton program",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turn the TV down",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "Open the garage door",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "Lock the front door",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "Turn the radiator on at two degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "Sweep the hall",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "Open the oven, 180 degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "water the flowers on the balcony",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Print the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "Book a table at a fish restaurant for tonight",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "Call a taxi home",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "Turn off wifi modem",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "open combi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "Close curtains",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "Get 10 lot Guarantee shares from the stock exchange",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "Sing pizza for tonight",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Pizza",
+      "track": "Sing Pizza",
+      "platform": "youtube"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "Start the car remotely",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "I'm bored today.",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "The Weeknd",
+      "track": "Blinding Lights",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "Shall I tell you about my grandfather's village?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "Tell me a joke",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "What do you think life means",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "You know I love you a lot, don't you?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "Oh, I'm so tired today",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "What is your favorite food",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "I want to have a little chat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "Will I be happy tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "Good night, my dear.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "My back hurts again, it's hard to age",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "I argued with Neva today, I feel terrible.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "Do you ever get bored of us?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "This weather has been upsetting me lately.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "another of the same",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "Add it",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "No, the other",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "Do it again",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "Cancel it",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "And tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "Yes, do so.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "Turn it into 5",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "level": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet was born in how many years",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Fatih Sultan Mehmet birth year"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "How many bones are in the human body",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "Why the sky is blue",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "What is the capital of Australia",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "How to make lentil soup",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "What is photosynthesis",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "How many players are in a football team",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Who wrote The Miserables?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  }
+ ]
+}

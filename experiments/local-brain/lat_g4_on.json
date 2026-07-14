@@ -1,0 +1,111 @@
+{
+  "tag": "g4-reason-ON",
+  "sys_prompt_chars": 12392,
+  "results": [
+    {
+      "label": "tool_cagrisi (cold)",
+      "cold": true,
+      "reps": 3,
+      "prompt_tokens": 3778,
+      "ttft_ms_p50": null,
+      "total_ms_p50": 3871.7,
+      "tok_s_p50": null,
+      "n_tok_p50": null,
+      "sample": "",
+      "all_ttft": [
+        0,
+        0,
+        0
+      ],
+      "all_total": [
+        2613,
+        3872,
+        4271
+      ]
+    },
+    {
+      "label": "tool_cagrisi (warm)",
+      "cold": false,
+      "reps": 3,
+      "prompt_tokens": 3762,
+      "ttft_ms_p50": null,
+      "total_ms_p50": 1127.3,
+      "tok_s_p50": null,
+      "n_tok_p50": null,
+      "sample": "",
+      "all_ttft": [
+        0,
+        0,
+        0
+      ],
+      "all_total": [
+        4346,
+        993,
+        1127
+      ]
+    },
+    {
+      "label": "sohbet ~50tok (cold)",
+      "cold": true,
+      "reps": 3,
+      "prompt_tokens": 3788,
+      "ttft_ms_p50": 3421.8,
+      "total_ms_p50": 4700.7,
+      "tok_s_p50": 42.5,
+      "n_tok_p50": 59,
+      "sample": "Yorgun olduğunu duyduğuma üzüldüm, bugün yoğun geçmiş olabilir. Akşam için kendini çok yormayacak, sevdiğin sakin bir filmi izleyip dinlenmeye ne dersin? İstersen sana güzel bir müzik listesi de açabi",
+      "all_ttft": [
+        3524,
+        3422,
+        3348
+      ],
+      "all_total": [
+        4701,
+        4574,
+        4788
+      ]
+    },
+    {
+      "label": "sohbet ~50tok (warm)",
+      "cold": false,
+      "reps": 3,
+      "prompt_tokens": 3771,
+      "ttft_ms_p50": 176.0,
+      "total_ms_p50": 1008.9,
+      "tok_s_p50": 52.8,
+      "n_tok_p50": 45,
+      "sample": "Bunu duyduğuma üzüldüm, bugün gerçekten yoğun geçti. Akşam seni hiç yormayacak, sevdiğin bir filmi açıp mısır patlatarak dinlenmeye ne dersin?",
+      "all_ttft": [
+        299,
+        176,
+        162
+      ],
+      "all_total": [
+        1197,
+        1009,
+        840
+      ]
+    },
+    {
+      "label": "uzun 200tok (warm)",
+      "cold": false,
+      "reps": 3,
+      "prompt_tokens": 3771,
+      "ttft_ms_p50": 173.3,
+      "total_ms_p50": 1192.8,
+      "tok_s_p50": 48.3,
+      "n_tok_p50": 49,
+      "sample": "Bu hafta Salı ve Perşembe akşam yedi de spor salonu programın var. Ayrıca Pazartesi günü kombi için tamirci gelecek. Neva'nın okul servisi her sabah yedi kırkta kapıda oluyor.",
+      "all_ttft": [
+        295,
+        173,
+        160
+      ],
+      "all_total": [
+        958,
+        1311,
+        1193
+      ]
+    }
+  ]
+}

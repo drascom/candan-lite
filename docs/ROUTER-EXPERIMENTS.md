@@ -784,3 +784,95 @@ diye yazıldı. Yanlış olan notlar değildi — **eşzamanlı bir değişiklik
 hataları (`n13`, `n14`) ekliyordu. Ölçümlerin koştuğu sürüm **137 vakalık** olandır
 (`git show HEAD:experiments/router-bench/router_set.py`). Ders: **sonuçları, ölçümün koştuğu
 commit'e göre oku** — çalışma ağacı altından kayabilir.
+
+---
+
+## 19. TR+EN çeviri katmanı — semantik komşu panzehiri (2026-07-14)
+
+§13'teki tek gerçek canlı hata (**"Kombi aç." / "Perdeleri kapat." → `light_control`**)
+için ikinci bir yol denendi: cümleyi küçük bir çeviri modeliyle İngilizceye çevirip
+router'a **İngilizceyi de** göstermek. Motivasyon: aynı tuzak cümleleri İngilizce
+verildiğinde Qwen belirgin biçimde daha az yapışıyor.
+
+**Set:** `router_set.CASES` (139) + **yeni** `pn_set.PN_CASES` (20, özel-isim ağırlıklı).
+**Çeviri:** `Helsinki-NLP/opus-mt-tc-big-tr-en`. **Harness:** `experiments/router-bench/bench_tren.py`
+→ `res_v_*.json`. Model/şema/katalog üretimle aynı (Qwen3.5-4B Q8, flag şeması, 23 low tool).
+
+### Çeviri ÖZEL İSİMLERİ öldürüyor (ölçüldü)
+
+| Türkçe | opus-mt çevirisi |
+|---|---|
+| Kuzu Kuzu çal | Play **Lamb Lamb** |
+| Müslüm Gürses'ten Affet çal | Forgive from **the Musicians** |
+| öğlen İskender yedim | I ate **Alexander** at noon |
+| Beşiktaş maçı kaç kaç bitti | How many games are finished *(takım adı YOK OLDU)* |
+| Eti bisküvi | **meat** biscuits |
+
+Bu yüzden "yalnızca İngilizce" (EN-only) üretime KONULAMAZ: tuzak direncini kazanır,
+**argümanı kaybeder**.
+
+### Beş kalıp, aynı set, aynı metrikler
+
+| kalıp | recall | arg | **trap_neigh** | trap_all | high-abst | multi (tp/fn/fp) | **özel isim korundu** |
+|---|---|---|---|---|---|---|---|
+| **TR-direkt** (o günkü üretim) | 94.1 | 87.5 | 72.7 | 80.8 | 69.2 | 6/0/1 | **85** |
+| EN-only (yalnızca çeviri) | 92.6 | 90.5 | **86.4** | 86.5 | 69.2 | 6/0/1 | **40** ⛔ |
+| TR+EN, *"argümanları TR'den al, tool'u EN'den seç"* | 98.5 | 92.5 | **9.1** ⛔ | 34.6 | 23.1 | 5/1/1 | 90 |
+| TR+EN, *"tool'u EN ile seç, args'ı TR'den doldur"* | 95.6 | 95.4 | **4.5** ⛔ | 1.9 | 15.4 | 4/2/0 | 95 |
+| **TR + (parantez içinde çeviri)** ← **SEÇİLEN** | **97.1** | **90.9** | **81.8** | **84.6** | 69.2 | **6/0/0** | **85** |
+
+### Dersin özü: çeviri VERİ'dir, EMİR değil
+
+İki metni "tool'u şundan seç, argümanı bundan al" diye **emirle** vermek recall'ı ve
+argümanı yükseltiyor ama **ABSTAIN'i yok ediyor** (trap_neigh 72.7 → 4.5–9.1): model
+cümlenin bir tool çağrısı olduğuna ikna oluyor ve sohbet/tuzak/desteklenmeyen cihaz
+cümlelerinde bile bir tool uyduruyor. Aynı çeviriyi **hiçbir emir vermeden**, cümlenin
+ardına parantez içinde eklemek, abstain'i bozmadan tuzak direncini artırıyor.
+
+> Bu, §14/6'nın ("meta-bilgiyi ayrı kanaldan sor") ikizi: **prompt'a ne koyduğun kadar,
+> onu NASIL çerçevelediğin de davranışı değiştirir.** Aynı bilgi, emir kipinde felaket.
+
+Seçilen kalıp (`worker/tool_catalog.py` → `TRANSLATION_SUFFIX`, METNİ DEĞİŞTİRME):
+
+```
+<türkçe cümle>
+
+(English translation of the sentence above: <çeviri>)
+```
+
+Canlı doğrulama (gölge mod, `worker/router.py` CLI): **"perdeleri kapat" → abstain**
+(üretimdeki hata DÜZELDİ), "Kuzu Kuzu çal" → `media_play {"track": "Kuzu Kuzu"}` (özel isim
+korundu). **"kombiyi aç, üşüdüm" hâlâ `light_control`** — x01 bu kalıpta da düşüyor
+(22 tuzağın 4'ü kalıyor). Yani katman hatayı **azaltıyor, sıfırlamıyor**.
+
+### Nerede koşuyor: **sunucuda**, GPU'suz
+
+| seçenek | gecikme | maliyet |
+|---|---|---|
+| Worker (Mac CPU), CTranslate2 int8 | **p50 61 ms** | worker'a `ctranslate2`+`sentencepiece` + **242 MB model dizini** (repo'ya girmez, elle kurulur), sesli akışla CPU yarışı |
+| **.25'te HTTP servisi** ← **SEÇİLEN** | **p50 60–110 ms** (LAN dahil) | worker'a **sıfır** yeni bağımlılık; model zaten sunucuda |
+
+`tools/translate_server.py` — systemd **`candan-translate.service`**, port **8081**,
+**CTranslate2 int8 CPU** (GPU'ya dokunmaz; VRAM zaten llama-server + TTS + Whisper ile dolu).
+Router prompt'u ~20 token uzuyor → llama-server gecikmesine ölçülebilir bir ek YOK (+~35 ms).
+
+**Güvenli başarısızlık (zorunlu):** servis kapalı/yavaş/bozuk → `translate()` `None` döner,
+prompt **bugünküyle birebir aynı** (TR-doğrudan) üretilir. Üst üste 3 hatadan sonra
+**devre kesici** 60 sn hiç denemez (her cümlede boşuna timeout beklenmesin).
+Knob'lar: `ROUTER_TRANSLATE` (varsayılan `true`), `ROUTER_TRANSLATE_URL`,
+`ROUTER_TRANSLATE_TIMEOUT_MS` (500). Karar defterine `text_en` alanı yazılır;
+dashboard cümlenin altında gösterir.
+
+**Kurulum (.25):**
+
+```bash
+pip install --break-system-packages ctranslate2 sentencepiece
+ct2-transformers-converter --model Helsinki-NLP/opus-mt-tc-big-tr-en \
+    --output_dir /opt/models/ct2-opusmt-tr-en --quantization int8
+cp <hf-snapshot>/{source,target}.spm /opt/models/ct2-opusmt-tr-en/
+systemctl enable --now candan-translate     # /opt/translate_server.py
+```
+
+> §16'daki "**Whisper translate katmanı — gereksiz, Qwen çok dilli**" satırı hâlâ doğru
+> (STT'yi İngilizce yapmak cevabı da İngilizceleştirir). Buradaki katman farklı: STT
+> Türkçe kalır, çeviri **yalnızca router'ın prompt'una** girer, kullanıcı onu hiç görmez.

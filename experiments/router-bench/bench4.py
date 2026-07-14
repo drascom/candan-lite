@@ -89,7 +89,89 @@ INSTR = {
         'If none of the tools fit, or the user is just chatting / venting / asking your opinion, '
         'or the request is something you cannot do with these tools, answer '
         '{"tool": null, "args": {}, "multi_intent": false}.'),
+    # --- flag2: "flag" + unsupported_request bayragi (semantik komsu tuzagi icin) ---
+    # A varyanti: acik "tool'un tarifi bunu GERCEKTEN kapsiyor mu" testi + ornekle
+    "flag2": (
+        "\n\nAnswer ONLY with a JSON object of the form "
+        '{"tool": "<one of the tool names above, or null>", "args": {<arguments>}, '
+        '"multi_intent": <true|false>, "unsupported_request": <true|false>}. '
+        'Set "multi_intent" to true if the user asked for MORE THAN ONE separate thing in this '
+        'sentence, false otherwise. '
+        'Set "unsupported_request" to true if the user is asking you to DO something real, but no '
+        'tool above actually does it. Each tool does ONLY what its description literally says and '
+        'nothing more: before you pick a tool, check that its description really covers the thing '
+        'the user asked for. A tool for one device does NOT work on a different device, and a tool '
+        'that reads something does NOT change it. If the closest tool is merely SIMILAR to what was '
+        'asked, that is not good enough — then set "unsupported_request": true and "tool": null. '
+        'If none of the tools fit, or the user is just chatting / venting / asking your opinion, '
+        'answer {"tool": null, "args": {}, "multi_intent": false, "unsupported_request": false}.'),
+    # B varyanti: KISA/genel (multi_intent'in kisa tarifiyle ayni ruh)
+    "flag2b": (
+        "\n\nAnswer ONLY with a JSON object of the form "
+        '{"tool": "<one of the tool names above, or null>", "args": {<arguments>}, '
+        '"multi_intent": <true|false>, "unsupported_request": <true|false>}. '
+        'Set "multi_intent" to true if the user asked for MORE THAN ONE separate thing in this '
+        'sentence, false otherwise. '
+        'Set "unsupported_request" to true if the user asked you to do a real task that NONE of the '
+        'tools above actually performs (a device, service or action that is not in the list), even '
+        'if some tool looks similar; in that case set "tool" to null. '
+        'If none of the tools fit, or the user is just chatting / venting / asking your opinion, '
+        'answer {"tool": null, "args": {}, "multi_intent": false, "unsupported_request": false}.'),
+    # KONTROL: flag2'nin "gercekten bu tool mu yapiyor" METNI, ama YENI ALAN YOK.
+    # Soru: kazanci saglayan sey ALAN mi, yoksa yalnizca metin mi?
+    "flagp": (
+        "\n\nAnswer ONLY with a JSON object of the form "
+        '{"tool": "<one of the tool names above, or null>", "args": {<arguments>}, '
+        '"multi_intent": <true|false>}. '
+        'Set "multi_intent" to true if the user asked for MORE THAN ONE separate thing in this '
+        'sentence, false otherwise. '
+        'Each tool does ONLY what its description literally says and nothing more: before you pick '
+        'a tool, check that its description really covers the thing the user asked for. A tool for '
+        'one device does NOT work on a different device, and a tool that reads something does NOT '
+        'change it. If the closest tool is merely SIMILAR to what was asked, that is not good '
+        'enough — then answer with "tool": null. '
+        'If none of the tools fit, or the user is just chatting / venting / asking your opinion, '
+        'or the request is something you cannot do with these tools, answer '
+        '{"tool": null, "args": {}, "multi_intent": false}.'),
 }
+
+FLAG2 = ("flag2", "flag2b")
+FLAGM = ("flag", "flagp") + FLAG2          # multi_intent alani olan semalar
+
+# --neg : tool tarifine NEGATIF KAPSAM cumlesi ekle ("bu tool sunlari YAPMAZ").
+# Semantik komsu tuzaginin katalog tarafindaki panzehri; bayraktan bagimsiz olcusun.
+NEG_SCOPE = {
+    "light_control": " It controls ONLY the light bulbs. It does NOT control the boiler, the "
+                     "heating, the air conditioner, the TV, the curtains/blinds, doors or any "
+                     "other appliance.",
+    "volume_set": " This is the volume of the ASSISTANT'S OWN speaker only. It does NOT control "
+                  "the TV or any other device.",
+    "shopping_list": " It only reads the list out loud. It cannot print it, e-mail it or change it.",
+    "media_play": " It only plays music/video on the house speakers. It cannot order anything and "
+                  "cannot switch the TV on.",
+}
+
+# --neg2 : GENIS negatif sinir seti. NEG_SCOPE'un ustune, KARISAN CIFTLERI (memory_add
+# <-> reminder_add <-> soul_add <-> timer_set, mail_check <-> mail_send) de acikca ayirir.
+# Koordinatorun "isimleri/tarifleri keskinlestirsek?" onerisinin test edilebilir hali.
+NEG_SCOPE2 = dict(NEG_SCOPE)
+NEG_SCOPE2.update({
+    "memory_add": " Use it when the user says 'remember / note / keep in mind' and there is NO "
+                  "time trigger. It stores the fact SILENTLY and NEVER speaks to the user later: "
+                  "it does NOT set a reminder or an alarm (that is reminder_add), and it is not a "
+                  "behaviour instruction (that is soul_add).",
+    "reminder_add": " Use it ONLY when the user wants to BE REMINDED / woken / alerted AT A TIME, "
+                    "out loud. It does NOT silently store a fact (that is memory_add) and it is "
+                    "not a kitchen countdown (that is timer_set).",
+    "soul_add": " This is about HOW the assistant should behave or speak. It is not a fact about "
+                "the world (that is memory_add) and it never fires at a time.",
+    "timer_set": " It is a countdown of N minutes from now. It does NOT set an alarm at a clock "
+                 "time and does not remind the user of anything (that is reminder_add).",
+    "mail_check": " It only READS and summarises the inbox. It does NOT send, reply to or delete "
+                  "mail.",
+    "memory_search": " It only searches what was SAVED EARLIER by the user. It does NOT search the "
+                     "internet (that is web_search).",
+})
 
 
 def schema_for(kind, names):
@@ -110,9 +192,13 @@ def schema_for(kind, names):
             "properties": {"tool": {"anyOf": [{"type": "string", "enum": names}, {"type": "null"}]},
                            "args": {"type": "object"}},
             "required": ["tool", "args"]}
-    if kind == "flag":
+    if kind in ("flag", "flagp"):
         base["properties"]["multi_intent"] = {"type": "boolean"}
         base["required"] = ["tool", "args", "multi_intent"]
+    if kind in FLAG2:
+        base["properties"]["multi_intent"] = {"type": "boolean"}
+        base["properties"]["unsupported_request"] = {"type": "boolean"}
+        base["required"] = ["tool", "args", "multi_intent", "unsupported_request"]
     return base
 
 
@@ -149,7 +235,7 @@ def norm(s):
 
 
 def parse(kind, s):
-    """-> {"calls": [{"tool":..,"args":{}}], "multi": bool|None, "err": bool}"""
+    """-> {"calls": [...], "multi": bool|None, "unsup": bool|None, "err": bool}"""
     try:
         obj = json.loads(s.strip())
     except Exception:
@@ -157,21 +243,25 @@ def parse(kind, s):
         try:
             obj = json.loads(m.group(0))
         except Exception:
-            return {"calls": [], "multi": None, "err": True}
+            return {"calls": [], "multi": None, "unsup": None, "err": True}
     if kind in ("list", "list_guard", "list_null"):
         calls = []
         for e in (obj.get("tools") or []):
             if isinstance(e, dict) and isinstance(e.get("tool"), str) and e["tool"]:
                 calls.append({"tool": e["tool"],
                               "args": e.get("args") if isinstance(e.get("args"), dict) else {}})
-        return {"calls": calls, "multi": None, "err": False}
+        return {"calls": calls, "multi": None, "unsup": None, "err": False}
     t = obj.get("tool")
     if isinstance(t, str) and t.strip().lower() in ("null", "none", ""):
         t = None
     calls = [] if t is None else [{"tool": t,
                                   "args": obj.get("args") if isinstance(obj.get("args"), dict) else {}}]
-    mi = obj.get("multi_intent") if kind == "flag" else None
-    return {"calls": calls, "multi": bool(mi) if isinstance(mi, bool) else None, "err": False}
+    mi = obj.get("multi_intent") if kind in FLAGM else None
+    us = obj.get("unsupported_request") if kind in FLAG2 else None
+    return {"calls": calls,
+            "multi": bool(mi) if isinstance(mi, bool) else None,
+            "unsup": bool(us) if isinstance(us, bool) else None,
+            "err": False}
 
 
 def build_prompt(tmpl, tvars, text, kind, catalog):
@@ -213,16 +303,38 @@ def summarize(per_case, lat, kind):
     m01_abstain = m01_half = None
     # flag semasi
     fl_multi_tp = fl_multi_fn = fl_multi_fp = fl_multi_tn = 0
+    # flag2: unsupported_request bayragi
+    us_by_cat = Counter()            # bayragin true ciktigi vaka sayisi (kategori bazli)
+    us_escape_n = us_escape_tot = 0  # GEREKSIZ KACIS: tool gereken vakada bayrak true
+    us_rescue = []                   # veto SAYESINDE kurtarilan abstain vakalari (id, tool)
+    us_escape_ids = []
+    raw_tool_ok = 0                  # veto ONCESI tool recall (kiyas)
 
     for c, pred in per_case:
         cat = c["cat"]
         calls = pred["calls"]
+        # >>> URETIM KURALI: unsupported_request=true -> tool ATILIR (ana modele dusulur)
+        if kind in FLAG2:
+            us = bool(pred["unsup"])
+            us_by_cat[cat] += us
+            if cat in TOOL_CATS:
+                # veto oncesi dogruluk (kiyas icin)
+                raw_tool_ok += bool([x for x in calls if x["tool"] in c["gold"]]) and len(calls) == 1
+                us_escape_tot += 1
+                if us:
+                    us_escape_n += 1
+                    us_escape_ids.append((c["id"], c["_text"],
+                                          [x["tool"] for x in calls]))
+            elif us and calls:
+                us_rescue.append((c["id"], cat, [x["tool"] for x in calls]))
+            if us:
+                calls = []           # veto
         tools = [x["tool"] for x in calls]
         if pred["err"]:
             errors += 1
         good = False
 
-        if kind == "flag" and pred["multi"] is not None:
+        if kind in FLAGM and pred["multi"] is not None:
             if cat == "multi":
                 fl_multi_tp += pred["multi"]; fl_multi_fn += (not pred["multi"])
             else:
@@ -330,6 +442,16 @@ def summarize(per_case, lat, kind):
         "multi_flag_tp": fl_multi_tp, "multi_flag_fn": fl_multi_fn,
         "multi_flag_fp": fl_multi_fp, "multi_flag_tn": fl_multi_tn,
         "multi_flag_fp_pct": pct(fl_multi_fp, fl_multi_fp + fl_multi_tn),
+        # >>> flag2: unsupported_request
+        "unsup_escape_pct": pct(us_escape_n, us_escape_tot),   # GEREKSIZ KACIS orani
+        "unsup_escape_n": us_escape_n,
+        "unsup_escape_total": us_escape_tot,
+        "unsup_escape_ids": [x[0] for x in us_escape_ids],
+        "unsup_escape_detail": us_escape_ids,
+        "unsup_rescue_n": len(us_rescue),                       # veto sayesinde kurtarilan
+        "unsup_rescue": us_rescue,
+        "unsup_by_cat": dict(us_by_cat),
+        "raw_recall_pct": pct(raw_tool_ok, us_escape_tot) if kind in FLAG2 else None,
         "parse_errors": errors,
         "by_cat": {k: {"n": cats[k], "ok": ok[k], "pct": pct(ok[k], cats[k])} for k in sorted(cats)},
         "splat_targets": dict(splat.most_common()),
@@ -345,7 +467,13 @@ def summarize(per_case, lat, kind):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="qwen35-4b-q8", choices=list(MODELS))
-    ap.add_argument("--schema", required=True, choices=["single", "list", "list_null", "list_guard", "flag"])
+    ap.add_argument("--schema", required=True,
+                    choices=["single", "list", "list_null", "list_guard", "flag", "flagp",
+                             "flag2", "flag2b"])
+    ap.add_argument("--neg", action="store_true",
+                    help="tool tarifine NEGATIF KAPSAM cumlesi ekle (bkz. NEG_SCOPE)")
+    ap.add_argument("--neg2", action="store_true",
+                    help="GENIS negatif sinir seti: karisan ciftler dahil (bkz. NEG_SCOPE2)")
     ap.add_argument("--lang", default="en", choices=["en", "tr"])
     ap.add_argument("--tier", default="low", choices=["full", "low"])
     ap.add_argument("--out", required=True)
@@ -353,6 +481,17 @@ def main():
 
     cfg = MODELS[a.model]
     catalog = catalog_for(a.tier)
+    if a.neg or a.neg2:
+        neg = NEG_SCOPE2 if a.neg2 else NEG_SCOPE
+        catalog = [json.loads(json.dumps(t)) for t in catalog]   # derin kopya
+        for t in catalog:
+            extra = neg.get(t["function"]["name"])
+            if extra:
+                t["function"]["description"] += extra
+        print("    [negscope: %d tool tarifi genisletildi, +%d karakter]" % (
+            sum(1 for t in catalog if t["function"]["name"] in neg),
+            sum(len(v) for k, v in neg.items()
+                if k in {t["function"]["name"] for t in catalog})))
     names = [t["function"]["name"] for t in catalog]
     schema = schema_for(a.schema, names)
     tmpl = load_tmpl(cfg["tmpl"])
@@ -380,14 +519,14 @@ def main():
                          cfg["stop"], schema)
             if r.get("error"):
                 print("  %s API ERR: %s" % (c["id"], str(r["error"])[:110]))
-                pred, out = {"calls": [], "multi": None, "err": True}, ""
+                pred, out = {"calls": [], "multi": None, "unsup": None, "err": True}, ""
             else:
                 out = r.get("response") or ""
                 pred = parse(a.schema, out)
                 lat.append(dt)
         except Exception as e:
             print("  %s EXC: %s" % (c["id"], e))
-            pred, out = {"calls": [], "multi": None, "err": True}, ""
+            pred, out = {"calls": [], "multi": None, "unsup": None, "err": True}, ""
         per_case.append((cc, pred))
         raws.append(out[:400])
 
@@ -402,6 +541,7 @@ def main():
            "raw": [{"id": c["id"], "cat": c["cat"], "text": c["_text"],
                     "pred_tools": [x["tool"] for x in p["calls"]],
                     "pred_calls": p["calls"], "multi_flag": p["multi"],
+                    "unsupported": p.get("unsup"),
                     "err": p["err"], "out": rw}
                    for (c, p), rw in zip(per_case, raws)],
            "latencies_ms": [round(x) for x in lat]}
@@ -414,6 +554,8 @@ def main():
               "multi_ok_pct", "multi_full_n", "multi_partial_n", "multi_none_n",
               "m01_abstain", "m01_half_job",
               "multi_flag_tp", "multi_flag_fn", "multi_flag_fp", "multi_flag_fp_pct",
+              "unsup_escape_pct", "unsup_escape_n", "unsup_escape_ids", "unsup_rescue_n",
+              "unsup_by_cat", "raw_recall_pct",
               "old35", "parse_errors", "lat_p50_ms"):
         print("  %-24s %s" % (k, s[k]))
     print("  --- kategori kirilimi ---")

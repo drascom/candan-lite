@@ -1,33 +1,32 @@
 {
-  "model": "qwen35-4b-q8",
-  "model_id": "qwen35-4b-q8",
-  "quant": "Q8_0",
+  "tag": "gemma4-12b-qat",
+  "url": "http://localhost:8090",
   "schema": "flag",
-  "lang": "tr",
+  "lang": "en",
   "tier": "low",
   "catalog_size": 23,
   "n_cases": 139,
-  "vram_model_mib": 5033,
+  "prompt_tokens": 2306,
   "summary": {
     "schema": "flag",
     "n": 139,
-    "recall_pct": 94.1,
-    "arg_ok_pct": 82.4,
-    "arg_ok_given_right_tool_pct": 87.5,
+    "recall_pct": 95.6,
+    "arg_ok_pct": 95.6,
+    "arg_ok_given_right_tool_pct": 100.0,
     "extra_tool_pct": 0.0,
     "extra_tool_n": 0,
     "extra_tool_total": 68,
-    "trap_abstain_pct": 80.8,
-    "trap_wrong_n": 10,
+    "trap_abstain_pct": 94.2,
+    "trap_wrong_n": 3,
     "trap_total": 52,
-    "high_abstain_pct": 69.2,
-    "high_fired_pct": 30.8,
+    "high_abstain_pct": 100.0,
+    "high_fired_pct": 0.0,
     "high_fired_hightool_n": 0,
     "multi_ok_pct": 0.0,
-    "multi_abstain_n": 0,
+    "multi_abstain_n": 2,
     "multi_full_n": 0,
-    "multi_partial_n": 5,
-    "multi_none_n": 0,
+    "multi_partial_n": 3,
+    "multi_none_n": 2,
     "m01_abstain": false,
     "m01_half_job": true,
     "multi_flag_tp": 6,
@@ -48,13 +47,13 @@
     "by_cat": {
       "arg": {
         "n": 17,
-        "ok": 17,
-        "pct": 100.0
+        "ok": 16,
+        "pct": 94.1
       },
       "high": {
         "n": 13,
-        "ok": 9,
-        "pct": 69.2
+        "ok": 13,
+        "pct": 100.0
       },
       "multi": {
         "n": 6,
@@ -63,13 +62,13 @@
       },
       "pair": {
         "n": 16,
-        "ok": 13,
-        "pct": 81.2
+        "ok": 14,
+        "pct": 87.5
       },
       "tool": {
         "n": 35,
-        "ok": 34,
-        "pct": 97.1
+        "ok": 35,
+        "pct": 100.0
       },
       "trap_chat": {
         "n": 14,
@@ -78,8 +77,8 @@
       },
       "trap_ctx": {
         "n": 8,
-        "ok": 6,
-        "pct": 75.0
+        "ok": 8,
+        "pct": 100.0
       },
       "trap_know": {
         "n": 8,
@@ -88,243 +87,190 @@
       },
       "trap_neigh": {
         "n": 22,
-        "ok": 16,
-        "pct": 72.7
+        "ok": 21,
+        "pct": 95.5
       }
     },
     "splat_targets": {
-      "light_control": 6,
-      "translate": 2,
-      "mail_check": 1,
-      "volume_set": 1,
-      "shopping_list": 1,
-      "media_play": 1,
-      "clock_now": 1,
-      "web_search": 1
+      "web_search": 2,
+      "shopping_list": 1
     },
-    "old35_pct": 91.4,
-    "old35": "32/35",
-    "lat_p50_ms": 854,
-    "lat_mean_ms": 888,
-    "lat_p95_ms": 1127
+    "old35_pct": 100.0,
+    "old35": "35/35",
+    "lat_p50_ms": 943,
+    "lat_mean_ms": 988,
+    "lat_p95_ms": 1373
   },
+  "trap_neigh_ok": "21/22",
+  "famous": [
+    {
+      "id": "x01",
+      "text": "turn on the boiler, I'm cold",
+      "pred": [],
+      "ok": true
+    },
+    {
+      "id": "x07",
+      "text": "close the curtains",
+      "pred": [],
+      "ok": true
+    },
+    {
+      "id": "n13",
+      "text": "turn the boiler on",
+      "pred": [],
+      "ok": true
+    },
+    {
+      "id": "n14",
+      "text": "close the curtains please",
+      "pred": [],
+      "ok": true
+    }
+  ],
+  "trap_neigh_detail": [
+    {
+      "id": "x01",
+      "text": "turn on the boiler, I'm cold",
+      "pred": []
+    },
+    {
+      "id": "x04",
+      "text": "set the AC to 22 degrees",
+      "pred": []
+    },
+    {
+      "id": "x07",
+      "text": "close the curtains",
+      "pred": []
+    },
+    {
+      "id": "x08",
+      "text": "turn on the TV, switch to the news",
+      "pred": []
+    },
+    {
+      "id": "x09",
+      "text": "start the dishwasher",
+      "pred": []
+    },
+    {
+      "id": "n01",
+      "text": "start the washing machine on the cotton program",
+      "pred": []
+    },
+    {
+      "id": "n02",
+      "text": "turn the TV volume down",
+      "pred": []
+    },
+    {
+      "id": "n03",
+      "text": "open the garage door",
+      "pred": []
+    },
+    {
+      "id": "n04",
+      "text": "lock the front door",
+      "pred": []
+    },
+    {
+      "id": "n05",
+      "text": "turn the heating up two degrees",
+      "pred": []
+    },
+    {
+      "id": "n06",
+      "text": "vacuum the living room",
+      "pred": []
+    },
+    {
+      "id": "n07",
+      "text": "turn on the oven, 180 degrees",
+      "pred": []
+    },
+    {
+      "id": "n08",
+      "text": "water the plants in the balcony",
+      "pred": []
+    },
+    {
+      "id": "n09",
+      "text": "print the shopping list",
+      "pred": [
+        "shopping_list"
+      ]
+    },
+    {
+      "id": "n10",
+      "text": "book me a table at the fish restaurant for tonight",
+      "pred": []
+    },
+    {
+      "id": "n11",
+      "text": "call a taxi to the house",
+      "pred": []
+    },
+    {
+      "id": "n12",
+      "text": "turn off the wifi router",
+      "pred": []
+    },
+    {
+      "id": "n13",
+      "text": "turn the boiler on",
+      "pred": []
+    },
+    {
+      "id": "n14",
+      "text": "close the curtains please",
+      "pred": []
+    },
+    {
+      "id": "x02",
+      "text": "buy 10 lots of Garanti stock on the exchange",
+      "pred": []
+    },
+    {
+      "id": "x03",
+      "text": "order pizza for tonight",
+      "pred": []
+    },
+    {
+      "id": "x05",
+      "text": "start the car remotely",
+      "pred": []
+    }
+  ],
   "errors": [
     {
-      "id": "t06",
-      "cat": "tool",
-      "text": "bu hafta sonu İzmir'de hava nasıl olacak",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "weather"
-      ],
-      "pred_args": {
-        "city": "İzmir",
-        "day": "weekend"
-      }
-    },
-    {
-      "id": "t15",
-      "cat": "arg",
-      "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_args": {
-        "text": "Veli toplantısı",
-        "at": "2024-10-17 14:00"
-      }
-    },
-    {
-      "id": "t16",
-      "cat": "arg",
-      "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "media_play"
-      ],
-      "pred_args": {
-        "artist": "Tarkan",
-        "track": "Kuzu Kuzu",
-        "platform": "spotify"
-      }
-    },
-    {
-      "id": "t40",
-      "cat": "tool",
-      "text": "sesini aç biraz",
-      "why": "gold=volume_set",
+      "id": "p10",
+      "cat": "pair",
+      "text": "cancel the 3 o'clock reminder",
+      "why": "gold=reminder_cancel",
       "pred_tools": [],
       "pred_args": []
     },
     {
-      "id": "p02",
-      "cat": "pair",
-      "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
-      "why": "gold=reminder_add",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_args": [
-        {
-          "text": "Neva'nın fıstık alerjisi var.",
-          "scope": "private"
-        }
-      ]
-    },
-    {
-      "id": "p10",
-      "cat": "pair",
-      "text": "saat 3'teki hatırlatmayı iptal et",
-      "why": "gold=reminder_cancel",
-      "pred_tools": [
-        "reminder_list"
-      ],
-      "pred_args": [
-        {}
-      ]
-    },
-    {
       "id": "p14",
       "cat": "pair",
-      "text": "bunu bana hatırlatma, sadece aklında tut",
+      "text": "don't remind me about it, just keep it in mind",
       "why": "gold=memory_add",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_args": [
-        {
-          "text": "bunu bana hatırlatma"
-        }
-      ]
+      "pred_tools": [],
+      "pred_args": []
     },
     {
-      "id": "a01",
+      "id": "a14",
       "cat": "arg",
-      "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_args": {
-        "text": "Pasaportumu yenile",
-        "at": "2024-10-29 19:00"
-      }
-    },
-    {
-      "id": "a04",
-      "cat": "arg",
-      "text": "iki buçuk dakikalık zamanlayıcı kur",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "timer_set"
-      ],
-      "pred_args": {
-        "minutes": 1.5
-      }
-    },
-    {
-      "id": "a05",
-      "cat": "arg",
-      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_args": {
-        "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
-        "scope": "private"
-      }
-    },
-    {
-      "id": "a12",
-      "cat": "arg",
-      "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "calendar_add"
-      ],
-      "pred_args": {
-        "title": "Dr. Kaya ile doktor randevusu",
-        "at": "2023-10-25 09:45"
-      }
-    },
-    {
-      "id": "a13",
-      "cat": "arg",
-      "text": "'seni özledim'i Kürtçe'ye çevir",
-      "why": "ARG-miss",
-      "pred_tools": [
-        "translate"
-      ],
-      "pred_args": {
-        "text": "seni özledim",
-        "target_lang": "kurmanji"
-      }
-    },
-    {
-      "id": "h02",
-      "cat": "high",
-      "text": "Neva'ya yemek hazır de",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "kitchen",
-          "state": "on"
-        }
-      ]
-    },
-    {
-      "id": "h04",
-      "cat": "high",
-      "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "Neva'nın odası",
-          "state": "on"
-        }
-      ]
-    },
-    {
-      "id": "h06",
-      "cat": "high",
-      "text": "okula mail at, Neva yarın gelmeyecek de",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "mail_check"
-      ],
-      "pred_args": [
-        {
-          "filter": "meeting"
-        }
-      ]
-    },
-    {
-      "id": "h12",
-      "cat": "high",
-      "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "kitchen",
-          "state": "on"
-        }
-      ]
+      "text": "remind me half an hour before the match starts to turn the TV on",
+      "why": "gold=reminder_add",
+      "pred_tools": [],
+      "pred_args": []
     },
     {
       "id": "m01",
       "cat": "multi",
-      "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle",
+      "text": "turn on the living room light and tell Neva to come down",
       "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
       "pred_tools": [
         "light_control"
@@ -334,7 +280,7 @@
     {
       "id": "m02",
       "cat": "multi",
-      "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+      "text": "add milk to the list and remind me to go to the market at 6",
       "why": "YARIM-IS (need=reminder_add+shopping_add)",
       "pred_tools": [
         "shopping_add"
@@ -344,27 +290,23 @@
     {
       "id": "m03",
       "cat": "multi",
-      "text": "yarın hava nasıl, bir de 7'ye alarm kur",
-      "why": "YARIM-IS (need=reminder_add+weather)",
-      "pred_tools": [
-        "weather"
-      ],
+      "text": "what's the weather tomorrow, and set an alarm for 7",
+      "why": "ABSTAIN (need=reminder_add+weather)",
+      "pred_tools": [],
       "pred_args": null
     },
     {
       "id": "m04",
       "cat": "multi",
-      "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
-      "why": "YARIM-IS (need=diet_log+diet_summary)",
-      "pred_tools": [
-        "diet_log"
-      ],
+      "text": "log my breakfast and tell me how many calories I've had",
+      "why": "ABSTAIN (need=diet_log+diet_summary)",
+      "pred_tools": [],
       "pred_args": null
     },
     {
       "id": "m05",
       "cat": "multi",
-      "text": "biraz müzik çal ve ışıkları kıs",
+      "text": "play some music and turn the lights down",
       "why": "YARIM-IS (need=light_control+media_play)",
       "pred_tools": [
         "media_play"
@@ -374,7 +316,7 @@
     {
       "id": "m06",
       "cat": "multi",
-      "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+      "text": "remember that Neva is allergic to peanuts and remind me tonight to tell her teacher",
       "why": "YARIM-IS (need=memory_add+reminder_add)",
       "pred_tools": [
         "memory_add"
@@ -382,53 +324,9 @@
       "pred_args": null
     },
     {
-      "id": "x01",
-      "cat": "trap_neigh",
-      "text": "kombiyi aç, üşüdüm",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "kitchen",
-          "state": "on"
-        }
-      ]
-    },
-    {
-      "id": "x07",
-      "cat": "trap_neigh",
-      "text": "perdeleri kapat",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "general",
-          "state": "off"
-        }
-      ]
-    },
-    {
-      "id": "n02",
-      "cat": "trap_neigh",
-      "text": "televizyonun sesini kıs",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "volume_set"
-      ],
-      "pred_args": [
-        {
-          "direction": "down"
-        }
-      ]
-    },
-    {
       "id": "n09",
       "cat": "trap_neigh",
-      "text": "alışveriş listesini yazdır",
+      "text": "print the shopping list",
       "why": "ABSTAIN bekleniyordu",
       "pred_tools": [
         "shopping_list"
@@ -438,92 +336,30 @@
       ]
     },
     {
-      "id": "n14",
-      "cat": "trap_neigh",
-      "text": "perdeleri kapat",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_args": [
-        {
-          "room": "general",
-          "state": "off"
-        }
-      ]
-    },
-    {
-      "id": "x03",
-      "cat": "trap_neigh",
-      "text": "bu akşam için pizza söyle",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "media_play"
-      ],
-      "pred_args": [
-        {
-          "artist": "Pizza",
-          "track": "Song",
-          "platform": "spotify"
-        }
-      ]
-    },
-    {
-      "id": "k06",
-      "cat": "trap_ctx",
-      "text": "peki ya yarın",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "clock_now"
-      ],
-      "pred_args": [
-        {
-          "kind": "date"
-        }
-      ]
-    },
-    {
-      "id": "k08",
-      "cat": "trap_ctx",
-      "text": "onu 5'e çevir",
-      "why": "ABSTAIN bekleniyordu",
-      "pred_tools": [
-        "translate"
-      ],
-      "pred_args": [
-        {
-          "text": "onu 5'e çevir",
-          "target_lang": "en"
-        }
-      ]
-    },
-    {
       "id": "q01",
       "cat": "trap_know",
-      "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+      "text": "what year was Fatih Sultan Mehmet born",
       "why": "ABSTAIN bekleniyordu",
       "pred_tools": [
         "web_search"
       ],
       "pred_args": [
         {
-          "query": "Fatih Sultan Mehmet doğum tarihi",
-          "max_results": 1
+          "query": "Fatih Sultan Mehmet birth year"
         }
       ]
     },
     {
-      "id": "q06",
+      "id": "q08",
       "cat": "trap_know",
-      "text": "fotosentez ne demek",
+      "text": "who wrote Sefiller",
       "why": "ABSTAIN bekleniyordu",
       "pred_tools": [
-        "translate"
+        "web_search"
       ],
       "pred_args": [
         {
-          "text": "fotosentez ne demek",
-          "target_lang": "tr"
+          "query": "who wrote Sefiller"
         }
       ]
     }
@@ -532,7 +368,7 @@
     {
       "id": "t01",
       "cat": "arg",
-      "text": "yarın değil, öbür gün sabah 9'a alarm kur",
+      "text": "set an alarm for 9am, not tomorrow but the day after",
       "pred_tools": [
         "reminder_add"
       ],
@@ -540,20 +376,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Alarm for tomorrow morning at 9 AM",
-            "at": "tomorrow 09:00"
+            "text": "alarm",
+            "at": "the day after tomorrow 09:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Alarm for tomorrow morning at 9 AM\", \"at\": \"tomorrow 09:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"alarm\", \"at\": \"the day after tomorrow 09:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "t02",
       "cat": "tool",
-      "text": "Ayşe'nin sınavı ne zaman",
+      "text": "when is Ayse's exam",
       "pred_tools": [
         "school_exam_schedule"
       ],
@@ -561,19 +396,18 @@
         {
           "tool": "school_exam_schedule",
           "args": {
-            "person": "Ayşe"
+            "person": "Ayse"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Ayşe\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Ayse\"}, \"multi_intent\": false}"
     },
     {
       "id": "t03",
       "cat": "tool",
-      "text": "Sezen Aksu'dan bir şey çal",
+      "text": "play something by Sezen Aksu",
       "pred_tools": [
         "media_play"
       ],
@@ -586,14 +420,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Sezen Aksu\"}, \"multi_intent\": false}"
     },
     {
       "id": "t04",
       "cat": "tool",
-      "text": "mailime bak, bugün toplantı var mı",
+      "text": "check my mail, is there a meeting today",
       "pred_tools": [
         "mail_check"
       ],
@@ -606,35 +439,33 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"meeting\"}, \"multi_intent\": false}"
     },
     {
       "id": "t05",
       "cat": "tool",
-      "text": "her sabah 8'de tansiyon ilacımı almamı hatırlat",
+      "text": "remind me to take my blood pressure medicine every morning at 8",
       "pred_tools": [
-        "reminder_add"
+        "med_reminder"
       ],
       "pred_calls": [
         {
-          "tool": "reminder_add",
+          "tool": "med_reminder",
           "args": {
-            "text": "Tansiyon ilacını almak",
+            "medicine": "blood pressure medicine",
             "at": "08:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Tansiyon ilacını almak\", \"at\": \"08:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"blood pressure medicine\", \"at\": \"08:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "t06",
       "cat": "tool",
-      "text": "bu hafta sonu İzmir'de hava nasıl olacak",
+      "text": "what will the weather be like in Izmir this weekend",
       "pred_tools": [
         "weather"
       ],
@@ -642,20 +473,19 @@
         {
           "tool": "weather",
           "args": {
-            "city": "İzmir",
+            "city": "Izmir",
             "day": "weekend"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"İzmir\", \"day\": \"weekend\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Izmir\", \"day\": \"weekend\"}, \"multi_intent\": false}"
     },
     {
       "id": "t07",
       "cat": "tool",
-      "text": "alışveriş listesine süt, ekmek ve yumurta ekle",
+      "text": "add milk, bread and eggs to the shopping list",
       "pred_tools": [
         "shopping_add"
       ],
@@ -663,19 +493,18 @@
         {
           "tool": "shopping_add",
           "args": {
-            "items": "süt, ekmek, yumurta"
+            "items": "milk, bread and eggs"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"süt, ekmek, yumurta\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk, bread and eggs\"}, \"multi_intent\": false}"
     },
     {
       "id": "t08",
       "cat": "tool",
-      "text": "öğlen 3 köfte yedim, diyetime yaz",
+      "text": "I ate 3 meatballs at noon, log it in my diet",
       "pred_tools": [
         "diet_log"
       ],
@@ -683,20 +512,20 @@
         {
           "tool": "diet_log",
           "args": {
-            "food": "köfte",
-            "meal": "öğlen"
+            "food": "3 meatballs",
+            "meal": "lunch",
+            "amount": "3"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"köfte\", \"meal\": \"öğlen\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"3 meatballs\", \"meal\": \"lunch\", \"amount\": \"3\"}, \"multi_intent\": false}"
     },
     {
       "id": "t09",
       "cat": "tool",
-      "text": "bugün toplam kaç kalori aldım",
+      "text": "how many calories have I had in total today",
       "pred_tools": [
         "diet_summary"
       ],
@@ -709,14 +538,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"today\"}, \"multi_intent\": false}"
     },
     {
       "id": "t10",
       "cat": "tool",
-      "text": "Galatasaray dün kaç kaç yaptı",
+      "text": "what was Galatasaray's score yesterday",
       "pred_tools": [
         "match_result"
       ],
@@ -729,14 +557,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Galatasaray\"}, \"multi_intent\": false}"
     },
     {
       "id": "t11",
       "cat": "tool",
-      "text": "salondaki ışıkları kapat",
+      "text": "turn off the lights in the living room",
       "pred_tools": [
         "light_control"
       ],
@@ -744,20 +571,19 @@
         {
           "tool": "light_control",
           "args": {
-            "room": "salon",
+            "room": "living room",
             "state": "off"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"salon\", \"state\": \"off\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"off\"}, \"multi_intent\": false}"
     },
     {
       "id": "t12",
       "cat": "tool",
-      "text": "şu an saat kaç",
+      "text": "what time is it right now",
       "pred_tools": [
         "clock_now"
       ],
@@ -770,14 +596,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"time\"}, \"multi_intent\": false}"
     },
     {
       "id": "t13",
       "cat": "pair",
-      "text": "dedemin doğum günü 3 Mayıs, aklında tut",
+      "text": "my grandfather's birthday is May 3rd, keep that in mind",
       "pred_tools": [
         "memory_add"
       ],
@@ -785,20 +610,19 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "dedemin doğum günü 3 Mayıs",
+            "text": "Grandfather's birthday is May 3rd.",
             "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"dedemin doğum günü 3 Mayıs\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Grandfather's birthday is May 3rd.\", \"scope\": \"private\"}, \"multi_intent\": false}"
     },
     {
       "id": "t14",
       "cat": "pair",
-      "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+      "text": "I told you my mom's birthday before, when was it",
       "pred_tools": [
         "memory_search"
       ],
@@ -806,19 +630,18 @@
         {
           "tool": "memory_search",
           "args": {
-            "query": "annemin doğum günü"
+            "query": "mom's birthday"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"annemin doğum günü\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mom's birthday\"}, \"multi_intent\": false}"
     },
     {
       "id": "t15",
       "cat": "arg",
-      "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
+      "text": "there's a parent-teacher meeting Thursday at 2, remind me",
       "pred_tools": [
         "reminder_add"
       ],
@@ -826,20 +649,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Veli toplantısı",
-            "at": "2024-10-17 14:00"
+            "text": "parent-teacher meeting",
+            "at": "Thursday 14:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Veli toplantısı\", \"at\": \"2024-10-17 14:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"parent-teacher meeting\", \"at\": \"Thursday 14:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "t16",
       "cat": "arg",
-      "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
+      "text": "play Kuzu Kuzu by Tarkan for my dad",
       "pred_tools": [
         "media_play"
       ],
@@ -849,19 +671,18 @@
           "args": {
             "artist": "Tarkan",
             "track": "Kuzu Kuzu",
-            "platform": "spotify"
+            "for_whom": "dad"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Tarkan\", \"track\": \"Kuzu Kuzu\", \"platform\": \"spotify\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Tarkan\", \"track\": \"Kuzu Kuzu\", \"for_whom\": \"dad\"}, \"multi_intent\": false}"
     },
     {
       "id": "t17",
       "cat": "tool",
-      "text": "bugünün tarihi ne",
+      "text": "what's the date today",
       "pred_tools": [
         "clock_now"
       ],
@@ -874,14 +695,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"date\"}, \"multi_intent\": false}"
     },
     {
       "id": "t18",
       "cat": "tool",
-      "text": "makarna için 12 dakikalık zamanlayıcı kur",
+      "text": "set a timer for 12 minutes for the pasta",
       "pred_tools": [
         "timer_set"
       ],
@@ -890,19 +710,18 @@
           "tool": "timer_set",
           "args": {
             "minutes": 12,
-            "label": "makarna"
+            "label": "pasta"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 12, \"label\": \"makarna\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 12, \"label\": \"pasta\"}, \"multi_intent\": false}"
     },
     {
       "id": "t19",
       "cat": "tool",
-      "text": "alışveriş listesini oku bana",
+      "text": "read me the shopping list",
       "pred_tools": [
         "shopping_list"
       ],
@@ -913,14 +732,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "t20",
       "cat": "tool",
-      "text": "mutfak ışığını aç",
+      "text": "turn on the kitchen light",
       "pred_tools": [
         "light_control"
       ],
@@ -928,20 +746,19 @@
         {
           "tool": "light_control",
           "args": {
-            "room": "mutfak",
+            "room": "kitchen",
             "state": "on"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"mutfak\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
     },
     {
       "id": "t21",
       "cat": "tool",
-      "text": "müziği durdur",
+      "text": "stop the music",
       "pred_tools": [
         "media_stop"
       ],
@@ -952,14 +769,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"media_stop\", \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "t22",
       "cat": "tool",
-      "text": "sesini biraz kıs, çok yüksek konuşuyorsun",
+      "text": "turn your volume down a bit, you're too loud",
       "pred_tools": [
         "volume_set"
       ],
@@ -972,14 +788,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"down\"}, \"multi_intent\": false}"
     },
     {
       "id": "t23",
       "cat": "tool",
-      "text": "internette yumurta kaç dakika haşlanır diye ara",
+      "text": "search the web for how long to boil an egg",
       "pred_tools": [
         "web_search"
       ],
@@ -987,20 +802,18 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "internette yumurta kaç dakika haşlanır",
-            "max_results": 3
+            "query": "how long to boil an egg"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"internette yumurta kaç dakika haşlanır\", \"max_results\": 3}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"how long to boil an egg\"}, \"multi_intent\": false}"
     },
     {
       "id": "t24",
       "cat": "tool",
-      "text": "'günaydın' kelimesini Almanca'ya çevir",
+      "text": "translate 'good morning' into German",
       "pred_tools": [
         "translate"
       ],
@@ -1008,20 +821,19 @@
         {
           "tool": "translate",
           "args": {
-            "text": "günaydın",
+            "text": "good morning",
             "target_lang": "German"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"günaydın\", \"target_lang\": \"German\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"good morning\", \"target_lang\": \"German\"}, \"multi_intent\": false}"
     },
     {
       "id": "t25",
       "cat": "tool",
-      "text": "hatırlatmalarım neler",
+      "text": "what are my reminders",
       "pred_tools": [
         "reminder_list"
       ],
@@ -1032,14 +844,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "t26",
       "cat": "tool",
-      "text": "Fenerbahçe dün akşam ne yaptı",
+      "text": "how did Fenerbahce do last night",
       "pred_tools": [
         "match_result"
       ],
@@ -1047,19 +858,18 @@
         {
           "tool": "match_result",
           "args": {
-            "team": "Fenerbahçe"
+            "team": "Fenerbahce"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Fenerbahçe\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"match_result\", \"args\": {\"team\": \"Fenerbahce\"}, \"multi_intent\": false}"
     },
     {
       "id": "t27",
       "cat": "tool",
-      "text": "acil mail var mı",
+      "text": "any urgent mail",
       "pred_tools": [
         "mail_check"
       ],
@@ -1072,14 +882,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"urgent\"}, \"multi_intent\": false}"
     },
     {
       "id": "t28",
       "cat": "tool",
-      "text": "öğle yemeğine bir kase mercimek çorbası yaz",
+      "text": "log a bowl of lentil soup for lunch",
       "pred_tools": [
         "diet_log"
       ],
@@ -1087,20 +896,20 @@
         {
           "tool": "diet_log",
           "args": {
-            "food": "mercimek çorbası",
-            "meal": "lunch"
+            "food": "lentil soup",
+            "meal": "lunch",
+            "amount": "a bowl"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"mercimek çorbası\", \"meal\": \"lunch\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"lentil soup\", \"meal\": \"lunch\", \"amount\": \"a bowl\"}, \"multi_intent\": false}"
     },
     {
       "id": "t29",
       "cat": "tool",
-      "text": "takvime ekle: cumartesi 11'de diş hekimi",
+      "text": "add an appointment: dentist on Saturday at 11",
       "pred_tools": [
         "calendar_add"
       ],
@@ -1108,21 +917,19 @@
         {
           "tool": "calendar_add",
           "args": {
-            "title": "Diş hekimi",
-            "at": "cumartesi 11",
-            "with_whom": ""
+            "title": "dentist",
+            "at": "Saturday at 11"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Diş hekimi\", \"at\": \"cumartesi 11\", \"with_whom\": \"\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"dentist\", \"at\": \"Saturday at 11\"}, \"multi_intent\": false}"
     },
     {
       "id": "t30",
       "cat": "tool",
-      "text": "yarın Ankara'da hava nasıl",
+      "text": "what's the weather in Ankara tomorrow",
       "pred_tools": [
         "weather"
       ],
@@ -1136,14 +943,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Ankara\", \"day\": \"tomorrow\"}, \"multi_intent\": false}"
     },
     {
       "id": "t31",
       "cat": "tool",
-      "text": "20 dakika sonra tesisatçıyı aramamı hatırlat",
+      "text": "remind me to call the plumber in 20 minutes",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1151,20 +957,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Tesisatçıyı ara",
+            "text": "call the plumber",
             "in_minutes": 20
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Tesisatçıyı ara\", \"in_minutes\": 20}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"call the plumber\", \"in_minutes\": 20}, \"multi_intent\": false}"
     },
     {
       "id": "t32",
       "cat": "tool",
-      "text": "bütün ışıkları kapat, yatıyoruz",
+      "text": "turn off all the lights, we're going to bed",
       "pred_tools": [
         "light_control"
       ],
@@ -1178,14 +983,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"all\", \"state\": \"off\"}, \"multi_intent\": false}"
     },
     {
       "id": "t33",
       "cat": "tool",
-      "text": "bu yıl fizik Nobel'ini kim kazandı internetten bak",
+      "text": "look up who won the Nobel prize in physics this year",
       "pred_tools": [
         "web_search"
       ],
@@ -1193,20 +997,18 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "physics Nobel Prize winner this year",
-            "max_results": 3
+            "query": "Nobel prize in physics 2024 winner"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"physics Nobel Prize winner this year\", \"max_results\": 3}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Nobel prize in physics 2024 winner\"}, \"multi_intent\": false}"
     },
     {
       "id": "t34",
       "cat": "tool",
-      "text": "Neva'nın matematik sınavı ne zaman",
+      "text": "when is Neva's math exam",
       "pred_tools": [
         "school_exam_schedule"
       ],
@@ -1215,19 +1017,18 @@
           "tool": "school_exam_schedule",
           "args": {
             "person": "Neva",
-            "subject": "matematik"
+            "subject": "math"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Neva\", \"subject\": \"matematik\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"school_exam_schedule\", \"args\": {\"person\": \"Neva\", \"subject\": \"math\"}, \"multi_intent\": false}"
     },
     {
       "id": "t35",
       "cat": "tool",
-      "text": "listeye yoğurt ve domates ekle",
+      "text": "put yogurt and tomatoes on the list",
       "pred_tools": [
         "shopping_add"
       ],
@@ -1235,19 +1036,18 @@
         {
           "tool": "shopping_add",
           "args": {
-            "items": "yoğurt, domates"
+            "items": "yogurt and tomatoes"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"yoğurt, domates\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"yogurt and tomatoes\"}, \"multi_intent\": false}"
     },
     {
       "id": "t36",
       "cat": "tool",
-      "text": "dünkü kalori özetimi ver",
+      "text": "give me my calorie summary for yesterday",
       "pred_tools": [
         "diet_summary"
       ],
@@ -1255,19 +1055,18 @@
         {
           "tool": "diet_summary",
           "args": {
-            "day": "dün"
+            "day": "yesterday"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"dün\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_summary\", \"args\": {\"day\": \"yesterday\"}, \"multi_intent\": false}"
     },
     {
       "id": "t37",
       "cat": "tool",
-      "text": "spotify'dan biraz caz çal",
+      "text": "play some jazz on spotify",
       "pred_tools": [
         "media_play"
       ],
@@ -1275,21 +1074,19 @@
         {
           "tool": "media_play",
           "args": {
-            "artist": "",
-            "track": "",
-            "platform": "spotify"
+            "platform": "spotify",
+            "track": "jazz"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"\", \"track\": \"\", \"platform\": \"spotify\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"platform\": \"spotify\", \"track\": \"jazz\"}, \"multi_intent\": false}"
     },
     {
       "id": "t38",
       "cat": "tool",
-      "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel",
+      "text": "translate this sentence into English: hava çok güzel",
       "pred_tools": [
         "translate"
       ],
@@ -1303,14 +1100,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"hava çok güzel\", \"target_lang\": \"English\"}, \"multi_intent\": false}"
     },
     {
       "id": "t39",
       "cat": "tool",
-      "text": "5 dakika zamanlayıcı ver",
+      "text": "give me 5 minutes on the timer",
       "pred_tools": [
         "timer_set"
       ],
@@ -1323,25 +1119,32 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 5}, \"multi_intent\": false}"
     },
     {
       "id": "t40",
       "cat": "tool",
-      "text": "sesini aç biraz",
-      "pred_tools": [],
-      "pred_calls": [],
+      "text": "make it louder",
+      "pred_tools": [
+        "volume_set"
+      ],
+      "pred_calls": [
+        {
+          "tool": "volume_set",
+          "args": {
+            "direction": "up"
+          }
+        }
+      ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"up\"}, \"multi_intent\": false}"
     },
     {
       "id": "p01",
       "cat": "pair",
-      "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+      "text": "remember that Neva is allergic to peanuts",
       "pred_tools": [
         "memory_add"
       ],
@@ -1349,62 +1152,19 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "Neva'nın fıstık alerjisi var.",
+            "text": "Neva is allergic to peanuts",
             "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva'nın fıstık alerjisi var.\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"scope\": \"private\"}, \"multi_intent\": false}"
     },
     {
       "id": "p02",
       "cat": "pair",
-      "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "memory_add",
-          "args": {
-            "text": "Neva'nın fıstık alerjisi var.",
-            "scope": "private"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva'nın fıstık alerjisi var.\", \"scope\": \"private\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p03",
-      "cat": "pair",
-      "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et",
-      "pred_tools": [
-        "memory_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "memory_add",
-          "args": {
-            "text": "Evlilik yıldönümümüz 14 Eylül'de.",
-            "scope": "private"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Evlilik yıldönümümüz 14 Eylül'de.\", \"scope\": \"private\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p04",
-      "cat": "pair",
-      "text": "yarın 6:30'da beni uyandır",
+      "text": "remind me tonight that Neva is allergic to peanuts",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1412,104 +1172,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Uyanılma",
-            "at": "06:30"
+            "text": "Neva is allergic to peanuts",
+            "at": "tonight"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Uyanılma\", \"at\": \"06:30\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"at\": \"tonight\"}, \"multi_intent\": false}"
     },
     {
-      "id": "p05",
+      "id": "p03",
       "cat": "pair",
-      "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et",
-      "pred_tools": [
-        "soul_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "soul_add",
-          "args": {
-            "text": "bana sadece Ayhan değil, Ayhan Bey diye hitap et",
-            "scope": "self"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"bana sadece Ayhan değil, Ayhan Bey diye hitap et\", \"scope\": \"self\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p06",
-      "cat": "pair",
-      "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
-      "pred_tools": [
-        "soul_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "soul_add",
-          "args": {
-            "text": "do not talk so much",
-            "scope": "self"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"do not talk so much\", \"scope\": \"self\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p07",
-      "cat": "pair",
-      "text": "annemin ilacı hakkında sana ne söylemiştim",
-      "pred_tools": [
-        "memory_search"
-      ],
-      "pred_calls": [
-        {
-          "tool": "memory_search",
-          "args": {
-            "query": "annemin ilacı"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"annemin ilacı\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p08",
-      "cat": "pair",
-      "text": "annem kalp hapını akşam 9'da içiyor, bunu kur",
-      "pred_tools": [
-        "med_reminder"
-      ],
-      "pred_calls": [
-        {
-          "tool": "med_reminder",
-          "args": {
-            "medicine": "kalp hapı",
-            "at": "21:00",
-            "person": "annem"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"kalp hapı\", \"at\": \"21:00\", \"person\": \"annem\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "p09",
-      "cat": "pair",
-      "text": "aile hafızasına yaz: pazar günü anneanneye gidiyoruz",
+      "text": "note that our wedding anniversary is on the 14th of September",
       "pred_tools": [
         "memory_add"
       ],
@@ -1517,20 +1192,148 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "pazar günü anneanneye gidiyoruz",
+            "text": "Wedding anniversary is on the 14th of September",
+            "scope": "private"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Wedding anniversary is on the 14th of September\", \"scope\": \"private\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p04",
+      "cat": "pair",
+      "text": "wake me up at 6:30 tomorrow",
+      "pred_tools": [
+        "reminder_add"
+      ],
+      "pred_calls": [
+        {
+          "tool": "reminder_add",
+          "args": {
+            "text": "wake me up",
+            "at": "tomorrow 06:30"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"wake me up\", \"at\": \"tomorrow 06:30\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p05",
+      "cat": "pair",
+      "text": "from now on call me Ayhan Bey, not just Ayhan",
+      "pred_tools": [
+        "soul_add"
+      ],
+      "pred_calls": [
+        {
+          "tool": "soul_add",
+          "args": {
+            "text": "call me Ayhan Bey, not just Ayhan",
+            "scope": "self"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"call me Ayhan Bey, not just Ayhan\", \"scope\": \"self\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p06",
+      "cat": "pair",
+      "text": "you talk too much, keep your answers shorter from now on",
+      "pred_tools": [
+        "soul_add"
+      ],
+      "pred_calls": [
+        {
+          "tool": "soul_add",
+          "args": {
+            "text": "keep answers shorter from now on"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"soul_add\", \"args\": {\"text\": \"keep answers shorter from now on\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p07",
+      "cat": "pair",
+      "text": "what did I tell you about my mother's medicine",
+      "pred_tools": [
+        "memory_search"
+      ],
+      "pred_calls": [
+        {
+          "tool": "memory_search",
+          "args": {
+            "query": "mother's medicine"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"mother's medicine\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p08",
+      "cat": "pair",
+      "text": "my mother takes her heart pill at 9pm, set that up",
+      "pred_tools": [
+        "med_reminder"
+      ],
+      "pred_calls": [
+        {
+          "tool": "med_reminder",
+          "args": {
+            "medicine": "heart pill",
+            "at": "21:00",
+            "person": "mother"
+          }
+        }
+      ],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": \"med_reminder\", \"args\": {\"medicine\": \"heart pill\", \"at\": \"21:00\", \"person\": \"mother\"}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p09",
+      "cat": "pair",
+      "text": "note in the family memory that we're going to grandma's on Sunday",
+      "pred_tools": [
+        "memory_add"
+      ],
+      "pred_calls": [
+        {
+          "tool": "memory_add",
+          "args": {
+            "text": "We're going to grandma's on Sunday",
             "scope": "family"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"pazar günü anneanneye gidiyoruz\", \"scope\": \"family\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"We're going to grandma's on Sunday\", \"scope\": \"family\"}, \"multi_intent\": false}"
     },
     {
       "id": "p10",
       "cat": "pair",
-      "text": "saat 3'teki hatırlatmayı iptal et",
+      "text": "cancel the 3 o'clock reminder",
+      "pred_tools": [],
+      "pred_calls": [],
+      "multi_flag": false,
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+    },
+    {
+      "id": "p11",
+      "cat": "pair",
+      "text": "did I already have a reminder for the dentist",
       "pred_tools": [
         "reminder_list"
       ],
@@ -1541,34 +1344,13 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"reminder_list\", \"args\": {}, \"multi_intent\": false}"
     },
     {
-      "id": "p11",
-      "cat": "pair",
-      "text": "diş hekimi için hatırlatmam var mıydı",
-      "pred_tools": [
-        "memory_search"
-      ],
-      "pred_calls": [
-        {
-          "tool": "memory_search",
-          "args": {
-            "query": "diş hekimi hatırlatma"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"diş hekimi hatırlatma\"}, \"multi_intent\": false}"
-    },
-    {
       "id": "p12",
       "cat": "pair",
-      "text": "araba sigortası hakkında ne dediğimi hafızamda ara",
+      "text": "search my memory for what I said about the car insurance",
       "pred_tools": [
         "memory_search"
       ],
@@ -1576,19 +1358,18 @@
         {
           "tool": "memory_search",
           "args": {
-            "query": "araba sigortası"
+            "query": "car insurance"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"araba sigortası\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_search\", \"args\": {\"query\": \"car insurance\"}, \"multi_intent\": false}"
     },
     {
       "id": "p13",
       "cat": "pair",
-      "text": "araba sigortasının güncel fiyatını internetten bak",
+      "text": "look up the current price of car insurance online",
       "pred_tools": [
         "web_search"
       ],
@@ -1596,40 +1377,28 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "araba sigortası fiyatları 2024",
-            "max_results": 5
+            "query": "current price of car insurance"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"araba sigortası fiyatları 2024\", \"max_results\": 5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"current price of car insurance\"}, \"multi_intent\": false}"
     },
     {
       "id": "p14",
       "cat": "pair",
-      "text": "bunu bana hatırlatma, sadece aklında tut",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "reminder_add",
-          "args": {
-            "text": "bunu bana hatırlatma"
-          }
-        }
-      ],
+      "text": "don't remind me about it, just keep it in mind",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"bunu bana hatırlatma\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "a01",
       "cat": "arg",
-      "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
+      "text": "remind me next Tuesday at half past seven in the evening to renew my passport",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1637,20 +1406,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Pasaportumu yenile",
-            "at": "2024-10-29 19:00"
+            "text": "renew my passport",
+            "at": "next Tuesday 19:30"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Pasaportumu yenile\", \"at\": \"2024-10-29 19:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"renew my passport\", \"at\": \"next Tuesday 19:30\"}, \"multi_intent\": false}"
     },
     {
       "id": "a02",
       "cat": "arg",
-      "text": "Neva'nın kimya sınavı 21'inde, takvime ekle",
+      "text": "Neva's chemistry exam is on the 21st, add it to the calendar",
       "pred_tools": [
         "calendar_add"
       ],
@@ -1658,21 +1426,19 @@
         {
           "tool": "calendar_add",
           "args": {
-            "title": "Neva'nın Kimya Sınavı",
-            "at": "21",
-            "with_whom": ""
+            "title": "Neva's chemistry exam",
+            "at": "21st"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Neva'nın Kimya Sınavı\", \"at\": \"21\", \"with_whom\": \"\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Neva's chemistry exam\", \"at\": \"21st\"}, \"multi_intent\": false}"
     },
     {
       "id": "a03",
       "cat": "arg",
-      "text": "bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat",
+      "text": "remind me in an hour and a half to take the bread out of the oven",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1680,20 +1446,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "ekmeği fırından çıkarmak",
+            "text": "take the bread out of the oven",
             "in_minutes": 90
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"ekmeği fırından çıkarmak\", \"in_minutes\": 90}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"take the bread out of the oven\", \"in_minutes\": 90}, \"multi_intent\": false}"
     },
     {
       "id": "a04",
       "cat": "arg",
-      "text": "iki buçuk dakikalık zamanlayıcı kur",
+      "text": "set a timer for two and a half minutes",
       "pred_tools": [
         "timer_set"
       ],
@@ -1701,19 +1466,18 @@
         {
           "tool": "timer_set",
           "args": {
-            "minutes": 1.5
+            "minutes": 2.5
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 1.5}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"timer_set\", \"args\": {\"minutes\": 2.5}, \"multi_intent\": false}"
     },
     {
       "id": "a05",
       "cat": "arg",
-      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+      "text": "note that Ismet's passport expires on 12 March 2027",
       "pred_tools": [
         "memory_add"
       ],
@@ -1721,20 +1485,19 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
+            "text": "Ismet's passport expires on 12 March 2027",
             "scope": "private"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"İsmet'in pasaportunun 12 Mart 2027'de dolduğu.\", \"scope\": \"private\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Ismet's passport expires on 12 March 2027\", \"scope\": \"private\"}, \"multi_intent\": false}"
     },
     {
       "id": "a06",
       "cat": "arg",
-      "text": "öbür gün Diyarbakır'da hava",
+      "text": "the weather in Diyarbakir the day after tomorrow",
       "pred_tools": [
         "weather"
       ],
@@ -1742,20 +1505,19 @@
         {
           "tool": "weather",
           "args": {
-            "city": "Diyarbakır",
-            "day": "tomorrow"
+            "city": "Diyarbakir",
+            "day": "the day after tomorrow"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Diyarbakır\", \"day\": \"tomorrow\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"Diyarbakir\", \"day\": \"the day after tomorrow\"}, \"multi_intent\": false}"
     },
     {
       "id": "a07",
       "cat": "arg",
-      "text": "akşam yemeğine 180 gram ızgara tavuk yaz",
+      "text": "log 180 grams of grilled chicken for dinner",
       "pred_tools": [
         "diet_log"
       ],
@@ -1763,21 +1525,20 @@
         {
           "tool": "diet_log",
           "args": {
-            "food": "ızgara tavuk",
+            "food": "grilled chicken",
             "meal": "dinner",
-            "amount": "180 gram"
+            "amount": "180 grams"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"ızgara tavuk\", \"meal\": \"dinner\", \"amount\": \"180 gram\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"grilled chicken\", \"meal\": \"dinner\", \"amount\": \"180 grams\"}, \"multi_intent\": false}"
     },
     {
       "id": "a08",
       "cat": "arg",
-      "text": "yarın öğlen Ayhan'a vergi ödemesini hatırlat",
+      "text": "remind Ayhan at noon tomorrow about the tax payment",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1785,20 +1546,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Ayhan'a vergi ödemesini hatırlat",
-            "at": "yesterday 12:00"
+            "text": "Ayhan: tax payment",
+            "at": "tomorrow 12:00"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Ayhan'a vergi ödemesini hatırlat\", \"at\": \"yesterday 12:00\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Ayhan: tax payment\", \"at\": \"tomorrow 12:00\"}, \"multi_intent\": false}"
     },
     {
       "id": "a09",
       "cat": "arg",
-      "text": "youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal",
+      "text": "play Bir Derdim Var by Mor ve Otesi on youtube",
       "pred_tools": [
         "media_play"
       ],
@@ -1806,21 +1566,20 @@
         {
           "tool": "media_play",
           "args": {
-            "artist": "Mor ve Ötesi",
             "track": "Bir Derdim Var",
+            "artist": "Mor ve Otesi",
             "platform": "youtube"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Mor ve Ötesi\", \"track\": \"Bir Derdim Var\", \"platform\": \"youtube\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"media_play\", \"args\": {\"track\": \"Bir Derdim Var\", \"artist\": \"Mor ve Otesi\", \"platform\": \"youtube\"}, \"multi_intent\": false}"
     },
     {
       "id": "a10",
       "cat": "arg",
-      "text": "yatak odası ışıklarını kıs",
+      "text": "dim the bedroom lights",
       "pred_tools": [
         "light_control"
       ],
@@ -1828,20 +1587,19 @@
         {
           "tool": "light_control",
           "args": {
-            "room": "yatak odası",
-            "state": "dim"
+            "room": "bedroom",
+            "state": "off"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"yatak odası\", \"state\": \"dim\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"bedroom\", \"state\": \"off\"}, \"multi_intent\": false}"
     },
     {
       "id": "a11",
       "cat": "arg",
-      "text": "ayın birinde kirayı ödemeyi hatırlat",
+      "text": "remind me on the first of the month to pay the rent",
       "pred_tools": [
         "reminder_add"
       ],
@@ -1849,20 +1607,19 @@
         {
           "tool": "reminder_add",
           "args": {
-            "text": "Kirayı ödemek",
-            "at": "ayın birinde"
+            "text": "pay the rent",
+            "at": "first of the month"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Kirayı ödemek\", \"at\": \"ayın birinde\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"pay the rent\", \"at\": \"first of the month\"}, \"multi_intent\": false}"
     },
     {
       "id": "a12",
       "cat": "arg",
-      "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
+      "text": "add a doctor's appointment with Dr. Kaya next Friday at quarter past nine",
       "pred_tools": [
         "calendar_add"
       ],
@@ -1870,20 +1627,19 @@
         {
           "tool": "calendar_add",
           "args": {
-            "title": "Dr. Kaya ile doktor randevusu",
-            "at": "2023-10-25 09:45"
+            "title": "Doctor's appointment with Dr. Kaya",
+            "at": "next Friday 09:15"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Dr. Kaya ile doktor randevusu\", \"at\": \"2023-10-25 09:45\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"calendar_add\", \"args\": {\"title\": \"Doctor's appointment with Dr. Kaya\", \"at\": \"next Friday 09:15\"}, \"multi_intent\": false}"
     },
     {
       "id": "a13",
       "cat": "arg",
-      "text": "'seni özledim'i Kürtçe'ye çevir",
+      "text": "translate 'I miss you' into Kurdish",
       "pred_tools": [
         "translate"
       ],
@@ -1891,223 +1647,159 @@
         {
           "tool": "translate",
           "args": {
-            "text": "seni özledim",
-            "target_lang": "kurmanji"
+            "text": "I miss you",
+            "target_lang": "Kurdish"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"seni özledim\", \"target_lang\": \"kurmanji\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"I miss you\", \"target_lang\": \"Kurdish\"}, \"multi_intent\": false}"
     },
     {
       "id": "a14",
       "cat": "arg",
-      "text": "maç başlamadan yarım saat önce televizyonu açmamı hatırlat",
-      "pred_tools": [
-        "reminder_add"
-      ],
-      "pred_calls": [
-        {
-          "tool": "reminder_add",
-          "args": {
-            "text": "Maç başlamadan yarım saat önce televizyonu aç",
-            "in_minutes": 30
-          }
-        }
-      ],
+      "text": "remind me half an hour before the match starts to turn the TV on",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"reminder_add\", \"args\": {\"text\": \"Maç başlamadan yarım saat önce televizyonu aç\", \"in_minutes\": 30}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x06",
       "cat": "high",
-      "text": "hesabımdan Ali'ye 500 lira gönder",
+      "text": "send 500 lira to Ali from my account",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h01",
       "cat": "high",
-      "text": "kardeşimin hesabına şimdi 2000 lira gönder",
+      "text": "transfer 2000 lira to my brother's account right now",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h02",
       "cat": "high",
-      "text": "Neva'ya yemek hazır de",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "kitchen",
-            "state": "on"
-          }
-        }
-      ],
+      "text": "tell Neva dinner is ready",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h03",
       "cat": "high",
-      "text": "Ayhan'a mesaj bırak, eve geç geleceğim",
+      "text": "leave a message for Ayhan that I'll be home late",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h04",
       "cat": "high",
-      "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "Neva'nın odası",
-            "state": "on"
-          }
-        }
-      ],
+      "text": "call Neva's room, I want to talk to her",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"Neva'nın odası\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h05",
       "cat": "high",
-      "text": "patronuma bugün hasta olduğumu yazan bir mail gönder",
+      "text": "send an email to my boss saying I'm sick today",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h06",
       "cat": "high",
-      "text": "okula mail at, Neva yarın gelmeyecek de",
-      "pred_tools": [
-        "mail_check"
-      ],
-      "pred_calls": [
-        {
-          "tool": "mail_check",
-          "args": {
-            "filter": "meeting"
-          }
-        }
-      ],
-      "multi_flag": true,
-      "unsupported": null,
+      "text": "mail the school and tell them Neva won't come tomorrow",
+      "pred_tools": [],
+      "pred_calls": [],
+      "multi_flag": false,
       "err": false,
-      "out": "{\"tool\": \"mail_check\", \"args\": {\"filter\": \"meeting\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h07",
       "cat": "high",
-      "text": "diş hekimi randevusunu takvimden sil",
+      "text": "delete the dentist appointment from the calendar",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h08",
       "cat": "high",
-      "text": "bütün hatırlatmalarımı iptal et",
+      "text": "cancel all my reminders",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h09",
       "cat": "high",
-      "text": "profil hafızamı temizle, çok uzadı",
+      "text": "clean up my profile memory, it's gotten too long",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h10",
       "cat": "high",
-      "text": "elektrik şirketine 750 lira öde",
+      "text": "pay 750 lira to the electricity company",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h11",
       "cat": "high",
-      "text": "aile hafızasını sil, sıfırdan başlayalım",
+      "text": "wipe the family memory and start over",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "h12",
       "cat": "high",
-      "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "kitchen",
-            "state": "on"
-          }
-        }
-      ],
+      "text": "tell everyone in the house that dinner is at 8",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "m01",
       "cat": "multi",
-      "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle",
+      "text": "turn on the living room light and tell Neva to come down",
       "pred_tools": [
         "light_control"
       ],
@@ -2115,20 +1807,19 @@
         {
           "tool": "light_control",
           "args": {
-            "room": "salon",
+            "room": "living room",
             "state": "on"
           }
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"salon\", \"state\": \"on\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"living room\", \"state\": \"on\"}, \"multi_intent\": true}"
     },
     {
       "id": "m02",
       "cat": "multi",
-      "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+      "text": "add milk to the list and remind me to go to the market at 6",
       "pred_tools": [
         "shopping_add"
       ],
@@ -2136,60 +1827,38 @@
         {
           "tool": "shopping_add",
           "args": {
-            "items": "süt"
+            "items": "milk"
           }
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"süt\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"shopping_add\", \"args\": {\"items\": \"milk\"}, \"multi_intent\": true}"
     },
     {
       "id": "m03",
       "cat": "multi",
-      "text": "yarın hava nasıl, bir de 7'ye alarm kur",
-      "pred_tools": [
-        "weather"
-      ],
-      "pred_calls": [
-        {
-          "tool": "weather",
-          "args": {
-            "city": "",
-            "day": "tomorrow"
-          }
-        }
-      ],
+      "text": "what's the weather tomorrow, and set an alarm for 7",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"weather\", \"args\": {\"city\": \"\", \"day\": \"tomorrow\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": true}"
     },
     {
       "id": "m04",
       "cat": "multi",
-      "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
-      "pred_tools": [
-        "diet_log"
-      ],
-      "pred_calls": [
-        {
-          "tool": "diet_log",
-          "args": {
-            "food": "kahvaltı"
-          }
-        }
-      ],
+      "text": "log my breakfast and tell me how many calories I've had",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"diet_log\", \"args\": {\"food\": \"kahvaltı\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": true}"
     },
     {
       "id": "m05",
       "cat": "multi",
-      "text": "biraz müzik çal ve ışıkları kıs",
+      "text": "play some music and turn the lights down",
       "pred_tools": [
         "media_play"
       ],
@@ -2202,14 +1871,13 @@
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"media_play\", \"args\": {\"platform\": \"spotify\"}, \"multi_intent\": true}"
     },
     {
       "id": "m06",
       "cat": "multi",
-      "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+      "text": "remember that Neva is allergic to peanuts and remind me tonight to tell her teacher",
       "pred_tools": [
         "memory_add"
       ],
@@ -2217,192 +1885,149 @@
         {
           "tool": "memory_add",
           "args": {
-            "text": "Neva'nın fıstık alerjisi var.",
+            "text": "Neva is allergic to peanuts",
             "scope": "private"
           }
         }
       ],
       "multi_flag": true,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva'nın fıstık alerjisi var.\", \"scope\": \"private\"}, \"multi_intent\": true}"
+      "out": "{\"tool\": \"memory_add\", \"args\": {\"text\": \"Neva is allergic to peanuts\", \"scope\": \"private\"}, \"multi_intent\": true}"
     },
     {
       "id": "x01",
       "cat": "trap_neigh",
-      "text": "kombiyi aç, üşüdüm",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "kitchen",
-            "state": "on"
-          }
-        }
-      ],
+      "text": "turn on the boiler, I'm cold",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"kitchen\", \"state\": \"on\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x04",
       "cat": "trap_neigh",
-      "text": "klimayı 22 dereceye ayarla",
+      "text": "set the AC to 22 degrees",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x07",
       "cat": "trap_neigh",
-      "text": "perdeleri kapat",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "general",
-            "state": "off"
-          }
-        }
-      ],
-      "multi_flag": false,
-      "unsupported": null,
-      "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"general\", \"state\": \"off\"}, \"multi_intent\": false}"
-    },
-    {
-      "id": "x08",
-      "cat": "trap_neigh",
-      "text": "televizyonu aç, habere geç",
+      "text": "close the curtains",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
+      "id": "x08",
+      "cat": "trap_neigh",
+      "text": "turn on the TV, switch to the news",
+      "pred_tools": [],
+      "pred_calls": [],
+      "multi_flag": true,
+      "err": false,
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": true}"
+    },
+    {
       "id": "x09",
       "cat": "trap_neigh",
-      "text": "bulaşık makinesini başlat",
+      "text": "start the dishwasher",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n01",
       "cat": "trap_neigh",
-      "text": "çamaşır makinesini pamuklu programında başlat",
+      "text": "start the washing machine on the cotton program",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n02",
       "cat": "trap_neigh",
-      "text": "televizyonun sesini kıs",
-      "pred_tools": [
-        "volume_set"
-      ],
-      "pred_calls": [
-        {
-          "tool": "volume_set",
-          "args": {
-            "direction": "down"
-          }
-        }
-      ],
+      "text": "turn the TV volume down",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"volume_set\", \"args\": {\"direction\": \"down\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n03",
       "cat": "trap_neigh",
-      "text": "garaj kapısını aç",
+      "text": "open the garage door",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n04",
       "cat": "trap_neigh",
-      "text": "ön kapıyı kilitle",
+      "text": "lock the front door",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n05",
       "cat": "trap_neigh",
-      "text": "kaloriferi iki derece aç",
+      "text": "turn the heating up two degrees",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n06",
       "cat": "trap_neigh",
-      "text": "salonu süpür",
+      "text": "vacuum the living room",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n07",
       "cat": "trap_neigh",
-      "text": "fırını aç, 180 derece",
+      "text": "turn on the oven, 180 degrees",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n08",
       "cat": "trap_neigh",
-      "text": "balkondaki çiçekleri sula",
+      "text": "water the plants in the balcony",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n09",
       "cat": "trap_neigh",
-      "text": "alışveriş listesini yazdır",
+      "text": "print the shopping list",
       "pred_tools": [
         "shopping_list"
       ],
@@ -2413,384 +2038,313 @@
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": \"shopping_list\", \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n10",
       "cat": "trap_neigh",
-      "text": "bu akşam için balık restoranından masa ayırt",
+      "text": "book me a table at the fish restaurant for tonight",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n11",
       "cat": "trap_neigh",
-      "text": "eve taksi çağır",
+      "text": "call a taxi to the house",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n12",
       "cat": "trap_neigh",
-      "text": "wifi modemi kapat",
+      "text": "turn off the wifi router",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n13",
       "cat": "trap_neigh",
-      "text": "kombi aç",
+      "text": "turn the boiler on",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "n14",
       "cat": "trap_neigh",
-      "text": "perdeleri kapat",
-      "pred_tools": [
-        "light_control"
-      ],
-      "pred_calls": [
-        {
-          "tool": "light_control",
-          "args": {
-            "room": "general",
-            "state": "off"
-          }
-        }
-      ],
+      "text": "close the curtains please",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"light_control\", \"args\": {\"room\": \"general\", \"state\": \"off\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x02",
       "cat": "trap_neigh",
-      "text": "borsadan 10 lot Garanti hissesi al",
+      "text": "buy 10 lots of Garanti stock on the exchange",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x03",
       "cat": "trap_neigh",
-      "text": "bu akşam için pizza söyle",
-      "pred_tools": [
-        "media_play"
-      ],
-      "pred_calls": [
-        {
-          "tool": "media_play",
-          "args": {
-            "artist": "Pizza",
-            "track": "Song",
-            "platform": "spotify"
-          }
-        }
-      ],
+      "text": "order pizza for tonight",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"media_play\", \"args\": {\"artist\": \"Pizza\", \"track\": \"Song\", \"platform\": \"spotify\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "x05",
       "cat": "trap_neigh",
-      "text": "arabayı uzaktan çalıştır",
+      "text": "start the car remotely",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c01",
       "cat": "trap_chat",
-      "text": "bugün çok sıkıldım",
+      "text": "I'm really bored today",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c02",
       "cat": "trap_chat",
-      "text": "sana dedemin köyünü anlatayım mı",
+      "text": "should I tell you about my grandfather's village",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c03",
       "cat": "trap_chat",
-      "text": "bana bir fıkra anlat",
+      "text": "tell me a joke",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c04",
       "cat": "trap_chat",
-      "text": "sence hayatın anlamı ne",
+      "text": "what do you think is the meaning of life",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c05",
       "cat": "trap_chat",
-      "text": "seni çok sevdiğimi biliyorsun değil mi",
+      "text": "you know I love you a lot right",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c06",
       "cat": "trap_chat",
-      "text": "of, bugün çok yorgunum",
+      "text": "ugh I'm so tired today",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c07",
       "cat": "trap_chat",
-      "text": "en sevdiğin yemek ne",
+      "text": "what's your favorite food",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c08",
       "cat": "trap_chat",
-      "text": "biraz sohbet etmek istiyorum",
+      "text": "I just want to chat a bit",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c09",
       "cat": "trap_chat",
-      "text": "acaba yarın mutlu olacak mıyım",
+      "text": "I wonder if I'll be happy tomorrow",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c10",
       "cat": "trap_chat",
-      "text": "iyi geceler canım",
+      "text": "good night my dear",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c11",
       "cat": "trap_chat",
-      "text": "sırtım yine ağrıyor, yaşlanmak zor",
+      "text": "my back hurts again, getting old is rough",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c12",
       "cat": "trap_chat",
-      "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+      "text": "I had a fight with Neva today and I feel awful",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c13",
       "cat": "trap_chat",
-      "text": "bizden hiç sıkılıyor musun",
+      "text": "do you ever get tired of us",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "c14",
       "cat": "trap_chat",
-      "text": "bu havalar son zamanlarda beni üzüyor",
+      "text": "the weather is making me sad lately",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k01",
       "cat": "trap_ctx",
-      "text": "aynısından bir tane daha",
+      "text": "one more of the same please",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k02",
       "cat": "trap_ctx",
-      "text": "onu da ekle",
+      "text": "add that one too",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k03",
       "cat": "trap_ctx",
-      "text": "hayır, diğeri",
+      "text": "no, the other one",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k04",
       "cat": "trap_ctx",
-      "text": "bir daha yap",
+      "text": "do it again",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k05",
       "cat": "trap_ctx",
-      "text": "onu iptal et",
+      "text": "cancel that",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k06",
       "cat": "trap_ctx",
-      "text": "peki ya yarın",
-      "pred_tools": [
-        "clock_now"
-      ],
-      "pred_calls": [
-        {
-          "tool": "clock_now",
-          "args": {
-            "kind": "date"
-          }
-        }
-      ],
+      "text": "what about tomorrow",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"clock_now\", \"args\": {\"kind\": \"date\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k07",
       "cat": "trap_ctx",
-      "text": "evet, öyle yap",
+      "text": "yes, do that",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "k08",
       "cat": "trap_ctx",
-      "text": "onu 5'e çevir",
-      "pred_tools": [
-        "translate"
-      ],
-      "pred_calls": [
-        {
-          "tool": "translate",
-          "args": {
-            "text": "onu 5'e çevir",
-            "target_lang": "en"
-          }
-        }
-      ],
+      "text": "change it to 5 instead",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"onu 5'e çevir\", \"target_lang\": \"en\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q01",
       "cat": "trap_know",
-      "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+      "text": "what year was Fatih Sultan Mehmet born",
       "pred_tools": [
         "web_search"
       ],
@@ -2798,243 +2352,233 @@
         {
           "tool": "web_search",
           "args": {
-            "query": "Fatih Sultan Mehmet doğum tarihi",
-            "max_results": 1
+            "query": "Fatih Sultan Mehmet birth year"
           }
         }
       ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet doğum tarihi\", \"max_results\": 1}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"Fatih Sultan Mehmet birth year\"}, \"multi_intent\": false}"
     },
     {
       "id": "q02",
       "cat": "trap_know",
-      "text": "insan vücudunda kaç kemik var",
+      "text": "how many bones are there in the human body",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q03",
       "cat": "trap_know",
-      "text": "gökyüzü neden mavi",
+      "text": "why is the sky blue",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q04",
       "cat": "trap_know",
-      "text": "Avustralya'nın başkenti neresi",
+      "text": "what's the capital of Australia",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q05",
       "cat": "trap_know",
-      "text": "mercimek çorbası nasıl yapılır",
+      "text": "how do you make lentil soup",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q06",
       "cat": "trap_know",
-      "text": "fotosentez ne demek",
-      "pred_tools": [
-        "translate"
-      ],
-      "pred_calls": [
-        {
-          "tool": "translate",
-          "args": {
-            "text": "fotosentez ne demek",
-            "target_lang": "tr"
-          }
-        }
-      ],
+      "text": "what does photosynthesis mean",
+      "pred_tools": [],
+      "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": \"translate\", \"args\": {\"text\": \"fotosentez ne demek\", \"target_lang\": \"tr\"}, \"multi_intent\": false}"
+      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q07",
       "cat": "trap_know",
-      "text": "bir futbol takımında kaç oyuncu vardır",
+      "text": "how many players are there in a football team",
       "pred_tools": [],
       "pred_calls": [],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
       "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
     },
     {
       "id": "q08",
       "cat": "trap_know",
-      "text": "Sefiller'i kim yazdı",
-      "pred_tools": [],
-      "pred_calls": [],
+      "text": "who wrote Sefiller",
+      "pred_tools": [
+        "web_search"
+      ],
+      "pred_calls": [
+        {
+          "tool": "web_search",
+          "args": {
+            "query": "who wrote Sefiller"
+          }
+        }
+      ],
       "multi_flag": false,
-      "unsupported": null,
       "err": false,
-      "out": "{\"tool\": null, \"args\": {}, \"multi_intent\": false}"
+      "out": "{\"tool\": \"web_search\", \"args\": {\"query\": \"who wrote Sefiller\"}, \"multi_intent\": false}"
     }
   ],
   "latencies_ms": [
-    808,
-    907,
-    795,
-    840,
-    1050,
-    878,
-    877,
+    1164,
+    978,
+    955,
     961,
-    793,
-    856,
-    848,
-    773,
-    1046,
-    910,
-    1107,
-    1066,
-    792,
-    922,
-    802,
-    892,
-    756,
-    839,
-    1013,
-    969,
-    838,
-    724,
-    852,
-    903,
-    1257,
-    913,
-    934,
-    1012,
-    984,
-    977,
-    884,
-    952,
-    917,
-    1034,
-    771,
-    852,
-    932,
-    1209,
-    1041,
-    1046,
-    994,
-    1127,
-    881,
     1073,
-    1082,
-    787,
-    928,
-    883,
-    1087,
-    783,
-    1446,
-    1127,
-    1069,
-    812,
-    1212,
-    1010,
-    1124,
-    1178,
-    1109,
-    961,
+    1036,
     1024,
-    1249,
-    1031,
-    1060,
-    787,
-    822,
-    939,
-    757,
-    963,
-    845,
-    867,
-    777,
-    758,
-    758,
-    750,
-    780,
-    1010,
-    854,
-    994,
-    842,
-    977,
-    830,
-    936,
-    1122,
-    715,
-    1004,
-    741,
-    731,
-    784,
-    928,
-    608,
-    790,
-    786,
-    756,
-    784,
-    793,
-    706,
-    844,
-    734,
+    1227,
+    925,
+    890,
+    1144,
+    917,
+    1276,
+    1013,
+    1288,
+    1345,
+    918,
+    1101,
+    837,
+    1075,
+    803,
+    1078,
+    1166,
+    1145,
+    815,
     967,
-    583,
+    983,
+    1311,
+    1205,
+    1088,
+    1251,
+    1102,
+    1218,
+    1354,
+    1054,
+    992,
+    1123,
+    1117,
+    1021,
+    945,
+    1309,
+    1233,
+    1432,
+    1266,
+    1415,
+    1078,
+    1083,
+    1371,
+    1346,
+    779,
+    883,
+    1005,
+    1123,
+    829,
+    1350,
+    1329,
+    1348,
+    1028,
+    1522,
+    1209,
+    1462,
+    1531,
+    1373,
+    1126,
+    1320,
+    1470,
+    1217,
     789,
-    826,
-    1018,
-    786,
-    734,
-    791,
-    760,
-    739,
-    793,
-    774,
-    641,
-    915,
     759,
-    734,
+    785,
+    837,
+    870,
+    763,
+    885,
+    770,
+    943,
+    802,
     734,
     753,
-    786,
-    752,
-    763,
-    781,
-    729,
-    731,
+    840,
+    807,
+    1154,
+    1071,
+    809,
+    813,
+    1023,
+    1318,
+    817,
     785,
-    878,
-    745,
-    1005,
-    1011,
-    669,
+    877,
+    1087,
+    787,
+    831,
+    739,
+    818,
+    839,
+    751,
+    976,
+    772,
+    730,
+    841,
+    860,
+    765,
+    876,
+    1016,
+    717,
+    947,
+    733,
+    782,
+    1156,
+    729,
     886,
-    758,
-    955,
-    1008,
-    797,
-    717
+    800,
+    919,
+    760,
+    747,
+    857,
+    769,
+    795,
+    803,
+    813,
+    800,
+    730,
+    791,
+    846,
+    767,
+    959,
+    750,
+    704,
+    915,
+    812,
+    1226,
+    780,
+    785,
+    820,
+    788,
+    771,
+    788,
+    1064
   ]
 }

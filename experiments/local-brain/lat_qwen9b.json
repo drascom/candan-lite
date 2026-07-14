@@ -1,0 +1,119 @@
+{
+  "tag": "qwen35-9b-q8",
+  "sys_prompt_chars": 12392,
+  "results": [
+    {
+      "label": "tool_cagrisi (cold)",
+      "cold": true,
+      "reps": 4,
+      "prompt_tokens": 3796,
+      "ttft_ms_p50": 2047.5,
+      "total_ms_p50": 2252.6,
+      "tok_s_p50": 42.0,
+      "n_tok_p50": 10.0,
+      "sample": "Tamam, salon ışıklarını kapattım.",
+      "all_ttft": [
+        1167,
+        1822,
+        2273,
+        2501
+      ],
+      "all_total": [
+        1305,
+        1997,
+        2508,
+        2749
+      ]
+    },
+    {
+      "label": "tool_cagrisi (warm)",
+      "cold": false,
+      "reps": 4,
+      "prompt_tokens": 3780,
+      "ttft_ms_p50": 58.1,
+      "total_ms_p50": 199.4,
+      "tok_s_p50": 65.5,
+      "n_tok_p50": 11.0,
+      "sample": "Tamam, salon ışıklarını kapatıyorum.",
+      "all_ttft": [
+        2593,
+        61,
+        55,
+        54
+      ],
+      "all_total": [
+        2857,
+        199,
+        199,
+        184
+      ]
+    },
+    {
+      "label": "sohbet ~50tok (cold)",
+      "cold": true,
+      "reps": 4,
+      "prompt_tokens": 3807,
+      "ttft_ms_p50": 2595.2,
+      "total_ms_p50": 3934.2,
+      "tok_s_p50": 40.6,
+      "n_tok_p50": 55.0,
+      "sample": "Tamam, dinlenmeye ihtiyacın var. Akşam yemeği için hafif bir şeyler pişir, sonra biraz kitap oku ya da müzik dinle. İstersen senin için sakin bir şarkı çalabilirim.",
+      "all_ttft": [
+        2819,
+        2577,
+        2613,
+        2546
+      ],
+      "all_total": [
+        3923,
+        3945,
+        3948,
+        3895
+      ]
+    },
+    {
+      "label": "sohbet ~50tok (warm)",
+      "cold": false,
+      "reps": 4,
+      "prompt_tokens": 3792,
+      "ttft_ms_p50": 57.0,
+      "total_ms_p50": 1258.0,
+      "tok_s_p50": 46.8,
+      "n_tok_p50": 57.0,
+      "sample": "Tamam, yorgunluk hissetmek normal. Akşam hafif bir şeyler yapabiliriz. Belki biraz kitap okur ya da müzik dinleyip dinleniriz. İsterseniz biraz sessizlikte vakit geçirelim.",
+      "all_ttft": [
+        255,
+        59,
+        55,
+        55
+      ],
+      "all_total": [
+        1849,
+        1203,
+        773,
+        1313
+      ]
+    },
+    {
+      "label": "uzun 200tok (warm)",
+      "cold": false,
+      "reps": 3,
+      "prompt_tokens": 3789,
+      "ttft_ms_p50": 61.0,
+      "total_ms_p50": 1998.8,
+      "tok_s_p50": 45.2,
+      "n_tok_p50": 75,
+      "sample": "Bu hafta akşam yemeği yine yatsa da, Pazar sabahı kahvaltı geç olacak. Ayşe'nin sınavı bu hafta sonu değil ama, Neva'nın servisi sabah yedi kırkta. Ayhan akşamları yeni projede çalışıyor. Başka bir şe",
+      "all_ttft": [
+        243,
+        61,
+        55
+      ],
+      "all_total": [
+        1999,
+        2074,
+        1665
+      ]
+    }
+  ]
+}

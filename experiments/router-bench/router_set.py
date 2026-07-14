@@ -479,6 +479,11 @@ CASES = [
       "bu akşam için balık restoranından masa ayırt", []),
     C("n11", "trap_neigh", "call a taxi to the house", "eve taksi çağır", []),
     C("n12", "trap_neigh", "turn off the wifi router", "wifi modemi kapat", []),
+    # --- GERCEK CANLI HATALAR (golge modda yakalandi; ikisi de light_control'e yapisti) ---
+    C("n13", "trap_neigh", "turn the boiler on", "kombi aç", [],
+      note="CANLI HATA: light_control dedi"),
+    C("n14", "trap_neigh", "close the curtains please", "perdeleri kapat", [],
+      note="CANLI HATA: light_control dedi (x07 ile ayni ama birebir canli cumle)"),
     C("x02", "trap_neigh", "buy 10 lots of Garanti stock on the exchange",
       "borsadan 10 lot Garanti hissesi al", [],
       note="money_send var (para gonderme), borsa emri YOK"),

@@ -22,6 +22,9 @@ dist/
 # pi sessions (per-user memory, local)
 sessions/
 
+# router karar defteri + yerel loglar (tools/dashboard.py bunlara bakar)
+logs/
+
 # speaker-ID: model (28MB) + enrolled DB — git'e girmez
 worker/models/
 worker/data/

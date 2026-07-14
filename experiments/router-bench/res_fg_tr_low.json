@@ -1,0 +1,2304 @@
+{
+ "model": "functiongemma-270m-it",
+ "quant": "Q8_0",
+ "schema": "native",
+ "lang": "tr",
+ "tier": "low",
+ "catalog_size": 23,
+ "n_cases": 139,
+ "vram_model_mib": 0,
+ "summary": {
+  "schema": "single",
+  "n": 139,
+  "recall_pct": 5.9,
+  "arg_ok_pct": 1.5,
+  "arg_ok_given_right_tool_pct": 25.0,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 96.2,
+  "trap_wrong_n": 2,
+  "trap_total": 52,
+  "high_abstain_pct": 84.6,
+  "high_fired_pct": 15.4,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 16.7,
+  "multi_abstain_n": 5,
+  "multi_full_n": 0,
+  "multi_partial_n": 0,
+  "multi_none_n": 4,
+  "m01_abstain": true,
+  "m01_half_job": false,
+  "multi_flag_tp": 0,
+  "multi_flag_fn": 0,
+  "multi_flag_fp": 0,
+  "multi_flag_tn": 0,
+  "multi_flag_fp_pct": 0.0,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 3,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 1,
+    "pct": 5.9
+   },
+   "high": {
+    "n": 13,
+    "ok": 11,
+    "pct": 84.6
+   },
+   "multi": {
+    "n": 6,
+    "ok": 1,
+    "pct": 16.7
+   },
+   "pair": {
+    "n": 16,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "tool": {
+    "n": 35,
+    "ok": 3,
+    "pct": 8.6
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 14,
+    "pct": 100.0
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 8,
+    "pct": 100.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 8,
+    "pct": 100.0
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 20,
+    "pct": 90.9
+   }
+  },
+  "splat_targets": {
+   "calendar_add": 2,
+   "diet_summary": 1,
+   "shopping_list": 1
+  },
+  "old35_pct": 54.3,
+  "old35": "19/35",
+  "lat_p50_ms": 104,
+  "lat_mean_ms": 106,
+  "lat_p95_ms": 146
+ },
+ "errors": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "yarın değil, öbür gün sabah 9'a alarm kur",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "Ayşe'nin sınavı ne zaman",
+   "why": "gold=school_exam_schedule",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Sezen Aksu'dan bir şey çal",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "mailime bak, bugün toplantı var mı",
+   "why": "gold=mail_check",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "her sabah 8'de tansiyon ilacımı almamı hatırlat",
+   "why": "gold=med_reminder/reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak",
+   "why": "gold=weather",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "alışveriş listesine süt, ekmek ve yumurta ekle",
+   "why": "gold=shopping_add",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "öğlen 3 köfte yedim, diyetime yaz",
+   "why": "gold=diet_log",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "bugün toplam kaç kalori aldım",
+   "why": "gold=diet_summary",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "Galatasaray dün kaç kaç yaptı",
+   "why": "gold=match_result",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "salondaki ışıkları kapat",
+   "why": "gold=light_control",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "şu an saat kaç",
+   "why": "gold=clock_now",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "dedemin doğum günü 3 Mayıs, aklında tut",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "at": "2024-07-24T14:00:00",
+    "with_whom": "family"
+   }
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "bugünün tarihi ne",
+   "why": "gold=clock_now",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "makarna için 12 dakikalık zamanlayıcı kur",
+   "why": "gold=timer_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "mutfak ışığını aç",
+   "why": "gold=light_control",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "müziği durdur",
+   "why": "gold=media_stop",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "sesini biraz kıs, çok yüksek konuşuyorsun",
+   "why": "gold=volume_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "internette yumurta kaç dakika haşlanır diye ara",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "'günaydın' kelimesini Almanca'ya çevir",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": {
+    "target_lang": "en",
+    "text": "günaydın"
+   }
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "hatırlatmalarım neler",
+   "why": "gold=reminder_list",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "Fenerbahçe dün akşam ne yaptı",
+   "why": "gold=match_result",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "acil mail var mı",
+   "why": "gold=mail_check",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "öğle yemeğine bir kase mercimek çorbası yaz",
+   "why": "gold=diet_log",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "takvime ekle: cumartesi 11'de diş hekimi",
+   "why": "gold=calendar_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "yarın Ankara'da hava nasıl",
+   "why": "gold=weather",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "20 dakika sonra tesisatçıyı aramamı hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "20:00"
+    }
+   ]
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "bütün ışıkları kapat, yatıyoruz",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": {
+    "room": "on"
+   }
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "bu yıl fizik Nobel'ini kim kazandı internetten bak",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "Neva'nın matematik sınavı ne zaman",
+   "why": "gold=school_exam_schedule",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "listeye yoğurt ve domates ekle",
+   "why": "gold=shopping_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "dünkü kalori özetimi ver",
+   "why": "gold=diet_summary",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "spotify'dan biraz caz çal",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel",
+   "why": "gold=translate",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "5 dakika zamanlayıcı ver",
+   "why": "gold=timer_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "sesini aç biraz",
+   "why": "gold=volume_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "yarın 6:30'da beni uyandır",
+   "why": "gold=reminder_add",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "2026-06-18T18:30:00",
+     "with_whom": "family"
+    }
+   ]
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+   "why": "gold=soul_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
+   "why": "gold=soul_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "annemin ilacı hakkında sana ne söylemiştim",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "annem kalp hapını akşam 9'da içiyor, bunu kur",
+   "why": "gold=med_reminder/reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "aile hafızasına yaz: pazar günü anneanneye gidiyoruz",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "diş hekimi için hatırlatmam var mıydı",
+   "why": "gold=memory_search/reminder_list",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "araba sigortası hakkında ne dediğimi hafızamda ara",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "araba sigortasının güncel fiyatını internetten bak",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "bunu bana hatırlatma, sadece aklında tut",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "Neva'nın kimya sınavı 21'inde, takvime ekle",
+   "why": "gold=calendar_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "iki buçuk dakikalık zamanlayıcı kur",
+   "why": "gold=timer_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "öbür gün Diyarbakır'da hava",
+   "why": "gold=weather",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "akşam yemeğine 180 gram ızgara tavuk yaz",
+   "why": "gold=diet_log",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_args": [
+    {
+     "day": "Tuesday"
+    }
+   ]
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "yarın öğlen Ayhan'a vergi ödemesini hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "yatak odası ışıklarını kıs",
+   "why": "gold=light_control",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "ayın birinde kirayı ödemeyi hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
+   "why": "gold=calendar_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir",
+   "why": "gold=translate",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "maç başlamadan yarım saat önce televizyonu açmamı hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "direction": "up"
+    }
+   ]
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "kardeşimin hesabına şimdi 2000 lira gönder",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_args": [
+    {
+     "day": "today"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "2026-07-20 14:30",
+     "title": "evdeki herkese yemeğin 8'de olduğunu"
+    }
+   ]
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+   "why": "YANLIS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur",
+   "why": "ABSTAIN (need=reminder_add+weather)",
+   "pred_tools": [],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
+   "why": "ABSTAIN (need=diet_log+diet_summary)",
+   "pred_tools": [],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs",
+   "why": "ABSTAIN (need=light_control+media_play)",
+   "pred_tools": [],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+   "why": "ABSTAIN (need=memory_add+reminder_add)",
+   "pred_tools": [],
+   "pred_args": null
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "2026-07-20 14:30",
+     "title": "pizza"
+    }
+   ]
+  }
+ ],
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "yarın değil, öbür gün sabah 9'a alarm kur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:alarm_timer{at:<escape>09:00<escape>}"
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "Ayşe'nin sınavı ne zaman",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Ayşe'nin sınavı ne zaman hakkında bilgi almak için lütfen sınav bilgileriyle ilgili bilgi verin."
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Sezen Aksu'dan bir şey çal",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with retrieving or organizing personal financial or legal information. My current capabilities are limited to assisting with tasks related to managing smart home devices like lighting and reminders. I cannot provide advice on financial or legal matters."
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "mailime bak, bugün toplantı var mı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or organizing emails. My current tools are focused on managing smart home devices like lights and music, such as managing reminders, shopping lists, and scheduling appointments. I cannot access or connect with external communication platforms like mail servers."
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "her sabah 8'de tansiyon ilacımı almamı hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with reminders or reminders for sleep. My current tools are focused on managing smart home devices like lights, music, and food, and cannot access or manage personal sleep schedules."
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Hava için ne önerirsiniz?"
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "alışveriş listesine süt, ekmek ve yumurta ekle",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_list{}"
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "öğlen 3 köfte yedim, diyetime yaz",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing tasks related to ordering or scheduling errands. My current tools are focused on managing smart home devices like lights, speakers, and weather. I cannot connect with external services for managing errands or tasks."
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "bugün toplam kaç kalori aldım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with calculating calories. My current tools are designed for managing smart home devices like lights, speakers, and music, and cannot provide nutritional insights or calculations related to food intake."
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "Galatasaray dün kaç kaç yaptı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or organizing sports information. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot access or connect with external databases for sports data."
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "salondaki ışıkları kapat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or recommending specific actions related to lighting or security. My current tools are focused on managing smart home devices like lights, thermostats, and alarms, such as storing and retrieving information about them. I cannot provide advice or recommendations for managing or protecting security systems."
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "şu an saat kaç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with scheduling or managing appointments. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide information about current time or date."
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "dedemin doğum günü 3 Mayıs, aklında tut",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing special occasions like birthdays. My current tools are focused on managing smart home devices like lights, speakers, and reminders, such as managing a diet log, searching for sports matches, and checking email. I cannot provide personalized birthday advice or assistance with planning special events."
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing special occasions like birthdays. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide personalized advice or assistance with such matters."
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2024-07-24T14:00:00",
+      "with_whom": "family"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2024-07-24T14:00:00<escape>,with_whom:<escape>family<escape>}"
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with this request. My current capabilities are limited to managing smart home devices such as lights, speakers, and weather. I cannot provide personalized advice or assistance with acquiring rare or valuable items like Tarkan."
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "bugünün tarihi ne",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with bugünün. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide technical advice or insights related to business or financial topics."
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "makarna için 12 dakikalık zamanlayıcı kur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "MAINTAINMENT_TIME_LIMIT: 12 minutes"
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "alışveriş listesini oku bana",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_list{}"
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "mutfak ışığını aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing household items like a \"mutfak ışığını aç\" (kitchen light). My current capabilities are limited to assisting with smart home devices such as managing lights and thermostats."
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "müziği durdur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or deleting documents. My current tools are designed for managing smart home devices and reminders, and I cannot access or delete personal or family documents."
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "sesini biraz kıs, çok yüksek konuşuyorsun",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your personal finances or providing advice on complex topics like budgeting or debt. My current tools are focused on managing smart home devices like lights and sound, such as storing, searching, and setting reminders. I cannot connect with financial institutions or offer personalized financial advice."
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "internette yumurta kaç dakika haşlanır diye ara",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with ordering or checking the time. My current tools are focused on managing smart home devices like lights, speakers, and reminders, and cannot provide information on food preparation or cooking time."
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "'günaydın' kelimesini Almanca'ya çevir",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "target_lang": "en",
+      "text": "günaydın"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:translate{target_lang:<escape>en<escape>,text:<escape>günaydın<escape>}"
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "hatırlatmalarım neler",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering past events or things. My current capabilities are limited to managing smart home devices and reminders. I cannot recall personal or family history."
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "Fenerbahçe dün akşam ne yaptı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding or retrieving information about Fenerbahçe. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot browse or search for sports or entertainment-related details."
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "acil mail var mı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or retrieving mail. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot connect with or access administrative or email systems for managing family calendars."
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "öğle yemeğine bir kase mercimek çorbası yaz",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "MERチherb, bir kase mercimek çorbası yaz."
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "takvime ekle: cumartesi 11'de diş hekimi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with writing or drafting legal documents like a cumartesi. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot generate or draft legal documents."
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "yarın Ankara'da hava nasıl",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or providing weather information for Ankara. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot browse or provide specific weather predictions for Ankara."
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "20 dakika sonra tesisatçıyı aramamı hatırlat",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "20:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>20:00<escape>}"
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "bütün ışıkları kapat, yatıyoruz",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "on"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>on<escape>}"
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "bu yıl fizik Nobel'ini kim kazandı internetten bak",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding biographical facts or trivia about famous scientists or Nobel laureates. My current tools are focused on managing smart home devices like lights, music, and reminders. I recommend searching for specific individuals or organizations related to those topics."
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "Neva'nın matematik sınavı ne zaman",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Neva'nın matematik sınavı, matematik öğretmeni tarafından **10.000** saatte sunulmaktadır."
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "listeye yoğurt ve domates ekle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:search{query:<escape>eye yoğurt domates ekle<escape>}"
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "dünkü kalori özetimi ver",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Dünkü kalori özetimi verini, güncel faturalarını ve faturalarını içeren bir görsel."
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "spotify'dan biraz caz çal",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending music. My current tools are focused on managing smart home devices like lights, reminders, and food, and cannot access or recommend music streaming services."
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "What is the weather like today?"
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "5 dakika zamanlayıcı ver",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing time tracking tools. My current capabilities are limited to assisting with smart home and personal management tasks such as managing lights, sounds, and reminders. I cannot generate or manage time tracking tools."
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "sesini aç biraz",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your personal finances or checking your financial status. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I don't have the capability to provide financial or personal advice."
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or recommending information about Neva'nın fıstık alerjisi. My current tools are focused on managing smart home devices like lights, music, and reminders, and do not have access to specialized knowledge or databases regarding natural language processing or information retrieval for medical advice."
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Neva'nın fıstık alerjisi hakkında ne düşünüyorsunuz?"
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing an event like an evlilik yıldönüm. My current tools are focused on managing smart home devices like lights, music, and reminders, and cannot access or manage personal or family calendars."
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "yarın 6:30'da beni uyandır",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-06-18T18:30:00",
+      "with_whom": "family"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-06-18T18:30:00<escape>,with_whom:<escape>family<escape>}"
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with tailoring a personalized message to Ayhan Bey. My current capabilities are limited to managing smart home devices and reminders, such as managing lights, music, and weather. I cannot access or connect with personal or family history, such as Ayhan Bey's past."
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing future conversations. My current capabilities are limited to managing smart home devices like lights and speakers. I cannot provide strategic advice or insights on future topics."
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "annemin ilacı hakkında sana ne söylemiştim",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with tailoring information about specific individuals or businesses. My current tools are focused on managing smart home devices like lights, reminders, and ordering food. I don't have the capability to provide personalized advice or information about individuals or businesses."
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "annem kalp hapını akşam 9'da içiyor, bunu kur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing personal health or recommending medication. My current tools are focused on managing smart home devices like lights and sound, such as managing reminders, shopping lists, and accessing educational information. I cannot provide medical advice or recommendations for managing health conditions."
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "aile hafızasına yaz: pazar günü anneanneye gidiyoruz",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing business strategies or legal documents like an \"aile hafızasına\" (family archive). My current capabilities are limited to assisting with smart home devices and managing reminders using the provided tools. I cannot generate or update business plans or legal contracts."
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or updating reminders. My current tools are focused on managing smart home devices such as lights, music, and weather. I cannot access or manage personal or family reminders."
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "diş hekimi için hatırlatmam var mıydı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering dentures. My current tools are focused on managing smart home devices like lights, music, and reminders, and cannot connect with dental services."
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "araba sigortası hakkında ne dediğimi hafızamda ara",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or organizing information about specific religious or spiritual practices. My current capabilities are limited to assisting with tasks related to managing smart home devices and reminders using the specified tools. I cannot provide guidance or information on religious beliefs or practices."
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "araba sigortasının güncel fiyatını internetten bak",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:time_to_calculate_price{}"
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "bunu bana hatırlatma, sadece aklında tut",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering information. My current capabilities are limited to managing smart home devices like lights, speakers, and the general shopping list. I cannot recall or organize personal or family memories."
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering to return your passport. My current tools are designed for managing smart home devices like lights and music, and do not include the functionality to retrieve or store personal or financial information like your passport. You may need to consult a different service."
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "Neva'nın kimya sınavı 21'inde, takvime ekle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with this request. My current capabilities are limited to managing smart home devices and reminders, such as managing lights, sound, and music. I cannot provide academic or medical information regarding Neva'nın kimya sınavı."
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering to cook. My current capabilities are limited to managing smart home devices like lights, speakers, and weather. I cannot recall specific events or routines like \"bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat.\""
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "iki buçuk dakikalık zamanlayıcı kur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "iki buçuk dakikalık zamanlayıcı kurmak için, şu adımları izlemeniz gerekebilir:\n\n1.  **Gerekirse Ayarlama:** Tamamen dışı bırakmak yerine, kuruma başlamadan önce **\"iki buçuk dakikalık zamanlayıcı kur\"** yazısını veya kuruma başlamadan önce **\"iki dakika\"** veya **\"iki saat\"** gibi bir ayayı ayarlamanız gerekebilir.\n2.  **Gerekirse Ayarlama:** Tamamen dışı bırakmak yerine, kuruma başlamadan önce *"
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with this request. My current tools are limited to managing smart home devices such as lights, speakers, and weather. I cannot access or retrieve historical or real-time passport information for individuals."
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "öbür gün Diyarbakır'da hava",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing weather for your visit. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide weather advice or assistance with planning outdoor activities like visiting a city."
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "akşam yemeğine 180 gram ızgara tavuk yaz",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "Tuesday"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_summary{day:<escape>Tuesday<escape>}"
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "yarın öğlen Ayhan'a vergi ödemesini hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or updating reminders. My current tools are focused on managing smart home devices like lights, music, and weather, and cannot access or manage financial or personal reminders."
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or recommending YouTube videos. My current tools are focused on managing smart home devices and reminders, such as managing lights, alarms, and music. I cannot access or recommend external video content."
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "yatak odası ışıklarını kıs",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or setting up an odası ışıklarını. My current tools are focused on managing smart home devices such as lights, thermostats, and music systems. I cannot generate or manage smart home control settings."
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "ayın birinde kirayı ödemeyi hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with reminders. My current tools are focused on managing smart home devices like lights, music, and weather, and cannot access or manage personal financial or health reminders."
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with booking or recommending travel arrangements. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot browse or recommend specific travel or booking services."
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with translating quotes into other languages. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I don't have the capability to perform language translation."
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "maç başlamadan yarım saat önce televizyonu açmamı hatırlat",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "direction": "up"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{direction:<escape>up<escape>,level:1}"
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "hesabımdan Ali'ye 500 lira gönder",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with sending or managing financial or personal items like 500 liters of pasta. My current tools are designed for managing smart home devices and reminders, and I cannot connect with external financial services."
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "kardeşimin hesabına şimdi 2000 lira gönder",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "today"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_summary{day:<escape>today<escape>}"
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Neva'ya yemek hazır de",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with ordering or recommending food. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide recipes or cooking advice."
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Ayhan'a mesaj bırak, eve geç geleceğim",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with sending or managing messages. My current capabilities are limited to managing smart home devices such as lights, speakers, and the food delivery system. I cannot connect with external services or handle communication management."
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or organizing a memory. My current tools are focused on managing smart home devices like lights, music, and reminders, and cannot access or manage personal memory."
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "patronuma bugün hasta olduğumu yazan bir mail gönder",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can help draft emails. Could you please provide the text or topic of the mail you would like to send?"
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "okula mail at, Neva yarın gelmeyecek de",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing mail or sending letters. My current tools are focused on managing smart home devices like lights, music, and reminders, and cannot connect with external services for managing mail."
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "diş hekimi randevusunu takvimden sil",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with troubleshooting a dental appointment. My current tools are focused on managing smart home devices and reminders, such as managing lights, music, and weather. I cannot provide assistance with medical advice or diagnosis."
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "bütün hatırlatmalarımı iptal et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your memory. My current tools are designed for managing smart home devices like lights and sound, such as storing and retrieving memories. I cannot provide assistance with managing your memory or accessing personal or family memory."
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "profil hafızamı temizle, çok uzadı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with cleaning up your memory. My current tools are designed for managing smart home devices and reminders, and I cannot delete or restore your memory. I recommend contacting your service provider for assistance with memory management."
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "elektrik şirketine 750 lira öde",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing finances or recommending investments. My current capabilities are limited to assisting with smart home and personal management tasks such as managing reminders, setting alarms, and checking the weather. I cannot provide financial advice or recommendations for electric companies."
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "aile hafızasını sil, sıfırdan başlayalım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or organizing family files. My current tools are focused on managing smart home devices like lights, speakers, and music, and do not have the capability to access or manage family files. You may need to consult a specialized family management or file management service."
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-07-20 14:30",
+      "title": "evdeki herkese yemeğin 8'de olduğunu"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-07-20 14:30<escape>,title:<escape>evdeki herkese yemeğin 8'de olduğunu<escape>}"
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with booking or arranging transportation to the salon. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot connect with services like salons or transportation."
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2024-05-14T12:00:00",
+      "with_whom": "family"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2024-05-14T12:00:00<escape>,with_whom:<escape>family<escape>}"
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with setting up alarms or managing your personal schedules. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide specific advice or assistance with setting up alarms or managing your personal schedules."
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can help with that! To calculate your caloric intake, could you please tell me what kind of meal you're planning to eat today?"
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or recommending music. My current tools are focused on managing smart home devices like lights, reminders, and ordering food. I cannot access or recommend external content like music."
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering or retrieving information about Neva. My current tools are focused on managing smart home devices like lights, music, and reminders, and do not have the capability to access or store personal or factual knowledge about historical or scientific concepts like Neva."
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "kombiyi aç, üşüdüm",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your household items or setting reminders. My current tools are focused on managing smart home devices like lights, music, and food, and cannot connect with external services for managing your personal or family schedules."
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "klimayı 22 dereceye ayarla",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or setting climate control settings. My current capabilities are limited to managing smart home devices such as lights, speakers, and thermostats. I cannot provide personalized climate control recommendations or advice."
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing household items or finding forgotten items. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide assistance with organizing or deleting forgotten items."
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "televizyonu aç, habere geç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with setting up or managing a television or streaming device. My current capabilities are limited to managing smart home devices and reminders."
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "bulaşık makinesini başlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with starting a cleaning appliance. My current tools are focused on managing smart home devices such as lights, thermostats, and smart speakers. I cannot recommend or assist with setting up or managing cleaning appliances."
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "çamaşır makinesini pamuklu programında başlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or setting up a cleaning program. My current tools are focused on managing smart home devices such as lights, thermostats, and speakers. I cannot recommend or assist with setting up or managing cleaning programs."
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "televizyonun sesini kıs",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing a TV speaker. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot generate or manage live video content."
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "garaj kapısını aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing schedules for opening Garaj Kapusa. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot access or update schedules for specific locations like Garaj Kapusa."
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "ön kapıyı kilitle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or recommending personal financial or business decisions. My current capabilities are limited to assisting with tasks related to smart home devices and managing reminders. I cannot provide personalized financial or business advice."
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "kaloriferi iki derece aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with this request. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot provide information or advice on the nutritional effects of specific foods."
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "salonu süpür",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with this request. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot provide personalized advice or assistance with food preparation or ordering."
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "fırını aç, 180 derece",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with setting a timer or controlling a kitchen appliance like the one you mentioned. My current tools are focused on managing smart home devices like lights, sound, and reminders. I cannot provide assistance with setting timers or controlling kitchen appliances."
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "balkondaki çiçekleri sula",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with this request. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot browse or provide information about botanical or flower cultivation."
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_list{}"
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "bu akşam için balık restoranından masa ayırt",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending restaurant menus. My current tools are focused on managing smart home devices like lights, speakers, and music, such as managing reminders, checking schedules, and searching for information. I cannot browse restaurant menus or recommendations for ordering takeout or delivery."
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "eve taksi çağır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or retrieving personalized shopping or order reminders. My current tools are focused on managing smart home devices like lights, music, and weather, and do not have the capability to assist with ordering or managing personal shopping items."
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "wifi modemi kapat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your family's Wi-Fi network. My current tools are focused on managing smart home devices and reminders, such as managing your lights, alarms, and music. I cannot connect with or access your family's Wi-Fi network or manage your family's Wi-Fi network."
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "kombi aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending products. My current capabilities are limited to managing smart home devices like lights, speakers, and weather. I cannot browse or recommend specific products or services."
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing household items or finding forgotten items. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide assistance with organizing or deleting forgotten items."
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "borsadan 10 lot Garanti hissesi al",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or managing personal information such as the name or initials of individuals. My current tools are limited to managing smart home devices and reminders, such as managing lights, music, and weather. I cannot access or retrieve personal details like the name or initials of individuals."
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-07-20 14:30",
+      "title": "pizza"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-07-20 14:30<escape>,title:<escape>pizza<escape>}"
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "arabayı uzaktan çalıştır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending apps for remote work. My current capabilities are focused on managing smart home devices like lights and speakers, such as managing reminders and accessing information about schedules. I cannot connect with external services or recommend specific apps for remote work."
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "bugün çok sıkıldım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with bug reports or solutions. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot track or resolve technical issues."
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "sana dedemin köyünü anlatayım mı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with writing persuasive stories or narratives. My current capabilities are focused on managing smart home devices like lights, speakers, and reminders. I cannot generate content on topics like discussing personal finances or improving family life."
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "bana bir fıkra anlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with writing a personal narrative. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot generate creative writing or storytelling."
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "sence hayatın anlamı ne",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Sence hayatın anlamı ne?"
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "seni çok sevdiğimi biliyorsun değil mi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending movies or TV shows. My current capabilities are focused on managing smart home devices like lights, speakers, and reminders. I cannot browse or recommend specific content."
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "of, bugün çok yorgunum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing symptoms like yorgunum. My current capabilities are limited to managing smart home devices like lights, speakers, and the food delivery system. I cannot provide medical advice or recommendations for managing symptoms."
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "en sevdiğin yemek ne",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending specific recipes or cooking tips. My current tools are focused on managing smart home devices like lights, speakers, and weather, and cannot provide culinary advice or recommendations for specific ingredients or cuisines."
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "biraz sohbet etmek istiyorum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "İsteğe göre sohbetmek için size yardımcı olmaktan memnun oldum. Ehept sorularınız varsa, lütfen çekinmeyin."
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "acaba yarın mutlu olacak mıyım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with planning or recommending activities for a person. My current capabilities are limited to managing smart home devices like lights, speakers, and reminders. I cannot provide personalized advice or recommendations for personal well-being or health."
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "iyi geceler canım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or organizing family calendars. My current tools are focused on managing smart home devices such as lights, speakers, and reminders. I cannot connect with or access family calendars or manage schedules."
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "sırtım yine ağrıyor, yaşlanmak zor",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with recommending or recommending advice on medical conditions like arthritis or age-related issues. My current capabilities are limited to managing smart home devices and reminders. I cannot provide personalized medical advice or recommendations."
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with diagnosing or recommending solutions to bugs. My current tools are focused on managing smart home devices like lights, speakers, and reminders, and cannot provide expert advice on technical issues like bug reports or troubleshooting solutions."
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "bizden hiç sıkılıyor musun",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your daily routine or finding tips for managing your finances. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot provide personalized financial or budgeting advice."
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "bu havalar son zamanlarda beni üzüyor",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or recommending content related to self-harm or harm to others. My current tools are designed for managing smart home devices and reminders, and I cannot provide assistance with such topics."
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "aynısından bir tane daha",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or recommending additional items for a user's account. My current capabilities are focused on managing smart home devices like lights, speakers, and reminders. I cannot browse or suggest new items for a user's account."
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "onu da ekle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending products or services. My current capabilities are focused on managing smart home devices like lights, speakers, and reminders using the provided tools. I cannot provide legal or financial advice on privacy or data protection."
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "hayır, diğeri",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with that request. My current tools are designed for managing smart home devices like lights, speakers, and reminders, and do not include the functionality to provide advice or assistance with medical or personal matters."
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "bir daha yap",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing tasks related to business operations or legal advice. My current capabilities are limited to assisting with managing smart home devices and reminders using the specified tools. I cannot provide legal or business advice."
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "onu iptal et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending or recommending products or services. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot provide legal or financial advice regarding internet usage or related topics."
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "peki ya yarın",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing tasks like picking up or dropping off groceries or managing appointments. My current tools are focused on managing smart home devices like lights, speakers, and music, and do not have the capability to assist with grocery shopping or managing appointments."
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "evet, öyle yap",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with creating or recommending personalized fitness or wellness routines. My current capabilities are focused on managing smart home devices like lights, speakers, and weather, such as storing and retrieving information about them. I cannot provide personalized fitness or wellness advice."
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "onu 5'e çevir",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with translating text into another language. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot perform complex language translation or understand nuances in communication."
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding the age of birth for Fatih Sultan Mehmet. My available tools are focused on managing smart home devices and reminders, and I cannot access or retrieve personal or family historical records."
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "insan vücudunda kaç kemik var",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with this request. My current capabilities are limited to managing smart home devices like lights, speakers, and weather. I cannot provide information or insights related to medical conditions or treatments."
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "gökyüzü neden mavi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Merhaba! Gözün rengi mavi."
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Avustralya'nın başkenti neresi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding the national capital of Avustralia. My current tools are focused on managing smart home devices and reminders, such as managing smart lights, alarms, and music. I cannot provide information about national capitals or their capitals."
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "mercimek çorbası nasıl yapılır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Merkeniz, bir zeytân ve zeytân suyuyla hazırlayalım.\n\n**Malzemeler:**\n\n*   1 kg zeytân\n*   1 kg zeytân suyu\n*   1 kg tereya danneggi\n*   1 kg tereya danneggi suyu\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tereya\n*   1 kg tere"
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "fotosentez ne demek",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with asking about photography. My current capabilities are limited to assisting with smart home devices and managing reminders using the provided tools. I cannot provide definitions or information about photography."
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "bir futbol takımında kaç oyuncu vardır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with finding soccer team statistics. My current tools are focused on managing smart home devices like lights and music, such as managing reminders, checking schedules, and ordering food. I cannot provide information about football teams."
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Sefiller'i kim yazdı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with writing or retrieving personal information like Sefilleri. My current tools are focused on managing smart home devices like lights, reminders, and ordering food. I cannot browse or access personal details like Sefilleri."
+  }
+ ],
+ "latencies_ms": [
+  59,
+  66,
+  100,
+  114,
+  92,
+  41,
+  39,
+  105,
+  92,
+  96,
+  119,
+  106,
+  134,
+  105,
+  95,
+  109,
+  100,
+  50,
+  39,
+  100,
+  89,
+  129,
+  101,
+  63,
+  85,
+  104,
+  103,
+  53,
+  101,
+  102,
+  56,
+  50,
+  114,
+  71,
+  64,
+  111,
+  143,
+  50,
+  128,
+  111,
+  133,
+  55,
+  106,
+  89,
+  145,
+  95,
+  187,
+  163,
+  146,
+  95,
+  85,
+  111,
+  45,
+  109,
+  127,
+  120,
+  127,
+  271,
+  107,
+  113,
+  51,
+  96,
+  105,
+  110,
+  94,
+  101,
+  105,
+  58,
+  108,
+  50,
+  94,
+  107,
+  96,
+  67,
+  99,
+  106,
+  111,
+  108,
+  116,
+  128,
+  102,
+  102,
+  95,
+  117,
+  77,
+  100,
+  126,
+  113,
+  105,
+  106,
+  83,
+  107,
+  110,
+  100,
+  115,
+  101,
+  103,
+  101,
+  116,
+  92,
+  39,
+  126,
+  113,
+  142,
+  96,
+  103,
+  128,
+  84,
+  117,
+  90,
+  113,
+  93,
+  41,
+  104,
+  228,
+  168,
+  83,
+  104,
+  104,
+  101,
+  104,
+  114,
+  117,
+  113,
+  146,
+  132,
+  121,
+  113,
+  131,
+  124,
+  107,
+  98,
+  88,
+  42,
+  126,
+  495,
+  99,
+  106,
+  118
+ ]
+}

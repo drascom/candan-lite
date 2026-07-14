@@ -934,7 +934,10 @@ if _HAS_LIVEKIT:
             (= ana modele düş). Router kapalıysa/patlarsa None — akış BOZULMAZ."""
             if self._router is None:
                 return None
-            return await self._router.route(text)
+            # Konuşmacı yalnızca karar DEFTERİNE yazılır (kime ait olduğunu görmek için);
+            # router'ın prompt'una GİRMEZ → kararı etkilemez.
+            speaker = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            return await self._router.route(text, speaker=speaker)
 
         # ── Wake word gate (konuşma penceresi) ───────────────────────────────
         def set_wake_change(self, cb: Optional[Callable[[bool], None]]) -> None:

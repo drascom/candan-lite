@@ -1,0 +1,2818 @@
+{
+ "variant": "tr",
+ "schema": "flag",
+ "model": "qwen35-4b-q8",
+ "summary": {
+  "schema": "flag",
+  "n": 139,
+  "recall_pct": 94.1,
+  "arg_ok_pct": 82.4,
+  "arg_ok_given_right_tool_pct": 87.5,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 80.8,
+  "trap_wrong_n": 10,
+  "trap_total": 52,
+  "high_abstain_pct": 69.2,
+  "high_fired_pct": 30.8,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 5,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 6,
+  "multi_flag_fn": 0,
+  "multi_flag_fp": 1,
+  "multi_flag_tn": 132,
+  "multi_flag_fp_pct": 0.8,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 0,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 17,
+    "pct": 100.0
+   },
+   "high": {
+    "n": 13,
+    "ok": 9,
+    "pct": 69.2
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 13,
+    "pct": 81.2
+   },
+   "tool": {
+    "n": 35,
+    "ok": 34,
+    "pct": 97.1
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 14,
+    "pct": 100.0
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 6,
+    "pct": 75.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 6,
+    "pct": 75.0
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 16,
+    "pct": 72.7
+   }
+  },
+  "splat_targets": {
+   "light_control": 6,
+   "translate": 2,
+   "mail_check": 1,
+   "volume_set": 1,
+   "shopping_list": 1,
+   "media_play": 1,
+   "clock_now": 1,
+   "web_search": 1
+  },
+  "old35_pct": 91.4,
+  "old35": "32/35",
+  "lat_p50_ms": 1888,
+  "lat_mean_ms": 1881,
+  "lat_p95_ms": 2285
+ },
+ "errors": [
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": {
+    "city": "İzmir",
+    "day": "weekend"
+   }
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "text": "Veli toplantısı",
+    "at": "2024-10-17 14:00"
+   }
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": {
+    "artist": "Tarkan",
+    "track": "Kuzu Kuzu",
+    "platform": "spotify"
+   }
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "sesini aç biraz",
+   "why": "gold=volume_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
+   "why": "gold=reminder_add",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": [
+    {
+     "text": "Neva'nın fıstık alerjisi var.",
+     "scope": "private"
+    }
+   ]
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "bunu bana hatırlatma, sadece aklında tut",
+   "why": "gold=memory_add",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": [
+    {
+     "text": "bunu bana hatırlatma"
+    }
+   ]
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "text": "Pasaportumu yenile",
+    "at": "2024-10-29 19:00"
+   }
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "iki buçuk dakikalık zamanlayıcı kur",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_args": {
+    "minutes": 1.5
+   }
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": {
+    "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
+    "scope": "private"
+   }
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "title": "Dr. Kaya ile doktor randevusu",
+    "at": "2023-10-25 09:45"
+   }
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": {
+    "text": "seni özledim",
+    "target_lang": "kurmanji"
+   }
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Neva'ya yemek hazır de",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva'nın odası",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "okula mail at, Neva yarın gelmeyecek de",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_args": [
+    {
+     "filter": "meeting"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+   "why": "YARIM-IS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "kombiyi aç, üşüdüm",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "kitchen",
+     "state": "on"
+    }
+   ]
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "general",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "televizyonun sesini kıs",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_args": [
+    {
+     "direction": "down"
+    }
+   ]
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "general",
+     "state": "off"
+    }
+   ]
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_args": [
+    {
+     "artist": "Pizza",
+     "track": "Song",
+     "platform": "spotify"
+    }
+   ]
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "peki ya yarın",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_args": [
+    {
+     "kind": "date"
+    }
+   ]
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "onu 5'e çevir",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "onu 5'e çevir",
+     "target_lang": "en"
+    }
+   ]
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_args": [
+    {
+     "query": "Fatih Sultan Mehmet doğum tarihi",
+     "max_results": 1
+    }
+   ]
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "fotosentez ne demek",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_args": [
+    {
+     "text": "fotosentez ne demek",
+     "target_lang": "tr"
+    }
+   ]
+  }
+ ],
+ "pn": {
+  "n": 20,
+  "tool_ok": 18,
+  "tool_pct": 90.0,
+  "name_ok": 17,
+  "name_pct": 85.0,
+  "rows": [
+   {
+    "id": "pn01",
+    "tr": "Kuzu Kuzu çal",
+    "en": "Play Lamb Lamb",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Kuzu Kuzu",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn02",
+    "tr": "Tarkan'dan Şımarık çal",
+    "en": "Play Spoiled by Tarkan",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Tarkan",
+     "track": "Şımarık",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn03",
+    "tr": "Sezen Aksu'dan Gülümse çal",
+    "en": "Smile Play from Sezen Aksu",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Sezen Aksu",
+     "track": "Gülümse",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn04",
+    "tr": "Duman'dan Her Şeyi Yak çal",
+    "en": "Burn Everything from Smoke Play",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [],
+    "args": {},
+    "tool_ok": false,
+    "name_ok": false
+   },
+   {
+    "id": "pn05",
+    "tr": "Sıla'nın Vaziyetler şarkısını aç",
+    "en": "Open Sila's State of the State song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Vaziyetler",
+     "track": "Sıla'nın Vaziyetler şarkısı",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn06",
+    "tr": "Müslüm Gürses'ten Affet çal",
+    "en": "Forgive from the Musicians",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "Müslüm Gürses",
+     "track": "Affet",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn07",
+    "tr": "Ezhel'in Geceler şarkısını çal",
+    "en": "Play Ezhel's Nights song",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [
+     "media_play"
+    ],
+    "args": {
+     "artist": "",
+     "track": "Ezhel'in Geceler",
+     "platform": "spotify"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn08",
+    "tr": "Yüzüklerin Efendisi'ni aç",
+    "en": "Open the Lord of the Rings",
+    "gold": [
+     "media_play"
+    ],
+    "pred_tools": [],
+    "args": {},
+    "tool_ok": false,
+    "name_ok": false
+   },
+   {
+    "id": "pn09",
+    "tr": "Neva'nın doğum günü 12 Mart, aklında tut",
+    "en": "Neva's birthday is March 12, keep it in mind",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Neva'nın doğum günü 12 Mart.",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn10",
+    "tr": "akşam 7'de Ayhan'ı aramamı hatırlat",
+    "en": "Remind me to call Ayhan at 7 p.m.",
+    "gold": [
+     "med_reminder",
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Ayhan'ı ara",
+     "at": "19:00"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn11",
+    "tr": "Neva'nın matematik sınavı ne zaman",
+    "en": "When is Neva's math test",
+    "gold": [
+     "school_exam_schedule"
+    ],
+    "pred_tools": [
+     "school_exam_schedule"
+    ],
+    "args": {
+     "person": "Neva",
+     "subject": "matematik"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn12",
+    "tr": "Ayhan'ın telefon numarası neydi, hafızana bak",
+    "en": "What was Ayhan's phone number, look at your memory",
+    "gold": [
+     "memory_search"
+    ],
+    "pred_tools": [
+     "memory_search"
+    ],
+    "args": {
+     "query": "Ayhan telefon numarası"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn13",
+    "tr": "bundan sonra bana Ayhan Bey diye hitap et",
+    "en": "From now on, call me Mr. Ayhan.",
+    "gold": [
+     "soul_add"
+    ],
+    "pred_tools": [
+     "soul_add"
+    ],
+    "args": {
+     "text": "bana Ayhan Bey diye hitap et",
+     "scope": "self"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn14",
+    "tr": "Beşiktaş maçı kaç kaç bitti",
+    "en": "How many games are finished",
+    "gold": [
+     "match_result"
+    ],
+    "pred_tools": [
+     "match_result"
+    ],
+    "args": {
+     "team": "Beşiktaş"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn15",
+    "tr": "Şanlıurfa'da hava nasıl",
+    "en": "How is the weather in Şanlıurfa",
+    "gold": [
+     "weather"
+    ],
+    "pred_tools": [
+     "weather"
+    ],
+    "args": {
+     "city": "Şanlıurfa"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn16",
+    "tr": "öğlen İskender yedim, diyetime yaz",
+    "en": "I ate Alexander at noon, write to my diet",
+    "gold": [
+     "diet_log"
+    ],
+    "pred_tools": [
+     "diet_log"
+    ],
+    "args": {
+     "food": "İskender",
+     "meal": "lunch"
+    },
+    "tool_ok": true,
+    "name_ok": false
+   },
+   {
+    "id": "pn17",
+    "tr": "alışveriş listesine Torku süt ve Eti bisküvi ekle",
+    "en": "Add Torku milk and meat biscuits to the shopping list",
+    "gold": [
+     "shopping_add"
+    ],
+    "pred_tools": [
+     "shopping_add"
+    ],
+    "args": {
+     "items": "Torku süt, Eti bisküvi"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn18",
+    "tr": "cumartesi Neva'yı Bostancı'dan almam gerek, hatırlat",
+    "en": "I need to get Neva from Bostancı on Saturday, remind me.",
+    "gold": [
+     "reminder_add"
+    ],
+    "pred_tools": [
+     "reminder_add"
+    ],
+    "args": {
+     "text": "Cumartesi Neva'yı Bostancı'dan almak",
+     "at": "next saturday"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn19",
+    "tr": "Kadıköy'deki dükkanın adı Çiya, unutma",
+    "en": "The shop in Kadıköy is called Chiya, remember",
+    "gold": [
+     "memory_add"
+    ],
+    "pred_tools": [
+     "memory_add"
+    ],
+    "args": {
+     "text": "Kadıköy'deki dükkanın adı Çiya",
+     "scope": "private"
+    },
+    "tool_ok": true,
+    "name_ok": true
+   },
+   {
+    "id": "pn20",
+    "tr": "Atatürk Havalimanı ile ilgili haberleri ara",
+    "en": "Search for news about Atatürk Airport",
+    "gold": [
+     "web_search"
+    ],
+    "pred_tools": [
+     "web_search"
+    ],
+    "args": {
+     "query": "Atatürk Havalimanı haberleri",
+     "max_results": 5
+    },
+    "tool_ok": true,
+    "name_ok": true
+   }
+  ]
+ },
+ "lat_p50_all_ms": 1882,
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "yarın değil, öbür gün sabah 9'a alarm kur",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Alarm for tomorrow morning at 9 AM",
+      "at": "tomorrow 09:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "Ayşe'nin sınavı ne zaman",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Ayşe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Sezen Aksu'dan bir şey çal",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Sezen Aksu"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "mailime bak, bugün toplantı var mı",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "her sabah 8'de tansiyon ilacımı almamı hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Tansiyon ilacını almak",
+      "at": "08:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "bu hafta sonu İzmir'de hava nasıl olacak",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "İzmir",
+      "day": "weekend"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "alışveriş listesine süt, ekmek ve yumurta ekle",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt, ekmek, yumurta"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "öğlen 3 köfte yedim, diyetime yaz",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "köfte",
+      "meal": "öğlen"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "bugün toplam kaç kalori aldım",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "today"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "Galatasaray dün kaç kaç yaptı",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Galatasaray"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "salondaki ışıkları kapat",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "şu an saat kaç",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "dedemin doğum günü 3 Mayıs, aklında tut",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "dedemin doğum günü 3 Mayıs",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "annemin doğum gününü sana söylemiştim, ne zamandı",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin doğum günü"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "perşembe saat 2'de veli toplantısı var, bana hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Veli toplantısı",
+      "at": "2024-10-17 14:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "babam için Tarkan'dan Kuzu Kuzu'yu çal",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Tarkan",
+      "track": "Kuzu Kuzu",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "bugünün tarihi ne",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "makarna için 12 dakikalık zamanlayıcı kur",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 12,
+      "label": "makarna"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "alışveriş listesini oku bana",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "mutfak ışığını aç",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "mutfak",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "müziği durdur",
+   "pred_tools": [
+    "media_stop"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_stop",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "sesini biraz kıs, çok yüksek konuşuyorsun",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "internette yumurta kaç dakika haşlanır diye ara",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "internette yumurta kaç dakika haşlanır",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "'günaydın' kelimesini Almanca'ya çevir",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "günaydın",
+      "target_lang": "German"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "hatırlatmalarım neler",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "Fenerbahçe dün akşam ne yaptı",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "Fenerbahçe"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "acil mail var mı",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "urgent"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "öğle yemeğine bir kase mercimek çorbası yaz",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "mercimek çorbası",
+      "meal": "lunch"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "takvime ekle: cumartesi 11'de diş hekimi",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Diş hekimi",
+      "at": "cumartesi 11",
+      "with_whom": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "yarın Ankara'da hava nasıl",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "20 dakika sonra tesisatçıyı aramamı hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Tesisatçıyı ara",
+      "in_minutes": 20
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "bütün ışıkları kapat, yatıyoruz",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "all",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "bu yıl fizik Nobel'ini kim kazandı internetten bak",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "physics Nobel Prize winner this year",
+      "max_results": 3
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "Neva'nın matematik sınavı ne zaman",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "Neva",
+      "subject": "matematik"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "listeye yoğurt ve domates ekle",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "yoğurt, domates"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "dünkü kalori özetimi ver",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "dün"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "spotify'dan biraz caz çal",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "",
+      "track": "",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "şu cümleyi İngilizce'ye çevir: hava çok güzel",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "hava çok güzel",
+      "target_lang": "English"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "5 dakika zamanlayıcı ver",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "sesini aç biraz",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi var.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "bu akşam bana Neva'nın fıstık alerjisi olduğunu hatırlat",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi var.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "evlilik yıldönümümüzün 14 Eylül olduğunu not et",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Evlilik yıldönümümüz 14 Eylül'de.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "yarın 6:30'da beni uyandır",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Uyanılma",
+      "at": "06:30"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "bundan sonra bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "bana sadece Ayhan değil, Ayhan Bey diye hitap et",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "çok konuşuyorsun, bundan sonra cevapların daha kısa olsun",
+   "pred_tools": [
+    "soul_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "soul_add",
+     "args": {
+      "text": "do not talk so much",
+      "scope": "self"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "annemin ilacı hakkında sana ne söylemiştim",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "annemin ilacı"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "annem kalp hapını akşam 9'da içiyor, bunu kur",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "medicine": "kalp hapı",
+      "at": "21:00",
+      "person": "annem"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "aile hafızasına yaz: pazar günü anneanneye gidiyoruz",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "pazar günü anneanneye gidiyoruz",
+      "scope": "family"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "saat 3'teki hatırlatmayı iptal et",
+   "pred_tools": [
+    "reminder_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "diş hekimi için hatırlatmam var mıydı",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "diş hekimi hatırlatma"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "araba sigortası hakkında ne dediğimi hafızamda ara",
+   "pred_tools": [
+    "memory_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_search",
+     "args": {
+      "query": "araba sigortası"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "araba sigortasının güncel fiyatını internetten bak",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "araba sigortası fiyatları 2024",
+      "max_results": 5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "bunu bana hatırlatma, sadece aklında tut",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "bunu bana hatırlatma"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "haftaya salı akşam yedi buçukta pasaportumu yenilemeyi hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Pasaportumu yenile",
+      "at": "2024-10-29 19:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "Neva'nın kimya sınavı 21'inde, takvime ekle",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Neva'nın Kimya Sınavı",
+      "at": "21",
+      "with_whom": ""
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "bir buçuk saat sonra ekmeği fırından çıkarmamı hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "ekmeği fırından çıkarmak",
+      "in_minutes": 90
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "iki buçuk dakikalık zamanlayıcı kur",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {
+      "minutes": 1.5
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğunu not et",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "İsmet'in pasaportunun 12 Mart 2027'de dolduğu.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "öbür gün Diyarbakır'da hava",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakır",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "akşam yemeğine 180 gram ızgara tavuk yaz",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "ızgara tavuk",
+      "meal": "dinner",
+      "amount": "180 gram"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "yarın öğlen Ayhan'a vergi ödemesini hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Ayhan'a vergi ödemesini hatırlat",
+      "at": "yesterday 12:00"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "youtube'dan Mor ve Ötesi'nden Bir Derdim Var'ı çal",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Mor ve Ötesi",
+      "track": "Bir Derdim Var",
+      "platform": "youtube"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "yatak odası ışıklarını kıs",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "yatak odası",
+      "state": "dim"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "ayın birinde kirayı ödemeyi hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Kirayı ödemek",
+      "at": "ayın birinde"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "gelecek cuma dokuzu çeyrek geçe Dr. Kaya ile doktor randevusu ekle",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "title": "Dr. Kaya ile doktor randevusu",
+      "at": "2023-10-25 09:45"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "'seni özledim'i Kürtçe'ye çevir",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "seni özledim",
+      "target_lang": "kurmanji"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "maç başlamadan yarım saat önce televizyonu açmamı hatırlat",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "text": "Maç başlamadan yarım saat önce televizyonu aç",
+      "in_minutes": 30
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "hesabımdan Ali'ye 500 lira gönder",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "kardeşimin hesabına şimdi 2000 lira gönder",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Neva'ya yemek hazır de",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Ayhan'a mesaj bırak, eve geç geleceğim",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Neva'nın odasını bağla, onunla konuşmak istiyorum",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva'nın odası",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "patronuma bugün hasta olduğumu yazan bir mail gönder",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "okula mail at, Neva yarın gelmeyecek de",
+   "pred_tools": [
+    "mail_check"
+   ],
+   "pred_calls": [
+    {
+     "tool": "mail_check",
+     "args": {
+      "filter": "meeting"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "diş hekimi randevusunu takvimden sil",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "bütün hatırlatmalarımı iptal et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "profil hafızamı temizle, çok uzadı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "elektrik şirketine 750 lira öde",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "aile hafızasını sil, sıfırdan başlayalım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "evdeki herkese yemeğin 8'de olduğunu söyle",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "salonun ışığını aç ve Neva'ya aşağı gelmesini söyle",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "salon",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "listeye süt ekle ve saat 6'da markete gitmemi hatırlat",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {
+      "items": "süt"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "yarın hava nasıl, bir de 7'ye alarm kur",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "",
+      "day": "tomorrow"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "kahvaltımı yaz ve bugün kaç kalori aldığımı söyle",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "food": "kahvaltı"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "biraz müzik çal ve ışıkları kıs",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Neva'nın fıstık alerjisi olduğunu unutma ve bu akşam öğretmenine söylememi hatırlat",
+   "pred_tools": [
+    "memory_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "memory_add",
+     "args": {
+      "text": "Neva'nın fıstık alerjisi var.",
+      "scope": "private"
+     }
+    }
+   ],
+   "multi_flag": true
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "kombiyi aç, üşüdüm",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "kitchen",
+      "state": "on"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "klimayı 22 dereceye ayarla",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "general",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "televizyonu aç, habere geç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "bulaşık makinesini başlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "çamaşır makinesini pamuklu programında başlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "televizyonun sesini kıs",
+   "pred_tools": [
+    "volume_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "volume_set",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "garaj kapısını aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "ön kapıyı kilitle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "kaloriferi iki derece aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "salonu süpür",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "fırını aç, 180 derece",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "balkondaki çiçekleri sula",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "alışveriş listesini yazdır",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "bu akşam için balık restoranından masa ayırt",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "eve taksi çağır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "wifi modemi kapat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "kombi aç",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "perdeleri kapat",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "general",
+      "state": "off"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "borsadan 10 lot Garanti hissesi al",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "bu akşam için pizza söyle",
+   "pred_tools": [
+    "media_play"
+   ],
+   "pred_calls": [
+    {
+     "tool": "media_play",
+     "args": {
+      "artist": "Pizza",
+      "track": "Song",
+      "platform": "spotify"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "arabayı uzaktan çalıştır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "bugün çok sıkıldım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "sana dedemin köyünü anlatayım mı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "bana bir fıkra anlat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "sence hayatın anlamı ne",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "seni çok sevdiğimi biliyorsun değil mi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "of, bugün çok yorgunum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "en sevdiğin yemek ne",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "biraz sohbet etmek istiyorum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "acaba yarın mutlu olacak mıyım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "iyi geceler canım",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "sırtım yine ağrıyor, yaşlanmak zor",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "bugün Neva'yla tartıştım, çok kötü hissediyorum",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "bizden hiç sıkılıyor musun",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "bu havalar son zamanlarda beni üzüyor",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "aynısından bir tane daha",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "onu da ekle",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "hayır, diğeri",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "bir daha yap",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "onu iptal et",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "peki ya yarın",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "date"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "evet, öyle yap",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "onu 5'e çevir",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "onu 5'e çevir",
+      "target_lang": "en"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet kaç yılında doğdu",
+   "pred_tools": [
+    "web_search"
+   ],
+   "pred_calls": [
+    {
+     "tool": "web_search",
+     "args": {
+      "query": "Fatih Sultan Mehmet doğum tarihi",
+      "max_results": 1
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "insan vücudunda kaç kemik var",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "gökyüzü neden mavi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "Avustralya'nın başkenti neresi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "mercimek çorbası nasıl yapılır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "fotosentez ne demek",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "text": "fotosentez ne demek",
+      "target_lang": "tr"
+     }
+    }
+   ],
+   "multi_flag": false
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "bir futbol takımında kaç oyuncu vardır",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Sefiller'i kim yazdı",
+   "pred_tools": [],
+   "pred_calls": [],
+   "multi_flag": false
+  }
+ ]
+}

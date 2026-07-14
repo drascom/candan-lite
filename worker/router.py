@@ -63,11 +63,14 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 import aiohttp
 
 from tool_catalog import TOOL_ORIGIN, TOOL_TIER, build_prompt, router_json_schema
+from translate import ROUTER_TRANSLATE, Translator
 
 logger = logging.getLogger("worker.router")
 
@@ -86,6 +89,52 @@ ROUTER_URL = os.environ.get("ROUTER_URL", "http://192.168.0.25:8080")
 # yavaşladığında kullanıcıyı bekletmektense sessizce ana modele geçmek YEĞDİR.
 ROUTER_TIMEOUT_MS = float(os.environ.get("ROUTER_TIMEOUT_MS", "1500") or 1500)
 
+# ── KARAR DEFTERİ (JSONL) ───────────────────────────────────────────────────
+# Gölge modda router'ın TEK ÜRÜNÜ kararıdır. stdout'a basmak yetmez (uçar, aranamaz,
+# oran hesaplanamaz) → her karar ayrıca bir JSONL satırı olarak diske yazılır.
+# Kullanıcı buna tools/dashboard.py'den bakar.
+# Yol GÖRELİYSE repo köküne çapalanır (worker cwd'si neresi olursa olsun aynı dosya).
+# Boş string ("") → dosyaya yazma tamamen KAPALI.
+# KIRMIZI ÇİZGİ: yazma hatası router'ı ASLA bozmaz — yutulur, bir kez uyarılır.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_raw_log_path = os.environ.get("ROUTER_LOG_PATH", "logs/router-decisions.jsonl").strip()
+ROUTER_LOG_PATH: Optional[Path] = None
+if _raw_log_path:
+    _p = Path(_raw_log_path).expanduser()
+    ROUTER_LOG_PATH = _p if _p.is_absolute() else _REPO_ROOT / _p
+
+_jsonl_state = {"warned": False}  # aynı hatayı her cümlede bağırma; bir kez uyar, sus
+
+
+def _append_jsonl(d: "RouterDecision") -> None:
+    """Kararı JSONL'e ekle. HİÇBİR koşulda istisna sızdırmaz (disk dolu, izin yok,
+    salt-okunur fs...) — log yazamamak sesli asistanı susturmak için bir sebep DEĞİL."""
+    if ROUTER_LOG_PATH is None:
+        return
+    try:
+        rec = {
+            "ts": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+            "speaker": d.speaker,
+            "text": d.text,
+            # Router'ın GERÇEKTEN gördüğü ikinci metin (ROUTER_TRANSLATE açıkken).
+            # null = çeviri kapalı ya da servis cevap vermedi → TR-doğrudan gitti.
+            "text_en": d.text_en,
+            "tool": d.tool,
+            "args": d.args,
+            "multi_intent": d.multi_intent,
+            "outcome": d.outcome,
+            "latency_ms": round(d.latency_ms, 1),
+            "err": d.error,
+        }
+        ROUTER_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with ROUTER_LOG_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except Exception as e:  # noqa: BLE001 — defter tutulamıyorsa bile router çalışmalı
+        if not _jsonl_state["warned"]:
+            _jsonl_state["warned"] = True
+            logger.warning("router karar defteri yazılamıyor (%s) → yalnızca stdout: %r",
+                           ROUTER_LOG_PATH, e)
+
 
 @dataclass
 class RouterDecision:
@@ -93,6 +142,10 @@ class RouterDecision:
     düşülmediğini) anlatır — canlıda 'router doğru mu karar veriyor' sorusunun cevabı."""
 
     text: str
+    # Cümleyi kim söyledi (speaker-ID'den). Tanınmadıysa/kapalıysa None.
+    speaker: Optional[str] = None
+    # Cümlenin İngilizce çevirisi (ROUTER_TRANSLATE). None = çeviri yok → TR-doğrudan.
+    text_en: Optional[str] = None
     tool: Optional[str] = None
     args: dict = field(default_factory=dict)
     multi_intent: bool = False
@@ -102,20 +155,25 @@ class RouterDecision:
     # abstain    → tool=null (sohbet/bilgi/belirsiz) → ana modele
     # multi      → multi_intent=true → tool ATILDI → ana modele
     # no_exec    → tool seçildi ama Python executor'ı yok → ana modele
-    # error      → timeout/HTTP/parse → ana modele
+    # timeout    → ROUTER_TIMEOUT_MS aşıldı → ana modele
+    # error      → HTTP/parse/executor → ana modele
     outcome: str = "error"
     error: Optional[str] = None
 
     def log(self) -> None:
         """Tek satır, izlenebilir, gürültüsüz. Kullanıcı canlıda buna bakar:
             router: shadow tool=reminder_add multi=false 412ms "yarın 9'a alarm kur"
+        Ayrıca kararı JSONL defterine ekler (stdout uçar; defter kalır ve aranabilir).
         """
         head = f"router: {self.outcome} tool={self.tool} multi={str(self.multi_intent).lower()}"
         tail = f'{self.latency_ms:.0f}ms "{self.text[:60]}"'
+        if self.text_en:  # çeviri katmanı açık ve cevap verdi → model NE OKUDU, görünsün
+            tail += f' en="{self.text_en[:60]}"'
         if self.error:
             logger.warning("%s %s err=%s", head, tail, self.error)
         else:
             logger.info("%s %s", head, tail)
+        _append_jsonl(self)
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +195,9 @@ class Router:
         self._timeout = aiohttp.ClientTimeout(total=timeout_ms / 1000.0)
         self._schema = router_json_schema()
         self._session: Optional[aiohttp.ClientSession] = None
+        # TR→EN çeviri katmanı (worker/translate.py). Kapalıysa None → hiç istek gitmez.
+        # Çeviri BAŞARISIZ olursa router TÜRKÇE-DOĞRUDAN devam eder (bugünkü davranış).
+        self._translator: Optional[Translator] = Translator() if ROUTER_TRANSLATE else None
 
     async def _sess(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
@@ -146,14 +207,25 @@ class Router:
     async def aclose(self) -> None:
         if self._session is not None and not self._session.closed:
             await self._session.close()
+        if self._translator is not None:
+            await self._translator.aclose()
 
-    async def decide(self, text: str) -> RouterDecision:
-        """Cümle → karar. İSTİSNA ATMAZ; hata → outcome='error' (çağıran ana modele düşer)."""
-        d = RouterDecision(text=text)
+    async def decide(self, text: str, speaker: Optional[str] = None) -> RouterDecision:
+        """Cümle → karar. İSTİSNA ATMAZ; hata → outcome='error' (çağıran ana modele düşer).
+        `speaker` yalnızca karar defterine yazılır — karara ETKİ ETMEZ (prompt'a girmez)."""
+        d = RouterDecision(text=text, speaker=speaker)
         t0 = time.monotonic()
         try:
+            # ── TR→EN çeviri (ROUTER_TRANSLATE) ──
+            # Tuzak direncini artırır ("perdeleri kapat" → light_control hatası düzelir),
+            # argümanlar yine TÜRKÇE orijinalden çıkar (özel isim korunur). ÖLÇÜM ve kalıp:
+            # tool_catalog.TRANSLATION_SUFFIX. Çeviri yoksa (kapalı/timeout/hata) text_en
+            # None kalır → build_prompt bugünkü TR-doğrudan prompt'u üretir. Translator
+            # İSTİSNA ATMAZ; ~60-110ms ekler (ölçüldü), router timeout'u 1500ms.
+            if self._translator is not None:
+                d.text_en = await self._translator.translate(text)
             payload = {
-                "prompt": build_prompt(text),
+                "prompt": build_prompt(text, text_en=d.text_en),
                 "json_schema": self._schema,   # grammar — geçersiz tool adı İMKÂNSIZ
                 "cache_prompt": True,          # statik tool önekinin KV-cache'i (prefill ~99ms)
                 "temperature": 0.0,
@@ -185,6 +257,7 @@ class Router:
             obj = json.loads((body.get("content") or "").strip())
         except asyncio.TimeoutError:
             d.latency_ms = (time.monotonic() - t0) * 1000
+            d.outcome = "timeout"
             d.error = f"timeout >{self._timeout.total * 1000:.0f}ms"
             return d
         except Exception as e:  # noqa: BLE001 — HER hata ana modele düşüş demek
@@ -216,13 +289,13 @@ class Router:
             d.outcome = "shadow" if not ROUTER_EXECUTE else "executed"
         return d
 
-    async def route(self, text: str) -> Optional[str]:
+    async def route(self, text: str, speaker: Optional[str] = None) -> Optional[str]:
         """Ana giriş. Tool çalıştıysa SESLİ CEVAP metnini döner; aksi hâlde None
         (= ana modele düş). HİÇBİR KOŞULDA istisna atmaz."""
         if not ROUTER_ENABLED or not text.strip():
             return None
         try:
-            d = await self.decide(text)
+            d = await self.decide(text, speaker=speaker)
             if d.outcome != "executed":
                 d.log()
                 return None

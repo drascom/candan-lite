@@ -264,6 +264,30 @@ INSTRUCTION = (
 
 STOP = ["<|im_end|>"]
 
+# ---------------------------------------------------------------------------
+# ÇEVİRİ SATIRI — TR+EN (worker/translate.py, ROUTER_TRANSLATE)
+#
+# Türkçe cümlenin İngilizce çevirisi, cümlenin ARDINA PARANTEZ İÇİNDE eklenir.
+# Çeviri VERİDİR, EMİR DEĞİL. Bu ayrım hayati:
+#
+#   ÖLÇÜLDÜ (139+20 vaka, Qwen3.5-4B Q8; experiments/router-bench/res_v_*.json):
+#     kalıp                                    recall  arg   trap_neigh  trap_all
+#     TR-direkt (baseline)                      94.1   87.5     72.7       80.8
+#     "argümanları TR'den al, tool'u EN'den"    98.5   92.5      9.1       34.6  ← ÇÖKTÜ
+#     "tool'u EN ile seç, args'ı TR'den doldur" 95.6   95.4      4.5        1.9  ← ÇÖKTÜ
+#     BU KALIP (yalnızca parantez içinde çeviri) 97.1   90.9     81.8       84.6  ← KAZANAN
+#
+#   "Tool'u seç / argümanları doldur" gibi bir EMİR, modeli cümlenin bir TOOL ÇAĞRISI
+#   olduğuna ikna ediyor ve ABSTAIN'i (sohbet/tuzak/desteklenmeyen cihaz) yok ediyor.
+#   Cümleyi yalnızca İKİ DİLDE göstermek ise abstain'i BOZMADAN tuzak direncini
+#   artırıyor ("perdeleri kapat", "kombi aç" → light_control hatası düzeliyor).
+#
+# Argümanlar Türkçe orijinalden çıkmaya devam eder (özel isim korunur: "Kuzu Kuzu"
+# çeviride "Lamb Lamb" olur; bu kalıpta argümana yine "Kuzu Kuzu" yazılır).
+# METNİ DEĞİŞTİRME — ölçülen davranış bu metne bağlı.
+# ---------------------------------------------------------------------------
+TRANSLATION_SUFFIX = "\n\n(English translation of the sentence above: {en})"
+
 
 def _static_prefix() -> str:
     import json
@@ -283,11 +307,18 @@ def _static_prefix() -> str:
 STATIC_PREFIX: str = _static_prefix()
 
 
-def build_prompt(text: str) -> str:
-    """Ham Qwen prompt'u: statik önek + kullanıcı cümlesi + çıktı talimatı."""
+def build_prompt(text: str, text_en: Optional[str] = None) -> str:
+    """Ham Qwen prompt'u: statik önek + kullanıcı cümlesi (+ çeviri) + çıktı talimatı.
+
+    `text_en` verilirse (ROUTER_TRANSLATE açık ve çeviri servisi cevap verdiyse) cümlenin
+    İngilizce çevirisi parantez içinde eklenir — bkz. TRANSLATION_SUFFIX. Çeviri YOKSA
+    (servis kapalı/timeout) prompt bugünküyle BİREBİR aynıdır."""
+    user = text
+    if text_en:
+        user += TRANSLATION_SUFFIX.format(en=text_en)
     return (
         STATIC_PREFIX
-        + "<|im_start|>user\n" + text + INSTRUCTION + "<|im_end|>\n"
+        + "<|im_start|>user\n" + user + INSTRUCTION + "<|im_end|>\n"
         + "<|im_start|>assistant\n<think>\n\n</think>\n\n"
     )
 

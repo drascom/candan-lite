@@ -1,0 +1,2542 @@
+{
+ "model": "functiongemma-270m-it",
+ "quant": "Q8_0",
+ "schema": "native",
+ "lang": "trans",
+ "tier": "low",
+ "catalog_size": 23,
+ "n_cases": 139,
+ "vram_model_mib": 0,
+ "summary": {
+  "schema": "single",
+  "n": 139,
+  "recall_pct": 35.3,
+  "arg_ok_pct": 19.1,
+  "arg_ok_given_right_tool_pct": 54.2,
+  "extra_tool_pct": 0.0,
+  "extra_tool_n": 0,
+  "extra_tool_total": 68,
+  "trap_abstain_pct": 88.5,
+  "trap_wrong_n": 6,
+  "trap_total": 52,
+  "high_abstain_pct": 84.6,
+  "high_fired_pct": 7.7,
+  "high_fired_hightool_n": 0,
+  "multi_ok_pct": 0.0,
+  "multi_abstain_n": 0,
+  "multi_full_n": 0,
+  "multi_partial_n": 4,
+  "multi_none_n": 0,
+  "m01_abstain": false,
+  "m01_half_job": true,
+  "multi_flag_tp": 0,
+  "multi_flag_fn": 0,
+  "multi_flag_fp": 0,
+  "multi_flag_tn": 0,
+  "multi_flag_fp_pct": 0.0,
+  "unsup_escape_pct": 0.0,
+  "unsup_escape_n": 0,
+  "unsup_escape_total": 0,
+  "unsup_escape_ids": [],
+  "unsup_escape_detail": [],
+  "unsup_rescue_n": 0,
+  "unsup_rescue": [],
+  "unsup_by_cat": {},
+  "raw_recall_pct": null,
+  "parse_errors": 8,
+  "by_cat": {
+   "arg": {
+    "n": 17,
+    "ok": 9,
+    "pct": 52.9
+   },
+   "high": {
+    "n": 13,
+    "ok": 11,
+    "pct": 84.6
+   },
+   "multi": {
+    "n": 6,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "pair": {
+    "n": 16,
+    "ok": 0,
+    "pct": 0.0
+   },
+   "tool": {
+    "n": 35,
+    "ok": 15,
+    "pct": 42.9
+   },
+   "trap_chat": {
+    "n": 14,
+    "ok": 13,
+    "pct": 92.9
+   },
+   "trap_ctx": {
+    "n": 8,
+    "ok": 8,
+    "pct": 100.0
+   },
+   "trap_know": {
+    "n": 8,
+    "ok": 7,
+    "pct": 87.5
+   },
+   "trap_neigh": {
+    "n": 22,
+    "ok": 18,
+    "pct": 81.8
+   }
+  },
+  "splat_targets": {
+   "light_control": 3,
+   "shopping_list": 1,
+   "match_result": 1
+  },
+  "old35_pct": 60.0,
+  "old35": "21/35",
+  "lat_p50_ms": 95,
+  "lat_mean_ms": 86,
+  "lat_p95_ms": 123
+ },
+ "errors": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "Not tomorrow, but the next day, set an alarm for 9 a.m.",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "When is Ayşe's exam",
+   "why": "gold=school_exam_schedule",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Play something from Sezen Aksu",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "See my email, is there a meeting today?",
+   "why": "gold=mail_check",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "What will the weather be like in Izmir this weekend?",
+   "why": "gold=weather",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "Add milk, bread and eggs to the shopping list",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": {}
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "How many calories did I get today?",
+   "why": "gold=diet_summary",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "How many did Galatasaray make yesterday?",
+   "why": "gold=match_result",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "Turn off the lights in the hall",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": {
+    "state": "off"
+   }
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "What time is it now?",
+   "why": "gold=clock_now",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "Grandpa's birthday is May 3, keep it in mind",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "I told you about my mother's birthday, when",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "Parents' meeting at 2:00 p.m. Thursday, remind me",
+   "why": "gold=calendar_add/reminder_add",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_args": [
+    {
+     "person": "parents_name",
+     "subject": "principal topic"
+    }
+   ]
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "Play Lamb Lamb from Tarkan for my father",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "What is today's date",
+   "why": "gold=clock_now",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "Set the 12-minute timer for pasta",
+   "why": "gold=timer_set",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_args": [
+    {
+     "kind": "time"
+    }
+   ]
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "turn on kitchen light",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": {
+    "room": "on",
+    "state": "on"
+   }
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "Stop the music",
+   "why": "gold=media_stop",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "Turn your voice down a little, you're talking too loud",
+   "why": "gold=volume_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "Search the Internet for how many minutes the egg is boiled",
+   "why": "gold=web_search",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_args": [
+    {
+     "kind": "time"
+    }
+   ]
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "What are my reminders",
+   "why": "gold=reminder_list",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "What Fenerbahçe did last night",
+   "why": "gold=match_result",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "Is there an emergency email",
+   "why": "gold=mail_check",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "Write a bowl of lentil soup for lunch",
+   "why": "gold=diet_log",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "Add to calendar: dentist on Saturday 11",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "at": "2026-06-11T11:00:00",
+    "title": "dentist"
+   }
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "See who won the physics Nobel this year online",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "When is Neva's math test",
+   "why": "gold=school_exam_schedule",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "Add yogurt and tomatoes to the list",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": {}
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "Play some jazz from Spotify",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "Give me a 5 minute timer",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_args": {}
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "Turn it up a bit",
+   "why": "gold=volume_set",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Remember that Neva is a peanut allergy.",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "Remind me tonight that Neva is allergic to peanuts.",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "Note that our wedding anniversary is September 14th.",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "Wake me up tomorrow at 6:30",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "From now on, call me Mr. Ayhan, not just Ayhan.",
+   "why": "gold=soul_add",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "09:00",
+     "with_whom": "Ayhan"
+    }
+   ]
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "You talk a lot, so your answers are shorter from now on.",
+   "why": "gold=soul_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "What did I tell you about my mother's medicine?",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "My mother drinks her heart pill at 9 p.m., so set it up.",
+   "why": "gold=med_reminder/reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "Write in family memory: we're going to Grandma's on Sunday",
+   "why": "gold=memory_add",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": [
+    {
+     "at": "2026-06-04T14:00:00",
+     "with_whom": "Grandma"
+    }
+   ]
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Cancel reminder at 3 p.m.",
+   "why": "gold=reminder_cancel",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "Do I have a reminder for the dentist?",
+   "why": "gold=memory_search/reminder_list",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "Call me in memory of what I said about car insurance",
+   "why": "gold=memory_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "See the current price of car insurance online",
+   "why": "gold=web_search",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "Don't remind me of that, just keep it in mind",
+   "why": "gold=memory_add",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": [
+    {
+     "at": "09:00"
+    }
+   ]
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "Remind me to renew my passport Tuesday at 7:30 p.m.",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "Remind me to remove the bread from the oven in an hour and a half.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "at": "09:00"
+   }
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "Set timer of two and a half minutes",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_args": {}
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "Note that Ismet's passport expired on March 12, 2027",
+   "why": "gold=memory_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "Remind Ayhan to pay taxes tomorrow at noon",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "Play Purple and Beyond from YouTube Have a Problem",
+   "why": "gold=media_play",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "Turn down the bedroom lights",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": {
+    "direction": "down"
+   }
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "Remind to pay the rent on one month",
+   "why": "gold=reminder_add",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_args": {
+    "at": "2026-06-10 19:15:00",
+    "title": "Doctor's Appointment with Dr. Kaya"
+   }
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "Remind me to turn on the TV half an hour before the game starts.",
+   "why": "ARG-miss",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_args": {
+    "at": "05:00"
+   }
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Get Neva's room, I want to talk to her.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "Neva's room"
+    }
+   ]
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Tell everyone in the house that the food is at 8 o'clock.",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turn on the light of the hall and tell Neva to come down",
+   "why": "YARIM-IS (2. niyet HIGH tool, abstain bekleniyordu)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Add milk to the list and remind me to go to the grocery store at 6:00",
+   "why": "YARIM-IS (need=reminder_add+shopping_add)",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Tomorrow, the weather is like, and you set an alarm for 7.",
+   "why": "YARIM-IS (need=reminder_add+weather)",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Write my breakfast and tell me how many calories I've taken today",
+   "why": "YARIM-IS (need=diet_log+diet_summary)",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Play some music and turn the lights down",
+   "why": "YARIM-IS (need=light_control+media_play)",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "why": "YANLIS (need=memory_add+reminder_add)",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_args": null
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "Turn on the TV, get on the news",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "on"
+    }
+   ]
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turn the TV down",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_args": [
+    {
+     "room": "on"
+    }
+   ]
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "Turn the radiator on at two degrees",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Print the shopping list",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_args": [
+    {}
+   ]
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "Tell me a joke",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [],
+   "pred_args": []
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "How many players are in a football team",
+   "why": "ABSTAIN bekleniyordu",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_args": [
+    {
+     "team": "football team"
+    }
+   ]
+  }
+ ],
+ "raw": [
+  {
+   "id": "t01",
+   "cat": "arg",
+   "text": "Not tomorrow, but the next day, set an alarm for 9 a.m.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with setting alarms or managing reminders. My current tools are focused on managing smart home devices like lights, sound, and time. I cannot provide assistance with setting up or managing personal or family reminders."
+  },
+  {
+   "id": "t02",
+   "cat": "tool",
+   "text": "When is Ayşe's exam",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "Could you please specify the subject or topic of Ayşe's exam?"
+  },
+  {
+   "id": "t03",
+   "cat": "tool",
+   "text": "Play something from Sezen Aksu",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with playing Sezen Aksu. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot access or play live audio content like Sezen Aksu."
+  },
+  {
+   "id": "t04",
+   "cat": "tool",
+   "text": "See my email, is there a meeting today?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can certainly help with that. To check if there is a meeting today, could you please specify the date?"
+  },
+  {
+   "id": "t05",
+   "cat": "tool",
+   "text": "Remind me to take my blood pressure medication every morning at 8:00.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "at": "08:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:med_reminder{at:<escape>08:00<escape>}"
+  },
+  {
+   "id": "t06",
+   "cat": "tool",
+   "text": "What will the weather be like in Izmir this weekend?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot provide weather predictions for Izmir this weekend. My current tools are focused on managing smart home devices like reminders, shopping lists, and time management, and I cannot access real-time or specific weather data for cities like Izmir."
+  },
+  {
+   "id": "t07",
+   "cat": "tool",
+   "text": "Add milk, bread and eggs to the shopping list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_add{items:[<escape>milk<escape>,<escape>bread<escape>,<escape>eggs<escape>]}"
+  },
+  {
+   "id": "t08",
+   "cat": "tool",
+   "text": "I had 3 meatballs at noon, write to my diet",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "amount": "3 meatballs",
+      "meal": "lunch",
+      "food": "meatballs"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_log{amount:<escape>3 meatballs<escape>,meal:<escape>lunch<escape>,food:<escape>meatballs<escape>}"
+  },
+  {
+   "id": "t09",
+   "cat": "tool",
+   "text": "How many calories did I get today?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:calories{amount:<escape>amount<escape>}"
+  },
+  {
+   "id": "t10",
+   "cat": "tool",
+   "text": "How many did Galatasaray make yesterday?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or reporting historical financial data such as the number of Galatasaray makes. My current tools are limited to managing smart home devices and reminders, and I cannot access or process such specialized financial information."
+  },
+  {
+   "id": "t11",
+   "cat": "tool",
+   "text": "Turn off the lights in the hall",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "state": "off"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{state:<escape>off<escape>}"
+  },
+  {
+   "id": "t12",
+   "cat": "tool",
+   "text": "What time is it now?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding current time. My current capabilities are limited to managing smart home devices like lights, speakers, and weather. I cannot provide real-time time or historical data."
+  },
+  {
+   "id": "t13",
+   "cat": "pair",
+   "text": "Grandpa's birthday is May 3, keep it in mind",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing special occasions like Grandfather's birthday. My current tools are focused on managing smart home devices like lights, music, and reminders, and cannot access or manage personal or family calendars."
+  },
+  {
+   "id": "t14",
+   "cat": "pair",
+   "text": "I told you about my mother's birthday, when",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or organizing birthday greetings. My current capabilities are limited to managing smart home devices like lights, speakers, and music, such as managing reminders, tracking food, and checking schedules. I cannot provide personalized birthday advice or arrangements."
+  },
+  {
+   "id": "t15",
+   "cat": "arg",
+   "text": "Parents' meeting at 2:00 p.m. Thursday, remind me",
+   "pred_tools": [
+    "school_exam_schedule"
+   ],
+   "pred_calls": [
+    {
+     "tool": "school_exam_schedule",
+     "args": {
+      "person": "parents_name",
+      "subject": "principal topic"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:school_exam_schedule{person:<escape>parents_name<escape>,subject:<escape>principal topic<escape>}"
+  },
+  {
+   "id": "t16",
+   "cat": "arg",
+   "text": "Play Lamb Lamb from Tarkan for my father",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or retrieving content related to specific movies or TV shows. My current capabilities are limited to managing smart home devices and reminders. I recommend searching for relevant information or contacting a different service for assistance."
+  },
+  {
+   "id": "t17",
+   "cat": "tool",
+   "text": "What is today's date",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding today's date. My current tools are designed for managing smart home devices and reminders, and I cannot access or retrieve external information about dates or times."
+  },
+  {
+   "id": "t18",
+   "cat": "tool",
+   "text": "Set the 12-minute timer for pasta",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:clock_now{kind:<escape>time<escape>}"
+  },
+  {
+   "id": "t19",
+   "cat": "tool",
+   "text": "Read me the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_list{}"
+  },
+  {
+   "id": "t20",
+   "cat": "tool",
+   "text": "turn on kitchen light",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "on",
+      "state": "on"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>on<escape>,state:<escape>on<escape>}"
+  },
+  {
+   "id": "t21",
+   "cat": "tool",
+   "text": "Stop the music",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:music_control{direction:<escape>down<escape>}"
+  },
+  {
+   "id": "t22",
+   "cat": "tool",
+   "text": "Turn your voice down a little, you're talking too loud",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:voice_set{direction:<escape>up<escape>,level:0}"
+  },
+  {
+   "id": "t23",
+   "cat": "tool",
+   "text": "Search the Internet for how many minutes the egg is boiled",
+   "pred_tools": [
+    "clock_now"
+   ],
+   "pred_calls": [
+    {
+     "tool": "clock_now",
+     "args": {
+      "kind": "time"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:clock_now{kind:<escape>time<escape>}"
+  },
+  {
+   "id": "t24",
+   "cat": "tool",
+   "text": "Translate the word 'good morning' into German",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "target_lang": "de",
+      "text": "good morning"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:translate{target_lang:<escape>de<escape>,text:<escape>good morning<escape>}"
+  },
+  {
+   "id": "t25",
+   "cat": "tool",
+   "text": "What are my reminders",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can help with that! To assist you with your reminders, could you please specify the exact times or dates you want to set them?"
+  },
+  {
+   "id": "t26",
+   "cat": "tool",
+   "text": "What Fenerbahçe did last night",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or analyzing sports or betting information. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot provide sports betting predictions or analysis."
+  },
+  {
+   "id": "t27",
+   "cat": "tool",
+   "text": "Is there an emergency email",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing emergency emails. My current tools are focused on managing smart home devices like lights, speakers, and music, such as managing reminders, logging meals, and checking schedules. I cannot access or process emergency email notifications."
+  },
+  {
+   "id": "t28",
+   "cat": "tool",
+   "text": "Write a bowl of lentil soup for lunch",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can certainly help with that! To write the perfect bowl of lentil soup, could you please specify the desired ingredients or quantities?"
+  },
+  {
+   "id": "t29",
+   "cat": "tool",
+   "text": "Add to calendar: dentist on Saturday 11",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-06-11T11:00:00",
+      "title": "dentist"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-06-11T11:00:00<escape>,title:<escape>dentist<escape>}"
+  },
+  {
+   "id": "t30",
+   "cat": "tool",
+   "text": "How is the weather in Ankara tomorrow",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Ankara"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:weather{city:<escape>Ankara<escape>}"
+  },
+  {
+   "id": "t31",
+   "cat": "tool",
+   "text": "Remind me to call the plumber in 20 minutes.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "at": "20:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:reminder_add{at:<escape>20:00<escape>,in_minutes:20}"
+  },
+  {
+   "id": "t32",
+   "cat": "tool",
+   "text": "Turn off all the lights, we're going to bed",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "state": "off"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{state:<escape>off<escape>}"
+  },
+  {
+   "id": "t33",
+   "cat": "tool",
+   "text": "See who won the physics Nobel this year online",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding or recommending news articles about winners of Nobel Prizes. My current tools are focused on managing smart home devices and reminders, such as managing your smart lights, alarms, and music. I cannot browse or search for specific news or award information."
+  },
+  {
+   "id": "t34",
+   "cat": "tool",
+   "text": "When is Neva's math test",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with finding the date or time for Neva's math test. My current tools are limited to managing smart home devices and reminders, and I cannot access or retrieve specific historical test schedules or dates."
+  },
+  {
+   "id": "t35",
+   "cat": "tool",
+   "text": "Add yogurt and tomatoes to the list",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_add{items:[<escape>yogurt<escape>,<escape>tomatoes<escape>]}"
+  },
+  {
+   "id": "t36",
+   "cat": "tool",
+   "text": "Give me yesterday's calorie summary",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "yesterday"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_summary{day:<escape>yesterday<escape>}"
+  },
+  {
+   "id": "t37",
+   "cat": "tool",
+   "text": "Play some jazz from Spotify",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:music_play{artist:<escape>Miles Davis<escape>}"
+  },
+  {
+   "id": "t38",
+   "cat": "tool",
+   "text": "Translate this sentence into English: the weather is beautiful",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "target_lang": "en",
+      "text": "the weather is beautiful"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:translate{target_lang:<escape>en<escape>,text:<escape>the weather is beautiful<escape>}"
+  },
+  {
+   "id": "t39",
+   "cat": "tool",
+   "text": "Give me a 5 minute timer",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:timer_set{minutes:5}"
+  },
+  {
+   "id": "t40",
+   "cat": "tool",
+   "text": "Turn it up a bit",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can help with that! What would you like to do with the smart light?"
+  },
+  {
+   "id": "p01",
+   "cat": "pair",
+   "text": "Remember that Neva is a peanut allergy.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with remembering a person's name or allergy. My current tools are designed for managing smart home devices and reminders, such as managing lights, alarms, and music. I cannot access or recall personal details like Neva."
+  },
+  {
+   "id": "p02",
+   "cat": "pair",
+   "text": "Remind me tonight that Neva is allergic to peanuts.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or setting reminders for specific individuals or events. My current tools are focused on managing smart home devices like lights, music, and reminders, and do not have the capability to access or manage personal or organizational schedules. You may need to consult a different platform or assistant for such assistance."
+  },
+  {
+   "id": "p03",
+   "cat": "pair",
+   "text": "Note that our wedding anniversary is September 14th.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing wedding anniversary reminders. My current tools are focused on managing smart home devices like lights, music, and reminders, and do not have the capability to access or access personal or financial information regarding wedding anniversaries."
+  },
+  {
+   "id": "p04",
+   "cat": "pair",
+   "text": "Wake me up tomorrow at 6:30",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with waking you up. My current capabilities are limited to managing smart home devices such as lighting, temperature, and speaker control. I cannot generate personalized wake-up alarms or schedules."
+  },
+  {
+   "id": "p05",
+   "cat": "pair",
+   "text": "From now on, call me Mr. Ayhan, not just Ayhan.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "09:00",
+      "with_whom": "Ayhan"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>09:00<escape>,with_whom:<escape>Ayhan<escape>}"
+  },
+  {
+   "id": "p06",
+   "cat": "pair",
+   "text": "You talk a lot, so your answers are shorter from now on.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with tailoring or generating shorter, more concise answers for you. My current capabilities are focused on managing smart home devices like lights, speakers, and reminders, such as storing and searching for information. I cannot generate personalized, shorter content tailored to conversational or conversational style."
+  },
+  {
+   "id": "p07",
+   "cat": "pair",
+   "text": "What did I tell you about my mother's medicine?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot provide specific medical advice or information about a mother's medicine. My current capabilities are limited to assisting with tasks related to smart home devices and reminders. I recommend consulting a healthcare professional for such advice."
+  },
+  {
+   "id": "p08",
+   "cat": "pair",
+   "text": "My mother drinks her heart pill at 9 p.m., so set it up.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with setting up or managing medication reminders. My current capabilities are limited to managing smart home devices like lights, speakers, and the food delivery system. I cannot provide medical advice or assistance with medication management."
+  },
+  {
+   "id": "p09",
+   "cat": "pair",
+   "text": "Write in family memory: we're going to Grandma's on Sunday",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-06-04T14:00:00",
+      "with_whom": "Grandma"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-06-04T14:00:00<escape>,with_whom:<escape>Grandma<escape>}"
+  },
+  {
+   "id": "p10",
+   "cat": "pair",
+   "text": "Cancel reminder at 3 p.m.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with canceling reminders. My current tools are designed for managing smart home devices like lights, speakers, and music, and do not have the capability to manage calendar or task management tasks."
+  },
+  {
+   "id": "p11",
+   "cat": "pair",
+   "text": "Do I have a reminder for the dentist?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can certainly help with reminders. Could you please tell me the exact time you would like to set the reminder for the dentist?"
+  },
+  {
+   "id": "p12",
+   "cat": "pair",
+   "text": "Call me in memory of what I said about car insurance",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with calling you in memory of something. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot access or recall personal or memory-related details."
+  },
+  {
+   "id": "p13",
+   "cat": "pair",
+   "text": "See the current price of car insurance online",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending car insurance prices. My current capabilities are limited to managing smart home devices and reminders, such as managing lights and music. I cannot browse or provide financial advice."
+  },
+  {
+   "id": "p14",
+   "cat": "pair",
+   "text": "Don't remind me of that, just keep it in mind",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "at": "09:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:reminder_add{at:<escape>09:00<escape>}"
+  },
+  {
+   "id": "a01",
+   "cat": "arg",
+   "text": "Remind me to renew my passport Tuesday at 7:30 p.m.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your personal travel or calendar appointments. My current tools are designed for managing smart home devices like lights, sound, and music, and do not include the functionality to set reminders or manage travel arrangements. You will need to use a dedicated calendar or reminder app for this."
+  },
+  {
+   "id": "a02",
+   "cat": "arg",
+   "text": "On Neva's chemistry exam 21, add to calendar",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "21:00",
+      "with_whom": "chemistry exam"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>21:00<escape>,with_whom:<escape>chemistry exam<escape>}"
+  },
+  {
+   "id": "a03",
+   "cat": "arg",
+   "text": "Remind me to remove the bread from the oven in an hour and a half.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "at": "09:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:reminder_add{at:<escape>09:00<escape>,in_minutes:45}"
+  },
+  {
+   "id": "a04",
+   "cat": "arg",
+   "text": "Set timer of two and a half minutes",
+   "pred_tools": [
+    "timer_set"
+   ],
+   "pred_calls": [
+    {
+     "tool": "timer_set",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:timer_set{minutes:180}"
+  },
+  {
+   "id": "a05",
+   "cat": "arg",
+   "text": "Note that Ismet's passport expired on March 12, 2027",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving or updating personal information such as passport expiration dates. My current tools are limited to managing smart home devices and reminders, such as managing lights, music, and weather. I cannot access or retrieve historical passport data."
+  },
+  {
+   "id": "a06",
+   "cat": "arg",
+   "text": "The next day, the weather in Diyarbakir",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "Diyarbakir"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:weather{city:<escape>Diyarbakir<escape>}"
+  },
+  {
+   "id": "a07",
+   "cat": "arg",
+   "text": "Write 180 grams of grilled chicken for dinner",
+   "pred_tools": [
+    "diet_log"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_log",
+     "args": {
+      "amount": "180 grams",
+      "meal": "dinner",
+      "food": "grilled chicken"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_log{amount:<escape>180 grams<escape>,meal:<escape>dinner<escape>,food:<escape>grilled chicken<escape>}"
+  },
+  {
+   "id": "a08",
+   "cat": "arg",
+   "text": "Remind Ayhan to pay taxes tomorrow at noon",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your personal finances or tasks related to taxes. My current tools are designed for managing smart home devices and reminders, and I cannot access or connect with financial or tax-related services."
+  },
+  {
+   "id": "a09",
+   "cat": "arg",
+   "text": "Play Purple and Beyond from YouTube Have a Problem",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:music_play{artist:<escape>Purple Porter<escape>}"
+  },
+  {
+   "id": "a10",
+   "cat": "arg",
+   "text": "Turn down the bedroom lights",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "direction": "down"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{direction:<escape>down<escape>,level:0}"
+  },
+  {
+   "id": "a11",
+   "cat": "arg",
+   "text": "Remind to pay the rent on one month",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your finances or reminders. My current tools are focused on managing smart home devices like lights, speakers, and music, such as managing your diet, school schedules, and mail. I cannot provide financial or personal financial advice."
+  },
+  {
+   "id": "a12",
+   "cat": "arg",
+   "text": "Add doctor's appointment with Dr. Kaya next Friday, 9:15 p.m.",
+   "pred_tools": [
+    "calendar_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "calendar_add",
+     "args": {
+      "at": "2026-06-10 19:15:00",
+      "title": "Doctor's Appointment with Dr. Kaya"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:calendar_add{at:<escape>2026-06-10 19:15:00<escape>,title:<escape>Doctor's Appointment with Dr. Kaya<escape>}"
+  },
+  {
+   "id": "a13",
+   "cat": "arg",
+   "text": "Turn 'I miss you' into Kurdish",
+   "pred_tools": [
+    "translate"
+   ],
+   "pred_calls": [
+    {
+     "tool": "translate",
+     "args": {
+      "target_lang": "kurdew",
+      "text": "I miss you"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:translate{target_lang:<escape>kurdew<escape>,text:<escape>I miss you<escape>}"
+  },
+  {
+   "id": "a14",
+   "cat": "arg",
+   "text": "Remind me to turn on the TV half an hour before the game starts.",
+   "pred_tools": [
+    "reminder_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "reminder_add",
+     "args": {
+      "at": "05:00"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:reminder_add{at:<escape>05:00<escape>,in_minutes:0}"
+  },
+  {
+   "id": "x06",
+   "cat": "high",
+   "text": "Send $500 from my account to Ali",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with sending money. My current tools are designed for managing smart home devices and reminders, such as managing your lights, music, and water. I cannot access or process financial transactions."
+  },
+  {
+   "id": "h01",
+   "cat": "high",
+   "text": "Send $2,000 to my brother's account now",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with sending money. My current tools are designed for managing smart home devices and reminders, and I cannot access or process financial transactions."
+  },
+  {
+   "id": "h02",
+   "cat": "high",
+   "text": "Say dinner is ready for Neva",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with ordering or planning dinner. My current tools are focused on managing smart home devices like lights, speakers, and reminders. I cannot access or manage food ordering or preparation systems."
+  },
+  {
+   "id": "h03",
+   "cat": "high",
+   "text": "Leave a message for Ayhan, I'll be home late",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your personal requests or messages. My current capabilities are limited to assisting with tasks related to smart home devices like lighting, reminders, and ordering food. I cannot access or process personal or sensitive requests from Ayhan."
+  },
+  {
+   "id": "h04",
+   "cat": "high",
+   "text": "Get Neva's room, I want to talk to her.",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "Neva's room"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>Neva's room<escape>}"
+  },
+  {
+   "id": "h05",
+   "cat": "high",
+   "text": "Send an email to my boss saying I'm sick today.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with drafting or sending emails. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot connect with or manage internal communication systems."
+  },
+  {
+   "id": "h06",
+   "cat": "high",
+   "text": "email the school, say Neva won't be coming tomorrow",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with drafting or sending emails. My current capabilities are limited to managing smart home devices and reminders, such as managing lights, music, and weather. I cannot access or process sensitive personal or school-related information like emails."
+  },
+  {
+   "id": "h07",
+   "cat": "high",
+   "text": "Delete the dentist appointment from the calendar",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with deleting appointments from your calendar. My current tools are designed for managing reminders, managing schedules, and accessing personal information, and I cannot delete calendar entries."
+  },
+  {
+   "id": "h08",
+   "cat": "high",
+   "text": "Cancel all my reminders",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with canceling your reminders. My current tools are designed for managing smart home devices like lights, speakers, and music, and do not have the capability to manage calendar or task management features. You might need to contact your organization or services for this functionality."
+  },
+  {
+   "id": "h09",
+   "cat": "high",
+   "text": "Clear my profile memory, it's gone too far",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with clearing your profile memory. My current tools are designed for managing smart home devices and reminders, and I cannot access or delete personal data. You may need to consult your privacy settings or contact your organization's support services for assistance with this issue."
+  },
+  {
+   "id": "h10",
+   "cat": "high",
+   "text": "Pay $750 to the electricity company",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with financial planning or budgeting. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot provide financial advice or recommendations."
+  },
+  {
+   "id": "h11",
+   "cat": "high",
+   "text": "Delete family memory, let's start from scratch",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with deleting family memory. My current tools are designed for managing specific tasks within a private organization, such as storing, searching, or setting reminders. I cannot delete personal or family memory."
+  },
+  {
+   "id": "h12",
+   "cat": "high",
+   "text": "Tell everyone in the house that the food is at 8 o'clock.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:food{at:<escape>8 o'clock<escape>}"
+  },
+  {
+   "id": "m01",
+   "cat": "multi",
+   "text": "Turn on the light of the hall and tell Neva to come down",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "hall",
+      "state": "on"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>hall<escape>,state:<escape>on<escape>}"
+  },
+  {
+   "id": "m02",
+   "cat": "multi",
+   "text": "Add milk to the list and remind me to go to the grocery store at 6:00",
+   "pred_tools": [
+    "shopping_add"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_add",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_add{items:[<escape>milk<escape>]}"
+  },
+  {
+   "id": "m03",
+   "cat": "multi",
+   "text": "Tomorrow, the weather is like, and you set an alarm for 7.",
+   "pred_tools": [
+    "weather"
+   ],
+   "pred_calls": [
+    {
+     "tool": "weather",
+     "args": {
+      "city": "today"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:weather{city:<escape>today<escape>}"
+  },
+  {
+   "id": "m04",
+   "cat": "multi",
+   "text": "Write my breakfast and tell me how many calories I've taken today",
+   "pred_tools": [
+    "diet_summary"
+   ],
+   "pred_calls": [
+    {
+     "tool": "diet_summary",
+     "args": {
+      "day": "today"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:diet_summary{day:<escape>today<escape>}"
+  },
+  {
+   "id": "m05",
+   "cat": "multi",
+   "text": "Play some music and turn the lights down",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "state": "off"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{state:<escape>off<escape>}"
+  },
+  {
+   "id": "m06",
+   "cat": "multi",
+   "text": "Remember Neva is allergic to peanuts and remind me to tell your teacher tonight.",
+   "pred_tools": [
+    "med_reminder"
+   ],
+   "pred_calls": [
+    {
+     "tool": "med_reminder",
+     "args": {
+      "at": "20:00:00",
+      "medicine": "peanuts"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:med_reminder{at:<escape>20:00:00<escape>,medicine:<escape>peanuts<escape>}"
+  },
+  {
+   "id": "x01",
+   "cat": "trap_neigh",
+   "text": "Open the boiler, I'm cold",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with opening a boiler. My current capabilities are limited to managing smart home devices such as lights, thermostats, and sound systems. I cannot access or control boiler systems."
+  },
+  {
+   "id": "x04",
+   "cat": "trap_neigh",
+   "text": "Set air conditioning to 22 degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with setting air conditioning settings. My current capabilities are limited to managing smart home devices such as lights, speakers, and the light control system. I cannot access or configure external systems like HVAC controls."
+  },
+  {
+   "id": "x07",
+   "cat": "trap_neigh",
+   "text": "Close curtains",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or closing curtains. My current tools are focused on managing smart home devices like lights, speakers, and reminders, and cannot provide assistance with controlling or managing curtains."
+  },
+  {
+   "id": "x08",
+   "cat": "trap_neigh",
+   "text": "Turn on the TV, get on the news",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "on"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>on<escape>}"
+  },
+  {
+   "id": "x09",
+   "cat": "trap_neigh",
+   "text": "Start the dishwasher",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with starting the dishwasher. My current tools are focused on managing smart home devices such as lights, speakers, and music. I cannot connect to or manage kitchen appliances like the dishwasher."
+  },
+  {
+   "id": "n01",
+   "cat": "trap_neigh",
+   "text": "Start the washing machine in the cotton program",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with starting the washing machine in the cotton program. My current tools are focused on managing smart home devices like lights, speakers, and music, and do not have the capability to manage appliance settings or start program management."
+  },
+  {
+   "id": "n02",
+   "cat": "trap_neigh",
+   "text": "Turn the TV down",
+   "pred_tools": [
+    "light_control"
+   ],
+   "pred_calls": [
+    {
+     "tool": "light_control",
+     "args": {
+      "room": "on"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:light_control{room:<escape>on<escape>}"
+  },
+  {
+   "id": "n03",
+   "cat": "trap_neigh",
+   "text": "Open the garage door",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with opening a garage door. My current capabilities are limited to managing smart home devices such as lights, speakers, and thermostats. I cannot access or control garage door openers."
+  },
+  {
+   "id": "n04",
+   "cat": "trap_neigh",
+   "text": "Lock the front door",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or locking doors. My current capabilities are limited to assisting with smart home and personal tasks using the provided tools. I cannot access or control physical security systems."
+  },
+  {
+   "id": "n05",
+   "cat": "trap_neigh",
+   "text": "Turn the radiator on at two degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:thermostat{at:<escape>2024-06-14T10:00:00<escape>}"
+  },
+  {
+   "id": "n06",
+   "cat": "trap_neigh",
+   "text": "Sweep the hall",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing a hall sweep. My current tools are focused on managing smart home devices like lights, speakers, and reminders, and cannot access or control hall management systems."
+  },
+  {
+   "id": "n07",
+   "cat": "trap_neigh",
+   "text": "Open the oven, 180 degrees",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with opening an oven. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot access or control kitchen appliances like ovens."
+  },
+  {
+   "id": "n08",
+   "cat": "trap_neigh",
+   "text": "water the flowers on the balcony",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with gardening or watering flowers. My current tools are focused on managing smart home devices like lights, speakers, and the food delivery system. I cannot recommend or advise on gardening or plant care."
+  },
+  {
+   "id": "n09",
+   "cat": "trap_neigh",
+   "text": "Print the shopping list",
+   "pred_tools": [
+    "shopping_list"
+   ],
+   "pred_calls": [
+    {
+     "tool": "shopping_list",
+     "args": {}
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:shopping_list{}"
+  },
+  {
+   "id": "n10",
+   "cat": "trap_neigh",
+   "text": "Book a table at a fish restaurant for tonight",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with booking a table for a fish restaurant. My current tools are focused on managing smart home devices and reminders, such as managing smart lights, alarms, and music. I cannot connect with restaurant booking systems or access real-time restaurant availability."
+  },
+  {
+   "id": "n11",
+   "cat": "trap_neigh",
+   "text": "Call a taxi home",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with calling a taxi home. My current capabilities are limited to managing smart home devices such as lights, speakers, and music. I cannot connect with or manage transportation services."
+  },
+  {
+   "id": "n12",
+   "cat": "trap_neigh",
+   "text": "Turn off wifi modem",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your Wi-Fi modem. My current tools are focused on managing smart home devices like lights, thermostats, and speakers, and cannot connect to or control them remotely."
+  },
+  {
+   "id": "n13",
+   "cat": "trap_neigh",
+   "text": "open combi",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with opening a new appliance store or recommending appliance stores. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot browse or recommend appliance stores."
+  },
+  {
+   "id": "n14",
+   "cat": "trap_neigh",
+   "text": "Close curtains",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or closing curtains. My current tools are focused on managing smart home devices like lights, speakers, and reminders, and cannot provide assistance with controlling or managing curtains."
+  },
+  {
+   "id": "x02",
+   "cat": "trap_neigh",
+   "text": "Get 10 lot Guarantee shares from the stock exchange",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with retrieving stock market data or details such as 10 lot guarantees. My current tools are limited to managing smart home devices and reminders, such as managing lights, music, and weather."
+  },
+  {
+   "id": "x03",
+   "cat": "trap_neigh",
+   "text": "Sing pizza for tonight",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing personalized music playlists. My current capabilities are limited to managing smart home devices such as lights, speakers, and reminders. I cannot generate or suggest music for personal entertainment."
+  },
+  {
+   "id": "x05",
+   "cat": "trap_neigh",
+   "text": "Start the car remotely",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with starting a remote car remotely. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot access or control car systems."
+  },
+  {
+   "id": "c01",
+   "cat": "trap_chat",
+   "text": "I'm bored today.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your boredom. My current capabilities are limited to assisting with tasks related to smart home devices like managing lights and sounds. I cannot provide creative or motivational ideas for boredom."
+  },
+  {
+   "id": "c02",
+   "cat": "trap_chat",
+   "text": "Shall I tell you about my grandfather's village?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with asking about a person's family history. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot provide genealogical or personal history information."
+  },
+  {
+   "id": "c03",
+   "cat": "trap_chat",
+   "text": "Tell me a joke",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": true,
+   "out": "<start_function_call>call:joke_teller{}"
+  },
+  {
+   "id": "c04",
+   "cat": "trap_chat",
+   "text": "What do you think life means",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with brainstorming or offering opinions on life's meaning. My current capabilities are focused on managing smart home devices and reminders using various tools. I cannot provide insights or perspectives on personal beliefs or philosophies."
+  },
+  {
+   "id": "c05",
+   "cat": "trap_chat",
+   "text": "You know I love you a lot, don't you?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with expressing love or affection. My current capabilities are limited to assisting with smart home and personal management tasks such as managing lights, sounds, and reminders. I cannot provide emotional support or advice on relationships."
+  },
+  {
+   "id": "c06",
+   "cat": "trap_chat",
+   "text": "Oh, I'm so tired today",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your physical or mental energy. My current capabilities are limited to assisting with tasks related to managing smart home devices like lights, speakers, and reminders. I cannot provide personalized energy tips or assistance with managing your daily routine."
+  },
+  {
+   "id": "c07",
+   "cat": "trap_chat",
+   "text": "What is your favorite food",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with recommending a favorite food. My current capabilities are focused on managing smart home devices like lighting and reminders, such as managing a smart light, setting alarms, and checking the time. I cannot browse food preferences or provide personalized recommendations."
+  },
+  {
+   "id": "c08",
+   "cat": "trap_chat",
+   "text": "I want to have a little chat",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I would be happy to chat! What would you like to talk about?"
+  },
+  {
+   "id": "c09",
+   "cat": "trap_chat",
+   "text": "Will I be happy tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot provide personalized advice or predictions about future events like tomorrow. My current capabilities are focused on managing smart home devices and reminders, such as managing lights, alarms, and music. I cannot access or provide future predictions for specific events."
+  },
+  {
+   "id": "c10",
+   "cat": "trap_chat",
+   "text": "Good night, my dear.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing your evening routine or setting reminders. My current capabilities are limited to assisting with tasks such as managing smart home devices, tracking food, and retrieving information. I cannot provide personalized evening planning or reminders."
+  },
+  {
+   "id": "c11",
+   "cat": "trap_chat",
+   "text": "My back hurts again, it's hard to age",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with recommending or recommending advice on physical health or injury management. My current capabilities are limited to managing smart home devices and reminders. I cannot provide personalized health recommendations or advice for back pain."
+  },
+  {
+   "id": "c12",
+   "cat": "trap_chat",
+   "text": "I argued with Neva today, I feel terrible.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or dealing with sensitive personal or emotional issues like arguments with individuals. My current capabilities are limited to assisting with tasks related to managing smart home devices like lighting and reminders. I cannot provide advice or support for managing or resolving personal conflicts."
+  },
+  {
+   "id": "c13",
+   "cat": "trap_chat",
+   "text": "Do you ever get bored of us?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with answering this question. My current capabilities are limited to assisting with tasks related to managing smart home devices and reminders using the provided tools. I cannot provide opinions or insights on personal preferences."
+  },
+  {
+   "id": "c14",
+   "cat": "trap_chat",
+   "text": "This weather has been upsetting me lately.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with managing or predicting weather. My current capabilities are limited to assisting with smart home and personal assistance tasks like managing reminders and ordering groceries. I recommend contacting a weather service for specific forecasts or advice."
+  },
+  {
+   "id": "k01",
+   "cat": "trap_ctx",
+   "text": "another of the same",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can certainly assist with organizing and adding items to your household. Could you please specify the items you would like to add?"
+  },
+  {
+   "id": "k02",
+   "cat": "trap_ctx",
+   "text": "Add it",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can certainly help with adding items to your household. Could you please specify the items you would like to add?"
+  },
+  {
+   "id": "k03",
+   "cat": "trap_ctx",
+   "text": "No, the other",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with creating or managing calendar appointments or events. My current tools are designed for managing smart home devices like lights, speakers, and reminders, and do not include the functionality to schedule or manage calendar appointments."
+  },
+  {
+   "id": "k04",
+   "cat": "trap_ctx",
+   "text": "Do it again",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with making future requests. My current capabilities are limited to managing smart home devices and reminders using the provided tools. I cannot perform complex tasks like setting reminders or managing family calendars."
+  },
+  {
+   "id": "k05",
+   "cat": "trap_ctx",
+   "text": "Cancel it",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with canceling commitments or agreements. My current tools are designed for managing smart home devices and reminders, and I cannot access or manage personal or family financial accounts."
+  },
+  {
+   "id": "k06",
+   "cat": "trap_ctx",
+   "text": "And tomorrow?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with planning or managing future events like tomorrow. My current capabilities are limited to managing smart home devices and reminders. I cannot provide information or assistance with planning for future events."
+  },
+  {
+   "id": "k07",
+   "cat": "trap_ctx",
+   "text": "Yes, do so.",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I would be happy to assist! Please tell me what you would like to do."
+  },
+  {
+   "id": "k08",
+   "cat": "trap_ctx",
+   "text": "Turn it into 5",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I can help with that! To set up your smart light control, could you please specify the room or room you would like the lights to turn on or off?"
+  },
+  {
+   "id": "q01",
+   "cat": "trap_know",
+   "text": "Fatih Sultan Mehmet was born in how many years",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with calculating Fatih Sultan Mehmet's birthdate. My current tools are designed for managing smart home devices and reminders, and do not have access to historical or astronomical birth information."
+  },
+  {
+   "id": "q02",
+   "cat": "trap_know",
+   "text": "How many bones are in the human body",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with answering this question. My current capabilities are limited to assisting with tasks related to smart home devices like managing lights and thermostats. I cannot provide information on the number of bones in the human body."
+  },
+  {
+   "id": "q03",
+   "cat": "trap_know",
+   "text": "Why the sky is blue",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with answering questions about scientific concepts such as the sky's origin or colors. My current capabilities are focused on managing smart home devices and reminders using the provided tools."
+  },
+  {
+   "id": "q04",
+   "cat": "trap_know",
+   "text": "What is the capital of Australia",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with this request. My current capabilities are limited to assisting with managing smart home devices and reminders using the provided tools. I cannot provide information about capital cities or their capitals."
+  },
+  {
+   "id": "q05",
+   "cat": "trap_know",
+   "text": "How to make lentil soup",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I cannot assist with cooking or baking lentil soup. My current capabilities are limited to managing smart home devices like lights, speakers, and weather."
+  },
+  {
+   "id": "q06",
+   "cat": "trap_know",
+   "text": "What is photosynthesis",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I am sorry, but I cannot assist with this request. My current capabilities are limited to assisting with smart home and personal management tasks such as managing lights, sounds, and reminders. I cannot provide information or assistance with scientific topics like photosynthesis."
+  },
+  {
+   "id": "q07",
+   "cat": "trap_know",
+   "text": "How many players are in a football team",
+   "pred_tools": [
+    "match_result"
+   ],
+   "pred_calls": [
+    {
+     "tool": "match_result",
+     "args": {
+      "team": "football team"
+     }
+    }
+   ],
+   "err": false,
+   "out": "<start_function_call>call:match_result{team:<escape>football team<escape>}"
+  },
+  {
+   "id": "q08",
+   "cat": "trap_know",
+   "text": "Who wrote The Miserables?",
+   "pred_tools": [],
+   "pred_calls": [],
+   "err": false,
+   "out": "I apologize, but I cannot assist with writing or retrieving trivia about famous writers. My current tools are focused on managing smart home devices like lights, music, and reminders. I cannot browse or access historical literature or trivia about famous writers."
+  }
+ ],
+ "latencies_ms": [
+  107,
+  54,
+  100,
+  64,
+  55,
+  109,
+  61,
+  70,
+  45,
+  99,
+  48,
+  91,
+  103,
+  111,
+  66,
+  101,
+  90,
+  49,
+  38,
+  57,
+  48,
+  55,
+  49,
+  60,
+  71,
+  95,
+  107,
+  71,
+  87,
+  46,
+  65,
+  48,
+  130,
+  112,
+  57,
+  49,
+  49,
+  63,
+  45,
+  54,
+  108,
+  130,
+  123,
+  104,
+  71,
+  130,
+  107,
+  111,
+  95,
+  101,
+  73,
+  103,
+  97,
+  58,
+  132,
+  70,
+  67,
+  49,
+  111,
+  51,
+  74,
+  101,
+  52,
+  54,
+  113,
+  104,
+  68,
+  67,
+  103,
+  87,
+  100,
+  115,
+  56,
+  95,
+  112,
+  90,
+  121,
+  122,
+  90,
+  100,
+  52,
+  59,
+  50,
+  49,
+  50,
+  49,
+  72,
+  97,
+  108,
+  98,
+  50,
+  100,
+  112,
+  49,
+  96,
+  94,
+  77,
+  94,
+  96,
+  102,
+  39,
+  120,
+  95,
+  97,
+  99,
+  95,
+  104,
+  100,
+  92,
+  97,
+  100,
+  39,
+  105,
+  109,
+  114,
+  116,
+  52,
+  112,
+  108,
+  103,
+  120,
+  104,
+  105,
+  69,
+  65,
+  104,
+  95,
+  89,
+  94,
+  72,
+  229,
+  171,
+  99,
+  96,
+  94,
+  73,
+  105,
+  51,
+  103
+ ]
+}
