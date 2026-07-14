@@ -51,6 +51,33 @@ PI_AGENTS_MD = os.environ.get("PI_AGENTS_MD", "pi/AGENTS.md")
 # Gecikme ayarı: thinking seviyesi. minimal en hızlı (ölçüldü: off=6.6s, minimal=2.6s,
 # default=3.2s). Boş / "default" → bayrak eklenmez (pi'nın kendi varsayılanı).
 PI_THINKING = os.environ.get("PI_THINKING", "minimal")
+
+# ── BEYİN SEÇİMİ (oturum başında) ────────────────────────────────────────────
+# Kullanıcı web'de oturum BAŞINDA hangi modelle konuşacağını seçer. Seçim token
+# route'undan agent dispatch metadata'sına ({"brain":"local"|"remote"}) gömülür; worker
+# `ctx.job.metadata` ile İŞ DOĞARKEN okur (agent.py) → pi alt-süreci doğru modelle doğar.
+# Yarış YOK: seçim, pi süreci başlamadan ÖNCE eldedir.
+#
+# PI_THINKING modele BAĞLI (bkz. .env.example):
+#   yerel  → "default": model reasoning'siz (models.json reasoning=false, sunucuda
+#            --reasoning off). "minimal" desteklenmeyen bir thinking seviyesi zorlar.
+#   uzak   → "minimal": en düşük gecikme (ölçüldü: off=6.6s, minimal=2.6s, default=3.2s).
+#
+# Seçim gelmezse/bozuksa → .env'deki PI_MODEL/PI_THINKING (bugünkü davranış).
+BRAINS: dict[str, tuple[str, str]] = {
+    "local": ("llama-cpp/gemma-4-12B-it-qat-q4_0", "default"),
+    "remote": ("openai-codex/gpt-5.6-terra", "minimal"),
+}
+
+
+def resolve_brain(choice: Optional[str]) -> tuple[str, str]:
+    """Beyin seçimini (model, thinking) çiftine çöz. Geçersiz/boş → .env varsayılanı."""
+    key = (choice or "").strip().lower()
+    if key in BRAINS:
+        return BRAINS[key]
+    return PI_MODEL, PI_THINKING
+
+
 # Tur stall watchdog: son ilerlemeden (text_delta / başlangıç) bu kadar saniye HİÇ
 # olay gelmezse turu temiz kapat (WebSocket 1000 gibi ~33-40s takılmalara karşı).
 PI_TURN_STALL_TIMEOUT = float(os.environ.get("PI_TURN_STALL_TIMEOUT", "12") or 12)
@@ -472,17 +499,27 @@ def _persona_exists(persona: str) -> bool:
     return (REPO_ROOT / PI_PERSONA_DIR / f"{persona}.md").is_file()
 
 
-def _build_pi_args(persona: str, session_id: str) -> list[str]:
-    """pi --mode rpc bayrakları (docs/pi-brain-design.md)."""
-    args = [PI_BIN, "--mode", "rpc", "--approve", "--model", PI_MODEL]
+def _build_pi_args(
+    persona: str,
+    session_id: str,
+    model: Optional[str] = None,
+    thinking: Optional[str] = None,
+) -> list[str]:
+    """pi --mode rpc bayrakları (docs/pi-brain-design.md).
+
+    model/thinking: oturum başı beyin seçimi (bkz. BRAINS/resolve_brain). None →
+    .env varsayılanı (PI_MODEL/PI_THINKING) = bugünkü davranış."""
+    model = model or PI_MODEL
+    thinking = PI_THINKING if thinking is None else thinking
+    args = [PI_BIN, "--mode", "rpc", "--approve", "--model", model]
     # İzolasyon: global (~/.pi/agent) extension/skill/prompt/theme/context keşfini kapat.
     # Aşağıdaki explicit `-e` / `--skill` / `--append-system-prompt` yolları etkilenmez.
     if PI_ISOLATED:
         args += ["--no-extensions", "--no-skills", "--no-prompt-templates",
                  "--no-themes", "--no-context-files"]
     # Gecikme: thinking seviyesi (minimal en hızlı). Boş/"default" → pi varsayılanı.
-    if PI_THINKING and PI_THINKING.lower() != "default":
-        args += ["--thinking", PI_THINKING]
+    if thinking and thinking.lower() != "default":
+        args += ["--thinking", thinking]
     # Tool politikası: built-in'leri (read/edit/bash/grep/web_search…) kapat; lokal mem
     # extension'ı (memory_add/memory_search) yaşasın. İsteğe bağlı allowlist ile tek tek
     # tool geri açılabilir (ör. web_search).
@@ -557,8 +594,14 @@ class PiRpcClient:
     - Diğer tüm satırlar (AgentSessionEvent) aktif turun kuyruğuna (`_turn_q`) gider.
     """
 
-    def __init__(self, persona: str, session_id: str):
-        self._args = _build_pi_args(persona, session_id)
+    def __init__(
+        self,
+        persona: str,
+        session_id: str,
+        model: Optional[str] = None,
+        thinking: Optional[str] = None,
+    ):
+        self._args = _build_pi_args(persona, session_id, model, thinking)
         # Alt-sürece geçecek hafıza kimliği (guest → ""). memory-skill $MEM_USER'ı okur.
         self._mem_user = _mem_user(session_id)
         self._proc: Optional[asyncio.subprocess.Process] = None
@@ -715,6 +758,50 @@ def _assistant_msg_text(message: Any) -> str:
     return "".join(parts)
 
 
+# ── `mate.tool` — Candan'ın NE YAPTIĞI (tool çağrısı + sonucu) ───────────────
+# pi'nin mesaj akışındaki iki şekli okuruz (sessions/*.jsonl ile birebir aynı):
+#   assistant  → content[] içinde {"type":"toolCall","id":…,"name":…,"arguments":{…}}
+#   toolResult → {"toolCallId":…,"toolName":…,"content":[{"type":"text","text":…}],"isError":…}
+# Çıktı şeması (web/lib/tool-events.ts ile AYNI sözleşme):
+#   {"type":"tool_call",   "id","name","args","ts"}
+#   {"type":"tool_result", "id","name","result","isError","ts"}
+# ts = epoch MİLİSANİYE (web transkript damgalarıyla aynı birim → tek kronolojik sıra).
+def _tool_events(message: Any) -> list[dict]:
+    """pi mesajından yayınlanacak tool olaylarını çıkar. Tool yoksa boş liste."""
+    if not isinstance(message, dict):
+        return []
+    now_ms = int(time.time() * 1000)
+    out: list[dict] = []
+    role = message.get("role")
+    if role == "assistant":
+        for c in message.get("content", []) or []:
+            if isinstance(c, dict) and c.get("type") == "toolCall":
+                out.append({
+                    "type": "tool_call",
+                    "id": c.get("id") or "",
+                    "name": c.get("name") or "",
+                    "args": c.get("arguments") or {},
+                    "ts": now_ms,
+                })
+    elif role == "toolResult":
+        text = "".join(
+            c.get("text", "")
+            for c in message.get("content", []) or []
+            if isinstance(c, dict) and c.get("type") == "text"
+        )
+        ts = message.get("timestamp")
+        out.append({
+            "type": "tool_result",
+            "id": message.get("toolCallId") or "",
+            "name": message.get("toolName") or "",
+            "result": text,
+            "isError": bool(message.get("isError")),
+            "ts": int(ts) if isinstance(ts, (int, float)) else now_ms,
+        })
+    # id/name'i olmayan olay web'de eşleşemez → yayınlama.
+    return [e for e in out if e["id"] and e["name"]]
+
+
 if _HAS_LIVEKIT:
 
     class PiStream(llm.LLMStream):
@@ -805,6 +892,11 @@ if _HAS_LIVEKIT:
                         if obj is None:  # süreç öldü
                             break
                         etype = obj.get("type")
+                        # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). Olayın TİPİNE
+                        # bakmıyoruz, MESAJINA bakıyoruz: hem assistant (toolCall) hem
+                        # toolResult mesajları `message` alanıyla gelir. Tekrar id ile
+                        # elenir; yayın hatası turu BOZMAZ (best-effort).
+                        self._brain._publish_tool_msg(obj.get("message"))
                         if etype == "message_update":
                             ame = obj.get("assistantMessageEvent") or {}
                             if ame.get("type") == "text_delta":
@@ -869,16 +961,31 @@ if _HAS_LIVEKIT:
             speaker_state: Any = None,
             speaker_id: Any = None,
             speaker_store: Any = None,
+            brain: Optional[str] = None,
         ):
             super().__init__()
             self._default_persona = persona
             self._persona = persona
             self._session_id = session_id or persona
+            # Beyin seçimi (oturum başı; web dispatch metadata'sı → agent.py). Geçersiz/
+            # yoksa .env varsayılanına düşer. Konuşmacı değişiminde (pi swap) de KORUNUR.
+            self._model, self._thinking = resolve_brain(brain)
+            logger.info(
+                "beyin: %s → model=%s thinking=%s",
+                (brain or "").strip().lower() or "varsayılan (worker/.env)",
+                self._model, self._thinking or "default",
+            )
             # speaker_state: `.current` alanı olan paylaşılan durum (None = kapalı).
             # Kapalıyken davranış Faz 2 ile AYNI: tek persona, tek warm süreç.
             self._speaker_state = speaker_state
-            self._client = PiRpcClient(self._persona, self._session_id)
+            self._client = PiRpcClient(
+                self._persona, self._session_id, self._model, self._thinking
+            )
             self._swap_lock = asyncio.Lock()
+            # `mate.tool` yayıncısı (agent.py bağlar; None → yayın YOK, eski davranış).
+            # Tool çağrısı/sonucu olayları buradan odaya gider; hata konuşmayı BOZMAZ.
+            self._tool_publisher: Optional[Callable[[dict], None]] = None
+            self._tool_seen: set[str] = set()   # aynı olay iki kez yayınlanmasın
             # Faz 3.1: sesli oto-enrollment bağımlılıkları. Üçü de varsa etkin;
             # yoksa (SPEAKER_ID_ENABLED kapalı vb.) enrollment TAMAMEN devre dışı.
             self._speaker_id = speaker_id
@@ -901,6 +1008,38 @@ if _HAS_LIVEKIT:
             self._wake_task: Optional[asyncio.Task] = None
             # Konsolidasyon: dosya başına son çalıştırma (günde en çok 1 → LLM turu yakma).
             self._consolidated: dict[str, float] = {}
+
+        # ── `mate.tool` yayını (Candan ne yapıyor) ───────────────────────────
+        def set_tool_publisher(self, cb: Optional[Callable[[dict], None]]) -> None:
+            """Tool olaylarını odaya basacak callback'i bağla (agent.py kurar; sync,
+            içinde task açar). None → yayın yok (eski davranış)."""
+            self._tool_publisher = cb
+
+        def _publish_tool_msg(self, message: Any) -> None:
+            """pi mesajındaki tool çağrısı/sonucunu web'e yayınla — BEST-EFFORT.
+
+            Hiçbir koşulda turu bozmaz: yayıncı yoksa/patlarsa sessizce (en fazla warning)
+            geçilir. Aynı olay iki kez gelebilir (message_end + turn_end aynı mesajı
+            taşıyabilir) → id ile elenir."""
+            cb = self._tool_publisher
+            if cb is None:
+                return
+            try:
+                events = _tool_events(message)
+            except Exception:  # noqa: BLE001 — ayrıştırma hatası konuşmayı BOZMAZ
+                logger.warning("mate.tool: olay ayrıştırılamadı", exc_info=True)
+                return
+            for ev in events:
+                key = f"{ev['type']}:{ev['id']}"
+                if key in self._tool_seen:
+                    continue
+                if len(self._tool_seen) > 500:   # uzun oturumda sınırsız büyümesin
+                    self._tool_seen.clear()
+                self._tool_seen.add(key)
+                try:
+                    cb(ev)
+                except Exception:  # noqa: BLE001 — yayın hatası konuşmayı BOZMAZ
+                    logger.warning("mate.tool yayını başarısız (%s)", ev["name"], exc_info=True)
 
         # ── Wake word gate (konuşma penceresi) ───────────────────────────────
         def set_wake_change(self, cb: Optional[Callable[[bool], None]]) -> None:
@@ -1361,7 +1500,8 @@ if _HAS_LIVEKIT:
                 )
                 old = self._client
                 self._persona, self._session_id = persona, session_id
-                self._client = PiRpcClient(persona, session_id)
+                # Beyin seçimi kişi değişse de AYNI kalır (oturum başında sabitlendi).
+                self._client = PiRpcClient(persona, session_id, self._model, self._thinking)
                 await self._client.start()
                 await old.stop()
                 return self._client

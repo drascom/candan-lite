@@ -8,6 +8,7 @@ Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain
 Oda: MATE_LIVEKIT_ROOM (candan-lite-dev)
 """
 import asyncio
+import json
 import logging
 import os
 from pathlib import Path
@@ -139,7 +140,38 @@ def _install_sleep_transcript_gate(session, brain) -> None:
     log.info("uyku-transkript gate aktif (SLEEP_TRANSCRIPTS_HIDDEN=true)")
 
 
+# Candan'ın NE YAPTIĞI (tool çağrısı + sonucu) kanalı — docs/MULTI-CLIENT-PLAN.md §6
+# `mate.*` isim alanı. Web bunu transkriptin arasına sokar (web/lib/tool-events.ts).
+TOOL_TOPIC = "mate.tool"
+
+
+def _brain_choice(ctx: JobContext) -> str | None:
+    """Oturum başı beyin seçimi — agent DISPATCH METADATA'sından ({"brain":"local"}).
+
+    Web token route'u bunu hem token'a gömülü RoomAgentDispatch'e hem `createDispatch`e
+    basar (web/app/api/token/route.ts). `ctx.job.metadata` iş DOĞARKEN elde olur —
+    entrypoint'in ilk satırında, ctx.connect()'ten bile önce → pi süreci doğru modelle
+    doğar, YARIŞ YOK (participant metadata'sı için katılımcıyı beklemek gerekirdi).
+
+    Metadata yok / JSON değil / alan yok → None → pi_brain worker/.env'deki PI_MODEL
+    varsayılanına düşer (bugünkü davranış). Hiçbir durumda oturum ÇÖKMEZ."""
+    log = logging.getLogger("worker.agent")
+    raw = (getattr(ctx.job, "metadata", "") or "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        log.warning("dispatch metadata JSON değil, yok sayıldı: %r", raw[:120])
+        return None
+    choice = data.get("brain") if isinstance(data, dict) else None
+    return choice if isinstance(choice, str) and choice.strip() else None
+
+
 async def entrypoint(ctx: JobContext):
+    # Beyin seçimi: pi süreci DOĞMADAN önce elde olmalı → job metadata (yarış yok).
+    brain_choice = _brain_choice(ctx)
+
     await ctx.connect()
 
     # --- Faz 3: speaker-ID (opsiyonel, additive) ---
@@ -168,6 +200,7 @@ async def entrypoint(ctx: JobContext):
         speaker_state=speaker_state,
         speaker_id=sp if speaker_state is not None else None,
         speaker_store=store if speaker_state is not None else None,
+        brain=brain_choice,   # oturum başı beyin seçimi (None → worker/.env varsayılanı)
     )
 
     async def _finalize_memory() -> None:
@@ -197,6 +230,30 @@ async def entrypoint(ctx: JobContext):
     # WAKE kapalıysa hep uyanık → gate zaten no-op olurdu; kurma.
     if WAKE_ENABLED and SLEEP_TRANSCRIPTS_HIDDEN:
         _install_sleep_transcript_gate(session, brain)
+
+    # `mate.tool`: tool çağrısı/sonucu → odaya text-stream (web sohbette gösterir).
+    # BEST-EFFORT: yayın patlarsa konuşma AYNEN sürer, sadece warning düşer.
+    tool_tasks: set[asyncio.Task] = set()   # RUF006: task referansı kaybolmasın
+
+    def _publish_tool(event: dict) -> None:
+        async def _send() -> None:
+            try:
+                await ctx.room.local_participant.send_text(
+                    json.dumps(event, ensure_ascii=False), topic=TOOL_TOPIC
+                )
+            except Exception:  # noqa: BLE001 — yayın hatası konuşmayı BOZMAZ
+                logging.getLogger("worker.agent").warning(
+                    "%s yayını başarısız: %s", TOOL_TOPIC, event.get("name"), exc_info=True
+                )
+
+        try:
+            task = asyncio.create_task(_send())
+        except RuntimeError:  # loop yok (olmamalı) → sessizce geç
+            return
+        tool_tasks.add(task)
+        task.add_done_callback(tool_tasks.discard)
+
+    brain.set_tool_publisher(_publish_tool)
 
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:

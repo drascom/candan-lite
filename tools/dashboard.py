@@ -93,6 +93,33 @@ def session_path(name: str) -> Path | None:
     return p
 
 
+def strip_system_prefix(text: str) -> str:
+    """Modele enjekte edilen "(Sistem: şu an ...)" / "(Sistem notu: ...)" önekini kırp.
+
+    worker/pi_brain.py her tura güncel saati (ve ilk turda selam direktifini) ekler —
+    MODEL için gerekli, dökümde GÜRÜLTÜ. Parantez iç içe olabilir ("... (~22:00, gece) ...")
+    → derinlik sayarak kapanışı buluyoruz; kapanmayan parantezde metne DOKUNMUYORUZ.
+    Aynı kırpma web istemcisinde de var (web/lib/tool-events.ts → stripSystemPrefix)."""
+    rest = text
+    while True:
+        s = rest.lstrip()
+        if not s.startswith("(Sistem"):
+            return s
+        depth = 0
+        end = -1
+        for i, ch in enumerate(s):
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end < 0:
+            return s          # kapanmayan parantez → olduğu gibi bırak
+        rest = s[end + 1:]
+
+
 def read_session(p: Path) -> list[dict]:
     """pi transkriptini ANLA (bozma!). Satırlar: session/model_change/message.
     message.content parçaları: text | thinking | toolCall. Roller: user/assistant/toolResult.
@@ -116,7 +143,12 @@ def read_session(p: Path) -> list[dict]:
                     continue
                 t = c.get("type")
                 if t == "text":
-                    parts.append(("text", c.get("text") or ""))
+                    txt = c.get("text") or ""
+                    if m.get("role") == "user":       # "(Sistem: ...)" öneki gösterilmez
+                        txt = strip_system_prefix(txt)
+                    if not txt:                        # sadece sistem notuydu → satır yok
+                        continue
+                    parts.append(("text", txt))
                 elif t == "thinking":
                     parts.append(("thinking", c.get("thinking") or ""))
                 elif t == "toolCall":

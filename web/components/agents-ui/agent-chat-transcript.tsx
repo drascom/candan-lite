@@ -1,6 +1,6 @@
 'use client';
 
-import { type ComponentProps, useRef } from 'react';
+import { type ComponentProps, useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'motion/react';
 import {
   type AgentState,
@@ -14,6 +14,15 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { Button } from '@/components/ui/button';
+import { useToolEvents } from '@/hooks/useToolEvents';
+import {
+  type ToolEvent,
+  formatToolCall,
+  readShowTools,
+  stripSystemPrefix,
+  writeShowTools,
+} from '@/lib/tool-events';
 
 /**
  * Props for the AgentChatTranscript component.
@@ -34,10 +43,57 @@ export interface AgentChatTranscriptProps extends ComponentProps<'div'> {
   className?: string;
 }
 
+/** Transkript satırı: ya bir konuşma mesajı ya da bir tool olayı (kronolojik tek akış). */
+type Row =
+  | { kind: 'message'; id: string; ts: number; message: ReceivedMessage; text: string }
+  | { kind: 'tool'; id: string; ts: number; event: ToolEvent };
+
+function timeLabel(ts: number, timeStyle: 'full' | 'medium' = 'medium'): string {
+  const locale = typeof navigator !== 'undefined' ? (navigator.language ?? 'en-US') : 'en-US';
+  return new Date(ts).toLocaleTimeString(locale, { timeStyle });
+}
+
+/**
+ * Tool olayı satırı — dashboard'daki (tools/dashboard.py) oturum dökümünün görsel dili:
+ * rol etiketi + saat, tool ÇAĞRISI monospace kutuda, tool SONUCU turuncu şeritte.
+ */
+function ToolRow({ event }: { event: ToolEvent }) {
+  const time = timeLabel(event.ts);
+
+  if (event.type === 'tool_call') {
+    return (
+      <div className="is-assistant flex w-full max-w-[95%] flex-col gap-1">
+        <div className="text-muted-foreground text-[11px] tracking-wider uppercase">
+          tool çağrısı · {time}
+        </div>
+        <pre className="border-border bg-muted text-foreground overflow-x-auto rounded-md border px-3 py-2 font-mono text-xs">
+          🔧 {formatToolCall(event)}
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="is-assistant flex w-full max-w-[95%] flex-col gap-1 border-l-2 border-amber-500 pl-3">
+      <div className="text-muted-foreground text-[11px] tracking-wider uppercase">
+        tool sonucu · {event.name} · {time}
+      </div>
+      <div className={event.isError ? 'text-destructive text-sm' : 'text-foreground text-sm'}>
+        {event.result}
+      </div>
+    </div>
+  );
+}
+
 /**
  * A chat transcript component that displays a conversation between the user and agent.
  * Shows messages with timestamps and origin indicators, plus a thinking indicator
  * when the agent is processing.
+ *
+ * Ayrıca Candan'ın NE YAPTIĞINI gösterir: `mate.tool` kanalından gelen tool çağrısı /
+ * sonucu olayları mesajların arasına KRONOLOJİK olarak sokulur (dashboard'daki oturum
+ * dökümü gibi). Tool detayları varsayılan AÇIK; sağ üstteki düğmeyle kapatılabilir
+ * (localStorage'da kalır). Kanal boşsa (worker yayınlamıyorsa) render eskisiyle AYNI.
  *
  * @extends ComponentProps<'div'>
  *
@@ -64,6 +120,14 @@ export function AgentChatTranscript({
   const awake = agentAttributes?.['candan.awake'];
   const awakeSnapshotRef = useRef<Map<string, string | undefined>>(new Map());
 
+  const toolEvents = useToolEvents();
+  // Tool detayları görünsün mü (localStorage; varsayılan AÇIK). null = henüz mount olmadı
+  // → server/client ilk render'ı ayrışmasın diye düğme o ana kadar çizilmez.
+  const [showTools, setShowTools] = useState<boolean | null>(null);
+  useEffect(() => {
+    setShowTools(readShowTools());
+  }, []);
+
   const visibleMessages = messages.filter((m) => {
     const isUser = m.from?.isLocal === true;
     if (!isUser) return true; // agent mesajı: her zaman görünür
@@ -73,20 +137,58 @@ export function AgentChatTranscript({
     return awakeSnapshotRef.current.get(m.id) !== 'false';
   });
 
+  // Mesajlar + tool olayları → tek kronolojik akış (ikisi de epoch ms damgalı).
+  const messageRows: Row[] = visibleMessages
+    .map((message) => ({
+      kind: 'message' as const,
+      id: message.id,
+      ts: new Date(message.timestamp).getTime(),
+      message,
+      // Worker'ın modele enjekte ettiği "(Sistem: şu an ...)" öneki kullanıcıya
+      // GÖSTERİLMEZ (bkz. lib/tool-events.ts → stripSystemPrefix).
+      text: stripSystemPrefix(message.message),
+    }))
+    .filter((row) => row.text.length > 0); // sadece sistem notundan ibaret mesaj → gösterme
+
+  const toolRows: Row[] = showTools
+    ? toolEvents.map((event) => ({
+        kind: 'tool' as const,
+        id: `${event.type}:${event.id}`,
+        ts: event.ts,
+        event,
+      }))
+    : [];
+
+  const rows: Row[] = [...messageRows, ...toolRows].sort((a, b) => a.ts - b.ts);
+
   return (
     <Conversation className={className} {...props}>
+      {showTools !== null && (
+        <Button
+          size="xs"
+          variant={showTools ? 'secondary' : 'ghost'}
+          aria-pressed={showTools}
+          onClick={() => {
+            const next = !showTools;
+            writeShowTools(next);
+            setShowTools(next);
+          }}
+          className="absolute top-2 right-3 z-20 rounded-full font-mono"
+          title="Tool çağrılarını ve sonuçlarını göster/gizle"
+        >
+          🔧 {showTools ? 'detay açık' : 'detay kapalı'}
+        </Button>
+      )}
       <ConversationContent>
-        {visibleMessages.map((receivedMessage) => {
-          const { id, timestamp, from, message } = receivedMessage;
-          const locale = navigator?.language ?? 'en-US';
-          const messageOrigin = from?.isLocal ? 'user' : 'assistant';
-          const time = new Date(timestamp);
-          const title = time.toLocaleTimeString(locale, { timeStyle: 'full' });
-
+        {rows.map((row) => {
+          if (row.kind === 'tool') {
+            return <ToolRow key={row.id} event={row.event} />;
+          }
+          const messageOrigin = row.message.from?.isLocal ? 'user' : 'assistant';
           return (
-            <Message key={id} title={title} from={messageOrigin}>
+            <Message key={row.id} title={timeLabel(row.ts, 'full')} from={messageOrigin}>
               <MessageContent>
-                <MessageResponse>{message}</MessageResponse>
+                <MessageResponse>{row.text}</MessageResponse>
               </MessageContent>
             </Message>
           );

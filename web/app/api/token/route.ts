@@ -8,6 +8,7 @@ import {
 } from 'livekit-server-sdk';
 import { ParticipantInfo_Kind, RoomAgentDispatch, RoomConfiguration } from '@livekit/protocol';
 import { AGENT_NAME } from '@/lib/agent-name';
+import { isBrain } from '@/lib/brain';
 
 type ConnectionDetails = {
   serverUrl: string;
@@ -31,12 +32,17 @@ export const revalidate = 0;
 
 export async function POST(req: NextRequest) {
   try {
+    // Beyin seçimi (oturum başı): istemci `?brain=local|remote` gönderir. Geçersiz/eksik →
+    // '' → dispatch metadata'sı YOK → worker `worker/.env` PI_MODEL varsayılanına düşer.
+    const dispatchMetadata = brainMetadata(req);
+
     // Parse room config from request body.
     const body = await req.json();
     const roomConfig = withAgentDispatch(
       body?.room_config
         ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })
-        : new RoomConfiguration()
+        : new RoomConfiguration(),
+      dispatchMetadata
     );
 
     // Generate participant token
@@ -74,7 +80,7 @@ export async function POST(req: NextRequest) {
       // varsa yok sayılır. Worker restart edilince agent düşer ama oda (açık sekme +
       // emptyTimeout) yaşar → yeni token'ın daveti işlenmez. Var olan oda için
       // agent'ı server tarafında açıkça çağırıyoruz.
-      await ensureAgentDispatch(serverUrl, roomName);
+      await ensureAgentDispatch(serverUrl, roomName, dispatchMetadata);
     }
 
     // Return connection details
@@ -105,6 +111,23 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * Beyin seçimini (oturum başı) dispatch metadata'sına çevir.
+ *
+ * `?brain=local|remote` → `{"brain":"local"}` (JSON string). Geçersiz/eksik → '' →
+ * metadata GÖNDERİLMEZ → worker `worker/.env` içindeki PI_MODEL/PI_THINKING'e düşer
+ * (bugünkü davranış; hiçbir koşulda oturum çökmez). Bkz. web/lib/brain.ts.
+ *
+ * Neden JOB (dispatch) metadata'sı, participant metadata'sı DEĞİL: worker bunu
+ * `ctx.job.metadata` ile entrypoint'in İLK satırında, `ctx.connect()`'ten bile ÖNCE
+ * görür — pi alt-süreci doğarken seçim ELDEDİR. Participant metadata'sı için agent
+ * katılımcının odaya girmesini beklemek zorunda kalırdı → yarış.
+ */
+function brainMetadata(req: NextRequest): string {
+  const brain = req.nextUrl.searchParams.get('brain');
+  return isBrain(brain) ? JSON.stringify({ brain }) : '';
+}
+
+/**
  * Explicit agent dispatch (https://docs.livekit.io/agents/worker/agent-dispatch).
  *
  * Token'a gömülü `roomConfig.agents[]` daveti LiveKit'te YALNIZCA oda İLK KEZ
@@ -114,12 +137,19 @@ export async function POST(req: NextRequest) {
  *
  * Client (livekit-client TokenSource) zaten `room_config` gönderiyor; yine de adı
  * burada, server-side env'den ZORLUYORUZ: sessizce düşerse agent hiç çağrılmaz.
+ *
+ * `metadata` (beyin seçimi) HER İKİ yolda da aynı: gömülü davete de, açık dispatch'e
+ * de basılır — yoksa yeni-oda yolunda seçim kaybolurdu. İstemci kendi `room_config`'inde
+ * agent'ı zaten göndermiş olabilir (appConfig.agentName) → var olan kaydın metadata'sını
+ * da BİZ yazıyoruz (seçim sessizce düşmesin).
  */
-function withAgentDispatch(roomConfig: RoomConfiguration): RoomConfiguration {
+function withAgentDispatch(roomConfig: RoomConfiguration, metadata: string): RoomConfiguration {
   if (!AGENT_NAME) return roomConfig;
   const existing = roomConfig.agents.find((a) => a.agentName === AGENT_NAME);
-  if (!existing) {
-    roomConfig.agents.push(new RoomAgentDispatch({ agentName: AGENT_NAME }));
+  if (existing) {
+    if (metadata) existing.metadata = metadata;
+  } else {
+    roomConfig.agents.push(new RoomAgentDispatch({ agentName: AGENT_NAME, metadata }));
   }
   return roomConfig;
 }
@@ -153,7 +183,11 @@ const DISPATCH_LOCK_MS = 8000;
  * Hata dayanıklılığı: dispatch adımı patlarsa token yine döner (yeni-oda yolu bozulmaz);
  * hata yalnız console'a loglanır.
  */
-async function ensureAgentDispatch(serverUrl: string, roomName: string): Promise<void> {
+async function ensureAgentDispatch(
+  serverUrl: string,
+  roomName: string,
+  metadata: string
+): Promise<void> {
   if (!AGENT_NAME || !API_KEY || !API_SECRET) return;
   // 2. savunma: senkron in-flight kilidi (await'ten ÖNCE damga bas → eşzamanlı POST'ları topla)
   const now = Date.now();
@@ -171,8 +205,11 @@ async function ensureAgentDispatch(serverUrl: string, roomName: string): Promise
     // Kayıt yoksa katılımcıyı da kontrol et: kaydı görünmeden düşen gömülü dispatch'i yakala.
     const participants = await roomService.listParticipants(roomName);
     if (participants.some((p) => p.kind === ParticipantInfo_Kind.AGENT)) return; // agent zaten odada
-    await dispatchClient.createDispatch(roomName, AGENT_NAME);
-    console.log(`[token] var olan oda ${roomName} için agent dispatch edildi (${AGENT_NAME})`);
+    await dispatchClient.createDispatch(roomName, AGENT_NAME, metadata ? { metadata } : undefined);
+    console.log(
+      `[token] var olan oda ${roomName} için agent dispatch edildi (${AGENT_NAME}` +
+        `${metadata ? `, ${metadata}` : ''})`
+    );
   } catch (error) {
     console.error('[token] ensureAgentDispatch başarısız (token yine dönüyor):', error);
   }
