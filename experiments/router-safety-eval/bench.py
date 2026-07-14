@@ -23,7 +23,7 @@ from urllib.request import Request, urlopen
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-sys.path.insert(0, str(ROOT / "worker"))
+sys.path.insert(0, str(ROOT / "experiments" / "router-bench"))
 
 from cases import CASES, CRITICAL_CATEGORIES, validate  # noqa: E402
 from tool_catalog import _TOOL_CALL_FORMAT, router_catalog  # noqa: E402

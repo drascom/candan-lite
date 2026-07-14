@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Candan panosu — router karar defteri + oturumlar + hafıza (yerel, tarayıcıdan).
+"""Candan panosu — oturum dökümü + hafıza (yerel, tarayıcıdan).
 
     python3 tools/dashboard.py        → http://127.0.0.1:8765
 
-NEDEN: gölge moddaki router'ın tek ürünü KARARIDIR. Terminalde `grep` ile karar
-avlamak yorucu; oran/dağılım/gecikme hesaplanamaz. Bu pano deftere (JSONL) bakar,
-özetler ve ŞÜPHELİ kararları öne çıkarır.
+NEDEN: pi transkriptlerini (sessions/*.jsonl) ve ailenin hafızasını (memory/)
+terminalden `grep`'le okumak yorucu. Bu pano ikisini de okunur hâlde gösterir.
+
+NOT: eski "router karar defteri" sayfası KALDIRILDI — küçük tool-router'ın kendisi
+kaldırıldı (tool seçimini artık tek yerel beyin kendi yapıyor).
 
 TASARIM KARARLARI (bilerek):
   • Yalnızca STANDART KÜTÜPHANE. Yeni bağımlılık YOK, build adımı YOK, tek dosya.
@@ -16,9 +18,8 @@ TASARIM KARARLARI (bilerek):
  YAZMA YETKİSİ — DAR VE BİLİNÇLİ
 ═══════════════════════════════════════════════════════════════════════════════
 Bu pano AİLENİN GERÇEK HAFIZASINA bakar. Yanlış bir buton geri alınamaz veri
-kaybıdır. O yüzden yazma yolları sayılıdır:
+kaybıdır. O yüzden yazma yolu TEKTİR:
 
-  SİLİNEBİLİR  router karar defteri (logs/*.jsonl) — sadece bir log, yeniden üretilir.
   YEDEKLİ      sessions/*.jsonl → sessions/.trash/ içine TAŞINIR. Kalıcı silme YOK.
   ASLA         memory/ (family.md, users/, policy.json, events.db) ve
                worker/data/speakers.db → SALT-OKUNUR. Bu dosyalara yazan/silen
@@ -32,20 +33,13 @@ import json
 import os
 import shutil
 import sqlite3
-import statistics
 import sys
 import urllib.parse
-from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-# router.py ile AYNI varsayılan + aynı çapa (göreli yol → repo kökü).
-_raw = os.environ.get("ROUTER_LOG_PATH", "logs/router-decisions.jsonl").strip()
-ROUTER_LOG = Path(_raw).expanduser()
-if not ROUTER_LOG.is_absolute():
-    ROUTER_LOG = REPO / ROUTER_LOG
 
 SESSIONS_DIR = REPO / "sessions"
 TRASH_DIR = SESSIONS_DIR / ".trash"
@@ -54,104 +48,11 @@ EVENTS_DB = MEMORY_DIR / "events.db"
 SPEAKERS_DB = REPO / "worker" / "data" / "speakers.db"
 
 PORT = int(os.environ.get("DASHBOARD_PORT", "8765") or 8765)
-MAX_ROWS = 3000          # defter büyürse yalnız son N karar gösterilir (sayfa şişmesin)
-SLOW_MS = 1000.0         # bunun üstü "yavaş" — router'ın ölçülen p50'si ~400ms
-MAGNET_MIN_COUNT = 3     # "mıknatıs tool" eşiği: en az bu kadar seçilmiş...
-MAGNET_MIN_SHARE = 0.25  # ...ve tool seçilen kararların en az bu kadarını kapmış
 
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  VERİ — hepsi SALT-OKUNUR
 # ═══════════════════════════════════════════════════════════════════════════
-def read_decisions() -> list[dict]:
-    """Karar defterini oku. Bozuk satır varsa ATLA (defter kısmen bozuksa bile pano açılır)."""
-    if not ROUTER_LOG.exists():
-        return []
-    out: list[dict] = []
-    try:
-        with ROUTER_LOG.open(encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                except (ValueError, TypeError):
-                    continue
-                if isinstance(rec, dict):
-                    out.append(rec)
-    except OSError:
-        return []
-    return out[-MAX_ROWS:]
-
-
-def summarize(rows: list[dict]) -> dict:
-    """Toplam / abstain oranı / tool dağılımı / gecikme p50-p95 / multi / hata."""
-    lat = sorted(float(r.get("latency_ms") or 0) for r in rows)
-    tools = Counter(r["tool"] for r in rows if r.get("tool"))
-    outcomes = Counter(r.get("outcome") or "?" for r in rows)
-    n = len(rows)
-
-    def pct(i: float) -> float:
-        if not lat:
-            return 0.0
-        k = min(len(lat) - 1, max(0, round(i * (len(lat) - 1))))
-        return lat[k]
-
-    tool_selected = sum(tools.values())
-    return {
-        "total": n,
-        "abstain": outcomes.get("abstain", 0),
-        "abstain_pct": (outcomes.get("abstain", 0) / n * 100) if n else 0.0,
-        "tool_selected": tool_selected,
-        "tools": tools.most_common(),
-        "outcomes": outcomes.most_common(),
-        "multi": sum(1 for r in rows if r.get("multi_intent")),
-        "errors": outcomes.get("error", 0),
-        "timeouts": outcomes.get("timeout", 0),
-        "avg_ms": statistics.fmean(lat) if lat else 0.0,
-        "p50_ms": pct(0.50),
-        "p95_ms": pct(0.95),
-    }
-
-
-def suspicious(rows: list[dict], summary: dict) -> dict:
-    """ŞÜPHELİ KARARLAR — panonun en değerli kısmı.
-
-    Bilinen zayıflığımız SEMANTİK KOMŞU TUZAĞI: canlı testte "Kombi aç" ve
-    "Perdeleri kapat" cümlelerinin İKİSİ de yanlışlıkla `light_control` seçti.
-    Bu hatayı makine tek başına bilemez (doğru cevabı bilmiyoruz) — ama şu ipucu
-    güçlü: bir tool kararların ORANSIZ BÜYÜK kısmını kapıyorsa muhtemelen bir
-    "çöp kutusu"dur, komşu niyetleri kendine çekiyordur. O yüzden kesin hüküm
-    vermek yerine tool'a düşen CÜMLELERİ yan yana listeliyoruz → kullanıcı gözle
-    tarar ve "bunun burada işi yok" der. Karar insanın.
-    """
-    failed = [r for r in rows if (r.get("outcome") in ("error", "timeout")) or r.get("err")]
-    slow_gate = max(SLOW_MS, summary["p95_ms"])
-    slow = sorted(
-        (r for r in rows if float(r.get("latency_ms") or 0) >= slow_gate),
-        key=lambda r: float(r.get("latency_ms") or 0), reverse=True,
-    )[:25]
-
-    by_tool: dict[str, list[dict]] = defaultdict(list)
-    for r in rows:
-        if r.get("tool"):
-            by_tool[r["tool"]].append(r)
-    sel = summary["tool_selected"] or 1
-    magnets = sorted(
-        (t for t, rs in by_tool.items()
-         if len(rs) >= MAGNET_MIN_COUNT and len(rs) / sel >= MAGNET_MIN_SHARE),
-        key=lambda t: -len(by_tool[t]),
-    )
-    return {
-        "failed": failed[-25:][::-1],
-        "slow": slow,
-        "slow_gate": slow_gate,
-        "magnets": magnets,
-        "by_tool": dict(sorted(by_tool.items(), key=lambda kv: -len(kv[1]))),
-    }
-
-
 def session_files() -> list[dict]:
     """sessions/*.jsonl → [{name, person, date, size, messages}]. SADECE OKUR."""
     out = []
@@ -367,27 +268,8 @@ details{margin:6px 0} summary{cursor:pointer;color:var(--mut)}
 .ro{font-size:12px;color:var(--mut);border:1px dashed var(--line);border-radius:6px;padding:6px 10px;display:inline-block}
 """
 
-JS_FILTER = """
-function ff(){
-  const o=document.getElementById('f-out').value,
-        t=document.getElementById('f-tool').value,
-        q=document.getElementById('f-q').value.toLowerCase();
-  let n=0;
-  document.querySelectorAll('#rt tbody tr').forEach(tr=>{
-    const oc=tr.dataset.out, tl=tr.dataset.tool;
-    let ok=true;
-    if(o==='tool'){ ok = tl!==''; } else if(o && o!=='all'){ ok = oc===o; }
-    if(ok && t) ok = tl===t;
-    if(ok && q) ok = tr.dataset.q.indexOf(q)>=0;
-    tr.style.display = ok?'':'none'; if(ok) n++;
-  });
-  document.getElementById('cnt').textContent = n;
-}
-"""
-
-
 def page(title: str, active: str, body: str, extra_js: str = "") -> bytes:
-    nav = [("/", "Router kararları"), ("/sessions", "Oturumlar"), ("/memory", "Hafıza (salt-okunur)")]
+    nav = [("/sessions", "Oturumlar"), ("/memory", "Hafıza (salt-okunur)")]
     links = "".join(
         f'<a href="{h}" class="{"on" if h == active else ""}">{E(t)}</a>' for h, t in nav
     )
@@ -398,156 +280,6 @@ def page(title: str, active: str, body: str, extra_js: str = "") -> bytes:
 <header><b>Candan panosu</b><nav>{links}</nav>
 <span class="mut" style="margin-left:auto">yenilendi {now} · <a href="" style="color:var(--acc)">yenile</a></span>
 </header><main>{body}</main><script>{extra_js}</script></body></html>""".encode()
-
-
-def _outcome_tag(oc: str) -> str:
-    cls = {"error": "err", "timeout": "err", "no_exec": "warn", "multi": "warn",
-           "executed": "ok", "shadow": "ok"}.get(oc, "")
-    return f'<span class="tag {cls}">{E(oc)}</span>'
-
-
-def _dec_table(rows: list[dict], tid: str = "") -> str:
-    if not rows:
-        return '<div class="empty">Kayıt yok.</div>'
-    trs = []
-    for r in rows:
-        tool = r.get("tool") or ""
-        text = r.get("text") or ""
-        oc = r.get("outcome") or "?"
-        err = r.get("err") or ""
-        args = r.get("args") or {}
-        args_s = json.dumps(args, ensure_ascii=False) if args else ""
-        # Çeviri katmanı açıkken (ROUTER_TRANSLATE) router cümleyi TR+EN görür; hata
-        # ayıklamada "model neyi okudu" sorusunun cevabı bu satırdır.
-        text_en = r.get("text_en") or ""
-        q = E((text + " " + text_en + " " + tool + " " + (r.get("speaker") or "") + " " + err).lower())
-        text_cell = E(text)
-        if text_en:
-            text_cell += f'<div class="mut">→ {E(text_en)}</div>'
-        tool_cell = f"<code>{E(tool)}</code>" if tool else '<span class="mut">—</span>'
-        if args_s:
-            tool_cell += f'<div class="mut"><code>{E(args_s)}</code></div>'
-        multi_cell = '<span class="tag warn">multi</span>' if r.get("multi_intent") else ""
-        err_cell = f'<div class="mut">{E(err)}</div>' if err else ""
-        trs.append(
-            f'<tr data-out="{E(oc)}" data-tool="{E(tool)}" data-q="{q}">'
-            f'<td class="mut">{E((r.get("ts") or "")[11:19])}</td>'
-            f'<td>{E(r.get("speaker") or "—")}</td>'
-            f'<td class="txt">{text_cell}</td>'
-            f'<td>{tool_cell}</td>'
-            f'<td>{multi_cell}</td>'
-            f'<td>{_outcome_tag(oc)}{err_cell}</td>'
-            f'<td class="num">{float(r.get("latency_ms") or 0):.0f}</td></tr>'
-        )
-    idattr = f' id="{tid}"' if tid else ""
-    return (f'<div class="wrap"><table{idattr}><thead><tr><th>Saat</th><th>Konuşan</th><th>Cümle</th>'
-            f'<th>Tool / args</th><th>Multi</th><th>Sonuç</th><th class="num">ms</th></tr></thead>'
-            f'<tbody>{"".join(trs)}</tbody></table></div>')
-
-
-def render_router() -> bytes:
-    rows = read_decisions()
-    s = summarize(rows)
-    susp = suspicious(rows, s)
-    newest = rows[::-1]  # en yeniler üstte
-
-    cards = "".join(
-        f'<div class="card"><div class="n">{n}</div><div class="l">{E(lbl)}</div></div>'
-        for n, lbl in [
-            (f'{s["total"]}', "toplam karar"),
-            (f'{s["abstain_pct"]:.0f}%', f'abstain ({s["abstain"]})'),
-            (f'{s["tool_selected"]}', "tool seçildi"),
-            (f'{s["multi"]}', "multi_intent"),
-            (f'{s["errors"] + s["timeouts"]}', "hata + timeout"),
-            (f'{s["p50_ms"]:.0f}', "p50 ms"),
-            (f'{s["p95_ms"]:.0f}', "p95 ms"),
-            (f'{s["avg_ms"]:.0f}', "ort. ms"),
-        ]
-    )
-
-    dist = "".join(
-        f'<tr><td><code>{E(t)}</code></td><td class="num">{c}</td>'
-        f'<td class="num">{c / (s["tool_selected"] or 1) * 100:.0f}%</td></tr>'
-        for t, c in s["tools"]
-    ) or '<tr><td colspan="3" class="mut">—</td></tr>'
-    oc_dist = "".join(
-        f'<tr><td>{_outcome_tag(o)}</td><td class="num">{c}</td>'
-        f'<td class="num">{c / (s["total"] or 1) * 100:.0f}%</td></tr>'
-        for o, c in s["outcomes"]
-    ) or '<tr><td colspan="3" class="mut">—</td></tr>'
-
-    # ── şüpheli ──
-    sus_html = []
-    if susp["magnets"]:
-        for t in susp["magnets"]:
-            rs = susp["by_tool"][t]
-            share = len(rs) / (s["tool_selected"] or 1) * 100
-            lis = "".join(f'<li>{E(r.get("text") or "")} '
-                          f'<span class="mut">— {E(json.dumps(r.get("args") or {}, ensure_ascii=False))}</span></li>'
-                          for r in rs[-40:][::-1])
-            sus_html.append(
-                f'<div class="box warn"><b>Mıknatıs tool: <code>{E(t)}</code></b> '
-                f'<span class="mut">— tool seçilen kararların %{share:.0f}\'ini ({len(rs)}) kaptı. '
-                f'Semantik komşu tuzağı olabilir (ör. "Kombi aç" → light_control). '
-                f'Cümleleri gözle tara: buraya AİT OLMAYAN var mı?</span>'
-                f'<ul>{lis}</ul></div>'
-            )
-    if susp["failed"]:
-        sus_html.append(f'<h2>Hatalı / timeout kararlar <small>{len(susp["failed"])}</small></h2>'
-                        + _dec_table(susp["failed"]))
-    if susp["slow"]:
-        sus_html.append(f'<h2>Yavaş kararlar <small>≥ {susp["slow_gate"]:.0f} ms</small></h2>'
-                        + _dec_table(susp["slow"]))
-    if not sus_html:
-        sus_html.append('<div class="box mut">Şüpheli bir şey yok (ya da defter henüz boş).</div>')
-
-    # tool → cümleler (gözle tarama; mıknatıs olmasa da faydalı)
-    groups = "".join(
-        f'<details><summary><code>{E(t)}</code> — {len(rs)} cümle</summary><ul>'
-        + "".join(f'<li>{E(r.get("text") or "")}</li>' for r in rs[-40:][::-1])
-        + "</ul></details>"
-        for t, rs in susp["by_tool"].items()
-    ) or '<div class="mut">Henüz hiçbir tool seçilmedi.</div>'
-
-    tool_opts = "".join(f'<option value="{E(t)}">{E(t)} ({c})</option>' for t, c in s["tools"])
-    oc_opts = "".join(f'<option value="{E(o)}">{E(o)} ({c})</option>' for o, c in s["outcomes"])
-
-    body = f"""
-<h2>Özet <small>{E(str(ROUTER_LOG))}{" · defter yok" if not ROUTER_LOG.exists() else ""}</small></h2>
-<div class="cards">{cards}</div>
-
-<div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:14px">
-  <div style="flex:1;min-width:280px"><h2>Tool dağılımı</h2><div class="wrap"><table>
-    <thead><tr><th>Tool</th><th class="num">Kez</th><th class="num">Pay</th></tr></thead>
-    <tbody>{dist}</tbody></table></div></div>
-  <div style="flex:1;min-width:280px"><h2>Sonuç dağılımı</h2><div class="wrap"><table>
-    <thead><tr><th>Sonuç</th><th class="num">Kez</th><th class="num">Pay</th></tr></thead>
-    <tbody>{oc_dist}</tbody></table></div></div>
-</div>
-
-<h2>⚠ Şüpheli kararlar <small>gözden geçir</small></h2>
-{"".join(sus_html)}
-
-<h2>Tool → seçilen cümleler <small>gözle tara</small></h2>
-{groups}
-
-<h2>Tüm kararlar <small>en yeniler üstte · gösterilen: <span id="cnt">{len(newest)}</span></small></h2>
-<div class="bar">
-  <select id="f-out" onchange="ff()">
-    <option value="all">Tüm sonuçlar</option>
-    <option value="tool">Tool seçilenler</option>
-    {oc_opts}
-  </select>
-  <select id="f-tool" onchange="ff()"><option value="">Tüm tool'lar</option>{tool_opts}</select>
-  <input id="f-q" placeholder="metinde ara…" oninput="ff()" size="30">
-  <form method="post" action="/router/clear" style="margin-left:auto"
-        onsubmit="return confirm('Router karar defteri SİLİNECEK ({len(rows)} kayıt). Emin misin?')">
-    <button class="danger" type="submit">Karar defterini temizle</button>
-  </form>
-</div>
-{_dec_table(newest, tid="rt")}
-"""
-    return page("Router kararları", "/", body, JS_FILTER)
 
 
 def render_sessions() -> bytes:
@@ -709,7 +441,7 @@ class Handler(BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(u.query)
         try:
             if u.path == "/":
-                self._send(render_router())
+                self._redirect("/sessions")   # giriş sayfası: oturumlar
             elif u.path == "/sessions":
                 self._send(render_sessions())
             elif u.path == "/session":
@@ -728,16 +460,8 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         form = urllib.parse.parse_qs(self.rfile.read(n).decode("utf-8", "replace")) if n else {}
 
-        # SADECE bu iki yazma yolu vardır. memory/ ve worker/data/ için YOK — ekleme.
-        if u.path == "/router/clear":
-            try:
-                if ROUTER_LOG.exists():
-                    ROUTER_LOG.unlink()  # sadece bir log; router bir sonraki kararda yeniden yaratır
-            except OSError as e:
-                self._send(page("Hata", "/", f'<div class="box">Silinemedi: <pre>{E(repr(e))}</pre></div>'), 500)
-                return
-            self._redirect("/")
-        elif u.path == "/session/trash":
+        # SADECE bu TEK yazma yolu vardır. memory/ ve worker/data/ için YOK — ekleme.
+        if u.path == "/session/trash":
             p = session_path((form.get("f") or [""])[0])
             if p is None:
                 self._send(page("Hata", "/sessions", '<div class="box">Geçersiz dosya.</div>'), 400)
@@ -769,7 +493,6 @@ def main() -> int:
         print(f"Port {PORT} açılamadı ({e}). Başka port: DASHBOARD_PORT=8766 python3 tools/dashboard.py")
         return 1
     print(f"Candan panosu → http://{host}:{PORT}")
-    print(f"  router defteri : {ROUTER_LOG}")
     print(f"  oturumlar      : {SESSIONS_DIR}")
     print(f"  hafıza         : {MEMORY_DIR} (SALT-OKUNUR)")
     print("Durdur: Ctrl-C")
