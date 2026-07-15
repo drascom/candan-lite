@@ -13,14 +13,7 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from livekit.agents import (
-    Agent,
-    AgentSession,
-    JobContext,
-    RoomInputOptions,
-    WorkerOptions,
-    cli,
-)
+from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
 
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
@@ -228,14 +221,15 @@ async def entrypoint(ctx: JobContext):
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )
 
-    # Web kısa süreli reconnect yaptığında aynı participant identity ile geri gelir. Session'ı
-    # ilk disconnect'te kapatırsak agent odada kısa süre "listening" görünse bile artık mic'i
-    # tüketmez; web de yaşayan agent var sanıp yeni job dispatch etmez. components-react 2.9.23
-    # mevcut agent state'ini başlangıçta okuyabildiği için eski init-loop riski artık yok.
+    # NOT: close_on_disconnect DEFAULT (True) bırakıldı — bilerek. False denendi ve GERİ ALINDI:
+    # agent odadan hiç çıkmayınca lk.agent.state "listening"de sabit kalıyor; web reconnect'te
+    # LiveKit client 20 sn'lik startup timer'ını ancak bir state-DEĞİŞİM event'i ile temizliyor.
+    # Değişim gelmeyince sahte "Agent joined but did not complete initializing" → failed →
+    # useAgentErrors.end() → view-controller 3 sn sonra start() → sonsuz flapping. Default'ta
+    # agent disconnect'te çıkıp reconnect'te taze katılır (yok→listening geçişi) → timer temizlenir.
     await session.start(
         agent=Agent(instructions="Sen Candan'sın. Türkçe, kısa ve yardımcı konuş."),
         room=ctx.room,
-        room_input_options=RoomInputOptions(close_on_disconnect=False),
     )
     # Uyurken kullanıcı transkriptini web UI'a YAYINLAMA (default açık). Ses/STT/wake
     # boru hattı AYNEN çalışır; sadece RoomIO'nun user-transkript yayını uykuda susar.
