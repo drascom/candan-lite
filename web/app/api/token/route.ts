@@ -36,8 +36,11 @@ export async function POST(req: NextRequest) {
     // '' → dispatch metadata'sı YOK → worker `worker/.env` PI_MODEL varsayılanına düşer.
     const dispatchMetadata = brainMetadata(req);
 
-    // Parse room config from request body.
-    const body = await req.json();
+    // Parse room config from request body. Yeni livekit-client bazı çağrılarda GÖVDESİZ
+    // POST atıyor → `req.json()` boş body'de `SyntaxError: Unexpected end of JSON input`
+    // fırlatır. Downstream zaten `body?.room_config` ile opsiyonel okuduğu için boş/geçersiz
+    // gövdeyi güvenle `{}` sayıyoruz.
+    const body = await req.json().catch(() => ({}) as Record<string, unknown>);
     const roomConfig = withAgentDispatch(
       body?.room_config
         ? RoomConfiguration.fromJson(body.room_config, { ignoreUnknownFields: true })

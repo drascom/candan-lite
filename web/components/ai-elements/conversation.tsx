@@ -11,7 +11,14 @@ export type ConversationProps = ComponentProps<typeof StickToBottom>;
 
 export const Conversation = ({ className, ...props }: ConversationProps) => (
   <StickToBottom
-    className={cn('relative flex-1 overflow-y-hidden', className)}
+    // overflow-y-auto: kullanıcı tekerlek/topla YUKARI kaydırıp geçmişi okuyabilsin.
+    // Eski `overflow-y-hidden` oto-scroll'un scrollTop'unu programatik kabul ediyordu
+    // (metin akıyordu) ama MANUEL kaydırmayı engelliyordu. use-stick-to-bottom zaten
+    // "yalnız en alttayken alta yapış" davranışını taşır (kullanıcı yukarı çıkınca
+    // escapedFromLock ile zorlamayı bırakır) → auto-scroll KIRILMADAN manuel scroll açılır.
+    // min-h-0: flex-1 çocuğun içeriğin altına inebilmesi (yoksa min-height:auto taşırır,
+    // iç scroll hiç tetiklenmez).
+    className={cn('relative flex-1 min-h-0 overflow-y-auto', className)}
     initial="smooth"
     resize="smooth"
     role="log"
