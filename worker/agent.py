@@ -13,7 +13,7 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents import Agent, AgentSession, JobContext, RoomInputOptions, WorkerOptions, cli
 from livekit.plugins import silero
 
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
@@ -224,6 +224,15 @@ async def entrypoint(ctx: JobContext):
     await session.start(
         agent=Agent(instructions="Sen Candan'sın. Türkçe, kısa ve yardımcı konuş."),
         room=ctx.room,
+        # close_on_disconnect=False: geçici web reconnect'i (ağ blip'i / view-controller'ın
+        # reconnect start()'ı) AgentSession'ı ÖLDÜRMESİN. Default True iken web bir an düşünce
+        # session kapanıyor ama job/agent katılımcı odada kalıyordu = ZOMBIE agent → web
+        # dönünce 'listening' state yayınlanmadığı için "did not complete initializing" →
+        # flapping döngüsü (ensureAgentDispatch zombie'yi "canlı" görüp yeniden dispatch etmiyordu).
+        # False ile session yaşar, web dönünce canlı agent'a bağlanır. Worker-restart iyileşme
+        # yolu ETKİLENMEZ: o, worker ölünce agent'ın GERÇEKTEN çıkmasına dayanır (bu ayar
+        # yalnız insan-katılımcı disconnect'ini kapsar, worker ölümünü değil).
+        room_input_options=RoomInputOptions(close_on_disconnect=False),
     )
     # Uyurken kullanıcı transkriptini web UI'a YAYINLAMA (default açık). Ses/STT/wake
     # boru hattı AYNEN çalışır; sadece RoomIO'nun user-transkript yayını uykuda susar.
