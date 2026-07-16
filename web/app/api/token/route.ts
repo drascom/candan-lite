@@ -186,10 +186,11 @@ const DISPATCH_LOCK_MS = 8000;
  * varsa (< bu süre) agent'ı "yolda" kabul edip dokunmuyoruz.
  *
  * Ölçüm (candan-lite-dev, soğuk worker): dispatch → agent katılımcı odada ≈ 2-8 sn.
- * 20 sn bunun rahat üstü; tek maliyeti, worker GERÇEKTEN ölüyse yeniden dispatch'in en fazla
- * 20 sn gecikmesi — istemci denemeye devam ettiği için kendi kendine toparlanır.
+ * 8 sn bunu tam kapsar; sağlıklı join'de çift-dispatch olmaz. Worker GERÇEKTEN ölüyse
+ * yeniden dispatch en fazla ~8 sn gecikir (eskiden 20 sn) — restart toparlanması artık
+ * deterministik.
  */
-const DISPATCH_GRACE_MS = 20000;
+const DISPATCH_GRACE_MS = 8000;
 
 /**
  * Var olan oda için agent'ı server tarafında açıkça dispatch et.
@@ -252,6 +253,19 @@ async function ensureAgentDispatch(
         return createdAtMs > newest ? createdAtMs : newest;
       }, 0);
     if (newestCreatedAtMs > 0 && now - newestCreatedAtMs < DISPATCH_GRACE_MS) return; // agent yolda
+
+    // Buraya kadar geldiysek: odada AGENT katılımcı YOK ve en taze kayıt grace'ten eski →
+    // bu kayıtlar kesinlikle ölü (worker restart). Yeni dispatch'ten önce temizle ki bayat
+    // kayıtlar birikmesin. Silme patlarsa createDispatch yine de denenir (bkz. catch).
+    try {
+      const staleDispatches = dispatches.filter((d) => d.agentName === AGENT_NAME);
+      await Promise.all(staleDispatches.map((d) => dispatchClient.deleteDispatch(d.id, roomName)));
+    } catch (cleanupError) {
+      console.error(
+        '[token] bayat dispatch temizligi basarisiz (createDispatch yine denenecek):',
+        cleanupError
+      );
+    }
 
     await dispatchClient.createDispatch(roomName, AGENT_NAME, metadata ? { metadata } : undefined);
     console.log(
