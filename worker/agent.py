@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
 
+from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
 from moss_stt import MossSTT                 # MOSS-Transcribe-Diarize STT (alternatif)
@@ -211,13 +212,14 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(_finalize_memory)
 
+    tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=_build_stt(),  # STT_BACKEND: wyoming (varsayılan) | moss
         # Faz 3.1: sesli oto-enrollment — bilinmeyen ses gelince PiBrain isim sorar,
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
         llm=brain,
-        tts=OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT),
+        tts=tts_plugin,
         # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
     )
 
@@ -227,6 +229,64 @@ async def entrypoint(ctx: JobContext):
     # Değişim gelmeyince sahte "Agent joined but did not complete initializing" → failed →
     # useAgentErrors.end() → view-controller 3 sn sonra start() → sonsuz flapping. Default'ta
     # agent disconnect'te çıkıp reconnect'te taze katılır (yok→listening geçişi) → timer temizlenir.
+    #
+    # ── ZOMBİ OTURUM: session kapandı ama JOB YAŞIYOR ────────────────────────────
+    # CANLI HATA (16:08, AJ_oZdpkERKJYiE): katılımcı bir an düşünce (sayfa yenileme /
+    # worker restart'ta bayat bağlantı) RoomIO `close_on_disconnect` gereği AgentSession'ı
+    # KAPATIYOR — ama job'u BİTİRMİYOR. `_aclose_impl` (voice/agent_session.py:1010)
+    # yalnız activity/room_io'yu kapatır; `ctx.room` BAĞLI KALIR, entrypoint'in diğer
+    # task'ları (heartbeat, wake_stt) çalışmaya devam eder. Sonuç: agent odada KATILIMCI
+    # olarak DURUR ama beyni ölüdür. Log'daki tablo tam bu: 16:08:18 session kapandı,
+    # 16:08:39 ve 16:10:28'de wake_stt hâlâ WAKE tespit ediyor (o ctx.room'a doğrudan
+    # bağlı, session'dan BAĞIMSIZ) → ses geliyor, cevap YOK.
+    #
+    # Web'in kurtarma zinciri (view-controller.tsx + token/route.ts ensureAgentDispatch)
+    # tamamen "AGENT KATILIMCI ODADAN ÇIKAR" varsayımına dayanıyor:
+    #   agent çıkar → agent.state 'failed' → useAgentErrors.end() → 3 sn sonra start()
+    #   → yeni token POST → ensureAgentDispatch odada AGENT görmez → createDispatch → taze job.
+    # Zombi agent odadan ÇIKMADIĞI için bu zincirin İLK halkası hiç kurulmuyordu:
+    # ensureAgentDispatch "odada AGENT katılımcı var → agent canlı, dokunma" deyip
+    # erken dönüyor, view-controller da 'failed' görmediği için yeniden başlatmıyor.
+    # Kullanıcının tek çaresi tam sayfa yenilemekti — canlıda yaşanan tam olarak buydu.
+    #
+    # ÇÖZÜM: session kapanınca JOB'U DA BİTİR → agent odadan çıkar → var olan (ve
+    # zaten dikkatle kurulmuş) web kurtarma zinciri kendiliğinden işler.
+    # NEDEN close_on_disconnect=False DEĞİL: yukarıdaki not — denendi, flapping yaptı.
+    # Ayrıca False ile session boş odada açık kalır (asistan boş odaya konuşabilir,
+    # pi süreci sızar, job hiç bitmez, finalize() hiç çalışmaz). "Katılımcı yokken
+    # sessize al" / "60 sn zaman aşımı" gibi seçenekler ise ODA-İÇİ durumu elle
+    # yönetmek demek: session'ı yeniden kurmak (session.start tekrar çağrılabilir,
+    # bkz. agent_session.py:878 "session can be restarted") mümkün ama RoomIO'nun
+    # relink'i, wake/tap/heartbeat'in yeniden bağlanması ve pi sürecinin durumu elle
+    # sıralanmak zorunda kalırdı — yeni yarışlar. Job'u bitirmek AYNI sonucu (taze,
+    # temiz oturum) framework'ün kendi yoluyla verir: süreç ölür, her şey sıfırlanır.
+    #
+    # TRADE-OFF: kısa bir kopmada bile pi süreci yeniden doğar → yeni oturum ~2-8 sn
+    # gecikir ve SOHBET GEÇMİŞİ o job ile gider (kalıcı hafıza `finalize()` ile
+    # KORUNUR — aşağıya bak). Bunu bilerek kabul ediyoruz: bugünkü davranış "hiç
+    # açılmıyor"; birkaç saniyede taze oturum her hâlükârda daha iyi.
+    #
+    # BONUS: finalize() (oturum sonu hafıza turu) ctx.add_shutdown_callback ile kayıtlı
+    # → zombi'de job ölene kadar HİÇ çalışmıyordu; artık kapanışta deterministik çalışır.
+    # Sıra doğru: job kapanışında ÖNCE room.disconnect() (agent odadan çıkar, web hemen
+    # 'failed' görür), SONRA shutdown callback'leri (finalize) koşar
+    # (ipc/job_proc_lazy_main.py:424 vs 428) → finalize'ın gecikmesi kurtarmayı YAVAŞLATMAZ.
+    @session.on("close")
+    def _on_session_close(ev) -> None:
+        reason = getattr(getattr(ev, "reason", None), "value", "") or "?"
+        # JOB_SHUTDOWN: zaten kapanıyoruz (session kendi shutdown callback'inden geldi)
+        # → tekrar shutdown çağırma, sonsuz döngüye girme.
+        if reason == "job_shutdown":
+            return
+        logging.getLogger("worker.agent").info(
+            "AgentSession kapandı (reason=%s) → job bitiriliyor: agent odadan çıksın ki "
+            "web taze dispatch alabilsin (zombi oturum önlemi)", reason
+        )
+        try:
+            ctx.shutdown(reason=f"session closed: {reason}")
+        except Exception:  # noqa: BLE001 — kapanış hiçbir koşulda patlamasın
+            logging.getLogger("worker.agent").warning("ctx.shutdown başarısız", exc_info=True)
+
     await session.start(
         agent=Agent(instructions="Sen Candan'sın. Türkçe, kısa ve yardımcı konuş."),
         room=ctx.room,
@@ -260,6 +320,24 @@ async def entrypoint(ctx: JobContext):
         task.add_done_callback(tool_tasks.discard)
 
     brain.set_tool_publisher(_publish_tool)
+
+    # Web UI "yeni sohbet" butonu → RPC. Sesli komutla AYNI yola iner
+    # (brain.new_session): davranış tek yerde, iki tetikleyici. Sıfırlanan yalnız
+    # SOHBET geçmişi; memory/ (memory_add/soul_add) KORUNUR.
+    async def _rpc_new_session(data) -> str:  # rtc.RpcInvocationData
+        log = logging.getLogger("worker.agent")
+        try:
+            ok = await brain.new_session()
+        except Exception:  # noqa: BLE001 — RPC hatası oturumu ASLA düşürmesin
+            log.warning("RPC yeni sohbet başarısız", exc_info=True)
+            return "error"
+        log.info("RPC yeni sohbet (web butonu): %s", "ok" if ok else "hata")
+        return "ok" if ok else "error"
+
+    try:
+        ctx.room.local_participant.register_rpc_method("candan.new_session", _rpc_new_session)
+    except Exception:  # noqa: BLE001 — RPC kaydı olmasa da ses yolu AYNEN çalışsın
+        logging.getLogger("worker.agent").warning("candan.new_session RPC kaydedilemedi", exc_info=True)
 
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
@@ -362,6 +440,18 @@ async def entrypoint(ctx: JobContext):
     # kökü tam buydu (bkz. reminders.AckTracker).
     ack = AckTracker()
 
+    # Mood kalıcılığı reset'i: agent yeni yanıt üretmeye başlarken ("thinking")
+    # TTS mood durumu nötr'e döner. Böylece [mood:X] işareti YALNIZCA onu koyan
+    # turda geçerli olur, sonraki turlara sızmaz. "thinking" her turda cümle-sentezi
+    # (synthesize) ÖNCESİNDE tam bir kez tetiklenir → sağlam tur-sınırı sinyali.
+    @session.on("agent_state_changed")
+    def _reset_tts_mood(ev) -> None:
+        try:
+            if getattr(ev, "new_state", "") == "thinking":
+                tts_plugin.reset_mood()
+        except Exception:  # noqa: BLE001 — reset hatası konuşmayı BOZMAZ
+            pass
+
     @session.on("user_input_transcribed")
     def _on_any_transcript(ev) -> None:
         ack.on_transcript(bool(getattr(ev, "is_final", False)))
@@ -460,6 +550,16 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
+    # Log dosyası: terminal çıktısı AYNEN sürer, ek olarak dosyaya da yazılır
+    # (AGENT_LOG_FILE, varsayılan worker/logs/agent.log; her başlatmada sıfırlanır).
+    # Job süreçleri buraya GİRMEZ (spawn/forkserver çocuğu modülü __mp_main__ olarak
+    # import eder) → dosyayı yalnız ANA süreç açar/sıfırlar; job logları zaten IPC ile
+    # ana sürece akıp aynı handler'dan geçer (bkz. log_utils.setup_file_logging).
+    _log_path = setup_file_logging()
+    if _log_path is not None:
+        # cli.run_app henüz logging'i kurmadı (handler'ımız root'ta ama seviye NOTSET)
+        # → normal log çağrısı görünmeyebilir; kullanıcıya doğrudan söyle.
+        print(f"[worker] loglar şu dosyaya da yazılıyor: {_log_path}")
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
