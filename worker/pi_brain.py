@@ -81,6 +81,40 @@ def resolve_brain(choice: Optional[str]) -> tuple[str, str]:
 # Tur stall watchdog: son ilerlemeden (text_delta / başlangıç) bu kadar saniye HİÇ
 # olay gelmezse turu temiz kapat (WebSocket 1000 gibi ~33-40s takılmalara karşı).
 PI_TURN_STALL_TIMEOUT = float(os.environ.get("PI_TURN_STALL_TIMEOUT", "12") or 12)
+# SOĞUK İLK TUR toleransı. Taze doğan pi süreci (boot / konuşmacı swap / mod swap)
+# oturum geçmişini BAŞTAN yükler → llama-server'da KV cache soğuk → prefill 9-17s.
+# ÖLÇÜLDÜ: 16:34:19 swap → 16:34:33 stall (12s), llama-server aynı anda
+# "prompt eval time = 8893.82 ms / 8717 tokens". Yani watchdog SAĞLIKLI bir turu
+# kesip "Bir saniye, tekrar dener misin?" yedeğini söyletiyordu. Sıcak turlar 0.4-1s.
+# Bu tolerans SADECE sürecin ilk text_delta'sına kadar geçerli; delta gelir gelmez
+# watchdog PI_TURN_STALL_TIMEOUT'a düşer → gerçek takılmalarda hız kaybı YOK.
+PI_FIRST_TURN_STALL_TIMEOUT = float(
+    os.environ.get("PI_FIRST_TURN_STALL_TIMEOUT", "45") or 45
+)
+# Soğuk yükleme bu saniyeyi geçerse kullanıcıya TEK kısa cümle söyle (10+ sn sessiz
+# bekletmek kötü). 0 → hiç söyleme. Yalnız soğuk turda, tur başına EN FAZLA bir kez.
+PI_COLD_NOTICE_DELAY = float(os.environ.get("PI_COLD_NOTICE_DELAY", "5") or 0)
+PI_COLD_NOTICE_TEXT = (
+    os.environ.get("PI_COLD_NOTICE_TEXT") or "Bir saniye, aklımı topluyorum."
+)
+# ── Compaction (bağlam sıkıştırma) ara sözü ─────────────────────────────────
+# pi bağlam dolunca geçmişi özetler (`compaction_start` → uzun LLM çağrısı →
+# `compaction_end`). ACİL DEĞİLSE bunu tur SONUNA saklar (agent-session
+# _handlePostAgentRun) — oraya DOKUNMUYORUZ, cevap zaten söylenmiş olur.
+# Sorun ACİL halde: bağlam taşarsa (reason="overflow") cevap ÜRETİLEMEDEN
+# compaction çalışır → kullanıcı cevabını beklerken uzun süre SESSİZLİK duyar.
+# Ayrım için reason'a değil, kullanıcının o turda BİR ŞEY DUYUP DUYMADIĞINA
+# (got_delta) bakıyoruz: duyduysa sus, duymadıysa tek kısa cümle söyle.
+PI_COMPACTION_NOTICE_TEXT = (
+    os.environ.get("PI_COMPACTION_NOTICE_TEXT") or "Bir saniye, aklımı toparlıyorum."
+)
+# Compaction penceresinde watchdog toleransı. ZORUNLU: compaction_start ile
+# compaction_end arasında pi HİÇBİR olay yaymaz (araya tek bir `compact()` LLM
+# çağrısı giriyor) → normal 12s tolerans sağlıklı bir sıkıştırmayı keser, turu
+# abort ederdi. Sıkıştırma tüm bağlamı özetler → dakikayı bulabilir.
+PI_COMPACTION_STALL_TIMEOUT = float(
+    os.environ.get("PI_COMPACTION_STALL_TIMEOUT", "120") or 120
+)
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
 
@@ -111,12 +145,26 @@ def _envflag(name: str, default: bool) -> bool:
 PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
 # NOT: buraya EKLENMEYEN tool çalışmaz. reminder_* (proaktif hatırlatma) ve
 # memory_consolidate (bağlam şişmesi) mem extension'ından geliyor → allowlist'te olmalı.
+# SIRA ÖNEMLİ — dekoratif değil. Bu listenin sırası pi'nın modele gönderdiği `tools[]`
+# dizisinin sırasını BİREBİR belirler (kanıt: pi 0.80.6 core/agent-session.js:1966-1986 →
+# allowlist adları önce gelir, registry adları sonra eklenir, `new Set(...)` ilk görüleni
+# tutar → allowlist sırası korunur; extension yükleme/`-e` sırası ETKİSİZ. Sahte
+# llama-server proxy'siyle gerçek HTTP gövdesi yakalanarak doğrulandı).
+#
+# ÖLÇÜLEN HATA (N=20, gerçek 9 tool, "15 dk sonra çamaşırı al" isteği): model rol yapma
+# modundayken (soul_add ile "korsan gibi konuş" kalıcı talimatı) ve `web_search`,
+# `reminder_add`'den ÖNCE geldiğinde reminder_add çağrısı 5/20'ye düşüyor. 2x2 kontrol
+# koşusu suçlunun SIRA olduğunu gösterdi (açıklama uzunluğu değil). Rol yapma tek başına
+# ve sıra tek başına zararsız; ikisi birleşince çöküyor.
+#
+# KURAL: kritik EYLEM tool'ları (reminder_add, memory_add, soul_add) web_search/
+# fetch_content'ten ÖNCE gelmeli. Yeni tool eklerken bu sırayı bozma.
 PI_TOOLS_ALLOWLIST = os.environ.get(
     "PI_TOOLS_ALLOWLIST",
     # web_search    → @oresk/pi-searxng (kendi SearXNG'miz, .25:8888)
     # fetch_content → pi-web-access (doğrudan HTTP + Readability; sağlayıcı yok)
-    "memory_add,memory_search,web_search,fetch_content,"
-    "reminder_add,reminder_list,reminder_cancel,memory_consolidate,soul_add",
+    "reminder_add,memory_add,soul_add,memory_search,"
+    "reminder_list,reminder_cancel,web_search,fetch_content,memory_consolidate",
 )
 
 # pi'nın GLOBAL npm paket dizini (repo DIŞI). Web eklentileri buradan explicit `-e` ile
@@ -156,6 +204,61 @@ CONSOLIDATE_COOLDOWN = float(os.environ.get("CONSOLIDATE_COOLDOWN_SECONDS", "864
 #                                (bizim pi/AGENTS.md zaten --append-system-prompt ile giriyor)
 # PI_ISOLATED=false → eski davranış (global her şey tekrar sızar).
 PI_ISOLATED = _envflag("PI_ISOLATED", True)
+
+
+# ── SESLE GELİŞTİRME MODU (self-development, Faz 0) ───────────────────────────
+# Kullanıcı sesle "geliştirme moduna geç" deyince worker pi alt-sürecini SWAP eder:
+# normal beyin (Gemma, kod tool'ları KAPALI, family-memory AÇIK) → dev beyin (GPT-5.6,
+# kod tool'ları AÇIK, family-memory KAPALI, izole git worktree, AYRI session-id).
+# "Normal moda dön" → geri swap. Tetikleyici = native pi tool'u (enter_dev_mode/
+# exit_dev_mode, pi/extensions/mode-switch): tool çağrısı worker'ın event akışından
+# yakalanır → swap. DEV_MODE_ENABLED=false → tüm mekanizma kapalı, davranış bugünküyle
+# BİRE BİR aynı (enter_dev_mode tool'u bile sunulmaz).
+DEV_MODE_ENABLED = _envflag("DEV_MODE_ENABLED", True)
+DEV_PERSONA = os.environ.get("DEV_PERSONA", "dev")
+DEV_SESSION_ID = os.environ.get("DEV_SESSION_ID", "self-dev")
+# Dev beyni: uzak güçlü model (GPT-5.6). GPU gerekmez (Codex uzak).
+DEV_MODEL = os.environ.get("DEV_MODEL", "openai-codex/gpt-5.6-terra")
+DEV_THINKING = os.environ.get("DEV_THINKING", "minimal")
+# İzole çalışma dizini = ayrı git worktree + ayrı branch. İlk girişte oluşturulur,
+# sonraki girişlerde tekrar kullanılır (bkz. _ensure_dev_worktree).
+DEV_WORKTREE = Path(
+    os.environ.get("DEV_WORKTREE", str(REPO_ROOT.parent / "candan-lite-selfdev"))
+)
+DEV_BRANCH = os.environ.get("DEV_BRANCH", "self-dev")
+# Dev tool allowlist. BOŞ (default) → allowlist YOK + --no-builtin-tools YOK → tüm
+# native kod tool'ları (read/bash/edit/write/grep/find/ls) + mode-switch (exit_dev_mode)
+# açık. Kısıtlamak istersen virgüllü liste ver (o zaman exit_dev_mode'u da EKLE).
+DEV_TOOLS_ALLOWLIST = os.environ.get("DEV_TOOLS_ALLOWLIST", "")
+
+
+def _ensure_dev_worktree() -> Path:
+    """Dev worktree'yi oluştur (ilk giriş) veya yeniden kullan. İzole branch = DEV_BRANCH.
+    Var olan worktree'yi/branch'i ASLA sıfırlamaz → önceki dev işi korunur. Senkron; swap
+    anında asyncio.to_thread ile çağrılır (event loop'u bloklamaz)."""
+    import subprocess
+
+    wt = DEV_WORKTREE
+    if (wt / ".git").exists():
+        return wt  # zaten kurulu worktree → tekrar kullan
+
+    def _git(*a: str) -> "subprocess.CompletedProcess[str]":
+        return subprocess.run(
+            ["git", "-C", str(REPO_ROOT), *a], capture_output=True, text=True
+        )
+
+    branch_exists = (
+        _git("rev-parse", "--verify", "--quiet", f"refs/heads/{DEV_BRANCH}").returncode == 0
+    )
+    if branch_exists:
+        r = _git("worktree", "add", str(wt), DEV_BRANCH)
+    else:
+        r = _git("worktree", "add", "-b", DEV_BRANCH, str(wt))
+    if r.returncode != 0:
+        logger.warning("dev worktree kurulamadı: %s", (r.stderr or "").strip())
+    else:
+        logger.info("dev worktree hazır: %s (branch %s)", wt, DEV_BRANCH)
+    return wt
 
 
 # Wake word ("konuşma penceresi") — sistem sürekli açık; agent normalde uyur,
@@ -259,6 +362,160 @@ def wake_match(text: str, wake_norm: Optional[str] = None,
             if squashed == v or _levenshtein(squashed, v) <= _WAKE_FUZZY_DIST:
                 return True, ""
     return False, text
+
+
+# ── Sohbet sıfırlama komutu (deterministik ifade eşleşmesi) ──────────────────
+# NEDEN LLM'e SORULMUYOR: ölçtük — model, uygulanabilir görünen talimatı bir tool
+# ÇAĞIRARAK değil, "tamam yaptım" DİYEREK geçiştiriyor (soul_add 0/8). "Yeni sohbet
+# başlat" aynı sınıfta → tool'a bağlansaydı sıfırlama hiç OLMAZDI. Bu yüzden wake
+# word gibi: transkript üzerinde, pi'ya prompt GİTMEDEN, burada eşleşir.
+RESET_ENABLED = (os.environ.get("RESET_ENABLED", "true") or "").strip().lower() not in (
+    "0", "false", "no", "off",
+)
+# Sıfırlama ifadeleri (virgülle). Eşleşme aksan/case/noktalama duyarsız (_wake_squash).
+RESET_PHRASES = os.environ.get(
+    "RESET_PHRASES",
+    "yeni sohbet başlat,yeni sohbete başla,yeni sohbet,sohbeti sıfırla,sohbeti resetle,"
+    "geçmişi sıfırla,geçmişi temizle,sohbeti temizle,yeni konuşma başlat,baştan başla,"
+    "yeni oturum aç,yeni oturum başlat,oturumu yenile,oturumu sıfırla,yeni sayfa aç",
+)
+# Sıfırlama sonrası sesli/görsel onay (kullanıcı komutun İŞLEDİĞİNİ duysun).
+RESET_ACK = os.environ.get("RESET_ACK", "Tamam, yeni sohbet başlattım. Seni dinliyorum.")
+RESET_FAIL = os.environ.get("RESET_FAIL", "Şu anda sohbeti sıfırlayamadım, sonra tekrar deneyelim.")
+# Yakın-ıska soru/ret satırları (bkz. reset_near_match).
+RESET_CONFIRM_ASK = os.environ.get(
+    "RESET_CONFIRM_ASK", "Yeni sohbet başlatmamı mı istiyorsun?"
+)
+RESET_CONFIRM_NO = os.environ.get("RESET_CONFIRM_NO", "Tamam, devam ediyoruz.")
+# Komut denemesi eşiği: sıfırlama YIKICI-hissi bir işlem → sadece KISA/kasıtlı sözde
+# ara. Uzun cümle içinde ("dün yeni sohbet başlat demiştim") TETİKLEMEZ.
+# 5 → 7: kullanıcı doğal konuşuyor ("bu oturumu kapatıp yeni bir oturum açar mısın"
+# 7 kelimeydi). Yanlış-pozitif riski DÜŞÜK: asıl koruma kelime sayısı değil, TÜM
+# cümlenin squash'ı ile ifadenin squash'ı arasındaki mesafe (uzun cümle → uzak).
+_RESET_MAX_WORDS = 7
+# 1 → 2. NEDEN: "başlat" → "başladı" bir STT kazası DEĞİL, Türkçe'de yapısal — emir
+# kipi ile geçmiş zaman tek-iki harfle ayrışıyor. Ölçüldü: "yeni sohbet başladı"
+# mesafe 2 idi → tolerans 1 ile SESSİZCE ıskalandı, metin LLM'e gitti, model
+# sıfırlamayı yapmadan "yaptım" dedi. Kullanıcı sıfırladım sandı.
+_RESET_FUZZY_DIST = 2
+# Yakın-ıska bandının üst sınırı: (_RESET_FUZZY_DIST, _RESET_NEAR_DIST] aralığı
+# "benziyor ama emin değilim" demek → YÜRÜTME, SOR. Levenshtein >= |uzunluk farkı|
+# olduğundan 4 mesafe zaten uzunlukları 4 içine hapseder → ayrı uzunluk guard'ı
+# gerekmez. Bant genişletmenin maliyeti yanlış SİLME değil, fazladan bir SORU.
+_RESET_NEAR_DIST = 4
+
+
+def _reset_squash(s: str) -> str:
+    """_wake_squash + Türkçe noktasız-ı katlaması ('ı'→'i').
+
+    NEDEN: NFKD 'ş'→'s', 'ğ'→'g' yapar ama 'ı' AYRI bir harftir, 'i'ye inmez. STT
+    kimi zaman "sıfırla", kimi zaman ASCII "sifirla" yazar → squash'lar 2 karakter
+    ayrışır, _RESET_FUZZY_DIST(1) yetmez, komut SESSİZCE kaçardı. İki yazımı da
+    aynı forma indiriyoruz. (wake yolu ETKİLENMEZ — _wake_squash'a dokunulmadı.)"""
+    return _wake_squash(s).replace("ı", "i")
+
+
+def _reset_phrases(raw: str = RESET_PHRASES) -> frozenset:
+    """Sıfırlama ifadelerinin squash edilmiş (boşluksuz/aksansız) kümesi."""
+    out = set()
+    for p in (raw or "").split(","):
+        p = _reset_squash(p)
+        if p:
+            out.add(p)
+    return frozenset(out)
+
+
+def _reset_distance(text: str, phrases: Optional[frozenset] = None) -> Optional[int]:
+    """Metnin sıfırlama ifadelerine EN YAKIN squash mesafesi; komut hiç denenmiyorsa None.
+
+    Wake word ZATEN ayıklanmış metin beklenir ("candan yeni sohbet başlat" →
+    "yeni sohbet başlat"). Sadece KISA söz (≤_RESET_MAX_WORDS) denenir → uzun
+    cümlede geçen aynı kelimeler sıfırlama TETİKLEMEZ (yanlış-pozitif koruması).
+    None ("hiç bakmadık") ile büyük mesafe ("baktık, uzak") AYRI: yakın-ıska
+    yolu ikisini farklı ele alır."""
+    if not RESET_ENABLED:
+        return None
+    words = re.findall(r"\w+", text or "", re.UNICODE)
+    if not words or len(words) > _RESET_MAX_WORDS:
+        return None
+    squashed = _reset_squash(text)
+    if not squashed:
+        return None
+    ps = _reset_phrases() if phrases is None else phrases
+    if not ps:
+        return None
+    return min(_levenshtein(squashed, p) for p in ps)
+
+
+def reset_match(text: str, phrases: Optional[frozenset] = None) -> bool:
+    """Metin bir sohbet-sıfırlama komutu mu? Deterministik (LLM YOK). Tam eşleşme
+    bandı: mesafe ≤ _RESET_FUZZY_DIST → SORMADAN yürüt."""
+    d = _reset_distance(text, phrases)
+    return d is not None and d <= _RESET_FUZZY_DIST
+
+
+def reset_near_match(text: str, phrases: Optional[frozenset] = None) -> bool:
+    """Yakın-ıska: sıfırlamaya BENZİYOR ama tam eşleşmiyor → YÜRÜTME, SOR.
+
+    NEDEN: tolerans ne olursa olsun eşiğin bir kenarı vardır ve kenarın dışına
+    düşen kasıtlı komut bugüne kadar SESSİZCE LLM'e gidiyordu — model de tool
+    çağırmadan "yaptım" diyordu. Bant, o kenarı sessiz-ıska yerine SORU'ya
+    çevirir: model SORAR, deterministik kod YÜRÜTÜR (sıfırlama ASLA modele
+    bırakılmaz)."""
+    d = _reset_distance(text, phrases)
+    return d is not None and _RESET_FUZZY_DIST < d <= _RESET_NEAR_DIST
+
+
+def _find_session_file(session_id: str, session_dir: Path) -> Optional[Path]:
+    """`sessions/` içinde header id'si `session_id` olan jsonl'i bul (pi'nın
+    --session-id çözümüyle AYNI kural: dosya ADI değil, ilk satırdaki header.id).
+    Bulunamazsa None. Sadece OKUR."""
+    if not session_dir.is_dir():
+        return None
+    for p in sorted(session_dir.glob("*.jsonl"), reverse=True):
+        try:
+            with p.open("r", encoding="utf-8", errors="replace") as f:
+                first = f.readline()
+            hdr = json.loads(first)
+        except Exception:  # noqa: BLE001 — bozuk/boş dosya → aday değil
+            continue
+        if isinstance(hdr, dict) and hdr.get("type") == "session" and hdr.get("id") == session_id:
+            return p
+    return None
+
+
+def _rotate_session_id(session_id: str, session_dir: Path) -> Optional[Path]:
+    """Sohbet geçmişini "sıfırla" — SİLMEDEN.
+
+    Eski jsonl'in header `id`'sini `<slug>-<timestamp>` ile döndürür (dosya YERİNDE
+    kalır, tek satır değişir). Sonuç: pi bir daha `--session-id <slug>` ile o dosyayı
+    BULAMAZ → taze oturum açar; eski geçmiş diskte ve panoda (tools/dashboard.py
+    dosya ADINDAN kişi çıkarır, ad DEĞİŞMEZ) okunabilir kalır.
+
+    NEDEN dosyayı taşımıyoruz: pi'nın tarama'sı `sessions/` KÖKÜNDE non-recursive
+    (`readdir` + `.jsonl`), alt dizin resume'a girmez — ama pano da göremezdi.
+    NEDEN pi'nın `new_session` RPC'si TEK BAŞINA yetmiyor: o, süreç-içi dosyayı
+    `<ts>_<rastgele-id>.jsonl`'e çevirir ama ESKİ dosyanın header id'si `<slug>`
+    kalır → worker bir sonraki açılışta `--session-id <slug>` ile ESKİ geçmişi
+    yeniden resume ederdi (sıfırlama kalıcı OLMAZDI).
+
+    Döner: arşivlenen dosya (yoksa None = zaten temiz, sıfırlanacak bir şey yok)."""
+    p = _find_session_file(session_id, session_dir)
+    if p is None:
+        return None
+    lines = p.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    if not lines:
+        return None
+    hdr = json.loads(lines[0])
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
+    # assertValidSessionId: sadece [A-Za-z0-9._-], alnum ile başla/bit → slug+stamp uyar.
+    hdr["id"] = f"{session_id}-eski-{stamp}"
+    lines[0] = json.dumps(hdr, ensure_ascii=False) + "\n"
+    # Atomik: geçici dosyaya yaz + replace → yarıda kesilirse eski dosya BOZULMAZ.
+    tmp = p.with_suffix(".jsonl.tmp")
+    tmp.write_text("".join(lines), encoding="utf-8")
+    os.replace(tmp, p)
+    return p
 
 
 class WakeGate:
@@ -511,16 +768,74 @@ def _persona_exists(persona: str) -> bool:
     return (REPO_ROOT / PI_PERSONA_DIR / f"{persona}.md").is_file()
 
 
+# ── Prewarm tahmini: son bilinen konuşmacı ───────────────────────────────────
+# NEDEN: job init'te varsayılan persona (candan/candan) için warm pi kuruluyordu;
+# kullanıcı konuşup speaker-ID onu Ayhan yapınca _current_client o warm süreci ÇÖPE
+# ATIP sıfırdan ayhan/ayhan doğuruyordu. Yani prewarm HER oturumda israftı ve soğuk
+# yükleme maliyeti kullanıcı konuştuktan SONRA ödeniyordu (ölçüm: 17:14:34 wake →
+# aynı saniye swap → cevap 17:15:43, 69 sn). Son konuşanı ısıtırsak tahmin TUTTUĞUNDA
+# swap hiç olmaz. Tahmin TUTMAZSA swap yolu aynen çalışır → bugünkünden kötü değil.
+# İşaret dosyası çünkü: speakers.db'deki updated_at son ENROLL'u gösterir, son
+# GÖRÜLMEyi değil — tanınmak updated_at'i bümez, o yüzden proxy olarak yanlış.
+def _last_speaker_path() -> Path:
+    """memory/last_speaker.json (MEMORY_DIR mutlak ise o — test izolasyonu)."""
+    return REPO_ROOT / MEMORY_DIR / "last_speaker.json"
+
+
+def read_last_speaker() -> Optional[str]:
+    """Son tanınan konuşmacının slug'ı. Dosya yok/bozuk → None (sessizce varsayılana
+    düşülür). Bu bir İPUCU'dur, doğruluk garantisi değil."""
+    try:
+        d = json.loads(_last_speaker_path().read_text())
+    except Exception:  # noqa: BLE001 — ipucu okunamazsa varsayılanla devam
+        return None
+    slug = d.get("slug") if isinstance(d, dict) else None
+    return slug if isinstance(slug, str) and slug else None
+
+
+def write_last_speaker(slug: str) -> None:
+    """İşaret dosyasını ATOMİK yaz (tmp + os.replace). Kilit YOK: bu sadece bir
+    prewarm ipucu, son yazan kazanır — yanlış değer en fazla bir swap'a mal olur.
+    Best-effort: hata konuşmayı BOZMAZ."""
+    import tempfile
+
+    if not slug:
+        return
+    path = _last_speaker_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".last-speaker-", suffix=".json")
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump({"slug": slug, "at": time.time()}, f, ensure_ascii=False)
+                f.write("\n")
+            os.replace(tmp, path)  # atomik: yarıda kalan yazım ipucunu bozmaz
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except Exception:  # noqa: BLE001 — ipucu yazılamazsa davranış bugünküyle AYNI
+        logger.debug("last_speaker yazılamadı", exc_info=True)
+
+
 def _build_pi_args(
     persona: str,
     session_id: str,
     model: Optional[str] = None,
     thinking: Optional[str] = None,
+    dev: bool = False,
 ) -> list[str]:
     """pi --mode rpc bayrakları (docs/pi-brain-design.md).
 
     model/thinking: oturum başı beyin seçimi (bkz. BRAINS/resolve_brain). None →
-    .env varsayılanı (PI_MODEL/PI_THINKING) = bugünkü davranış."""
+    .env varsayılanı (PI_MODEL/PI_THINKING) = bugünkü davranış.
+
+    dev=True → SESLE GELİŞTİRME modu (bkz. DEV_MODE_ENABLED): native kod tool'ları
+    AÇIK (--no-builtin-tools YOK, dev allowlist), family-memory ve kişisel hafıza
+    enjeksiyonu KAPALI (dev sohbeti asistanın hafızasına karışmaz). dev=False →
+    bugünkü normal davranış BİRE BİR korunur."""
     model = model or PI_MODEL
     thinking = PI_THINKING if thinking is None else thinking
     args = [PI_BIN, "--mode", "rpc", "--approve", "--model", model]
@@ -535,9 +850,19 @@ def _build_pi_args(
     # Tool politikası: built-in'leri (read/edit/bash/grep/web_search…) kapat; lokal mem
     # extension'ı (memory_add/memory_search) yaşasın. İsteğe bağlı allowlist ile tek tek
     # tool geri açılabilir (ör. web_search).
-    if PI_NO_BUILTIN_TOOLS:
+    # Dev modunda native kod tool'ları AÇIK → --no-builtin-tools EKLENMEZ.
+    if PI_NO_BUILTIN_TOOLS and not dev:
         args += ["--no-builtin-tools"]
-    allowlist = ",".join(t.strip() for t in PI_TOOLS_ALLOWLIST.split(",") if t.strip())
+    raw_allow = DEV_TOOLS_ALLOWLIST if dev else PI_TOOLS_ALLOWLIST
+    allow_items = [t.strip() for t in raw_allow.split(",") if t.strip()]
+    # Mod-değişim tetikleyici tool'u ilgili modun allowlist'ine gir: normal → enter,
+    # dev → exit. Allowlist boşsa (dev default) HİÇ eklenmez → kısıtlama yok, tool zaten
+    # yüklü extension'dan çağrılabilir. Böylece boş-allowlist = "tümü açık" korunur.
+    if DEV_MODE_ENABLED and allow_items:
+        mode_tool = "exit_dev_mode" if dev else "enter_dev_mode"
+        if mode_tool not in allow_items:
+            allow_items.append(mode_tool)
+    allowlist = ",".join(allow_items)
     if allowlist:
         args += ["--tools", allowlist]
     # Ortak taban + kişilik overlay'i sistem prompt'una ekle.
@@ -552,41 +877,53 @@ def _build_pi_args(
     # (memory/users/<user>/soul.md) SADECE tanınan kullanıcıya ve ortak tabanın
     # ARDINDAN (sonra gelen = öncelikli) yüklenir → çelişirse kişininki geçerli.
     # Dosya yoksa graceful: hiçbir şey eklenmez, davranış bugünküyle aynı.
-    soul_common = REPO_ROOT / MEMORY_DIR / "soul.md"
-    if soul_common.is_file():
-        args += ["--append-system-prompt", str(soul_common)]
-    # Hafıza çekirdeği (küçük, boot'ta yüklü). Kullanıcı kimliği = session_id slug'ı
-    # (tanınan kişi). Guest/unknown → mem_user boş → hiçbir şey eklenmez (Faz 2 aynen).
-    mem_user = _mem_user(session_id)
-    if mem_user:
-        mem = REPO_ROOT / MEMORY_DIR
-        profile = mem / "users" / mem_user / "profile.md"
-        if profile.is_file():
-            args += ["--append-system-prompt", str(profile)]
-        family = mem / "family.md"
-        if family.is_file():  # role != guest zaten garanti (mem_user dolu)
-            args += ["--append-system-prompt", str(family)]
-        # Kişiye özel ruh (ortak tabanın ÜSTÜNDE; çelişirse bu geçerli).
-        soul = mem / "users" / mem_user / "soul.md"
-        if soul.is_file():
-            args += ["--append-system-prompt", str(soul)]
-        # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
-        args += [
-            "--append-system-prompt",
-            (f"Aktif kullanıcı: {mem_user}. "
-             f"Hafıza yolun: {MEMORY_DIR}/users/{mem_user}/ "
-             f"(notlar: notes/, profil: profile.md). "
-             f"Ortak aile hafızası: {MEMORY_DIR}/family.md."),
-        ]
+    # Kişisel/aile hafıza enjeksiyonu SADECE normal modda. Dev modunda KAPALI: dev
+    # sohbeti asistanın hafızasını bağlamına almaz (ve family-memory tool'u da yüklenmez
+    # → dev sohbeti hafızaya YAZAMAZ; ikinci karışmama garantisi).
+    if not dev:
+        soul_common = REPO_ROOT / MEMORY_DIR / "soul.md"
+        if soul_common.is_file():
+            args += ["--append-system-prompt", str(soul_common)]
+        # Hafıza çekirdeği (küçük, boot'ta yüklü). Kullanıcı kimliği = session_id slug'ı
+        # (tanınan kişi). Guest/unknown → mem_user boş → hiçbir şey eklenmez (Faz 2 aynen).
+        mem_user = _mem_user(session_id)
+        if mem_user:
+            mem = REPO_ROOT / MEMORY_DIR
+            profile = mem / "users" / mem_user / "profile.md"
+            if profile.is_file():
+                args += ["--append-system-prompt", str(profile)]
+            family = mem / "family.md"
+            if family.is_file():  # role != guest zaten garanti (mem_user dolu)
+                args += ["--append-system-prompt", str(family)]
+            # Kişiye özel ruh (ortak tabanın ÜSTÜNDE; çelişirse bu geçerli).
+            soul = mem / "users" / mem_user / "soul.md"
+            if soul.is_file():
+                args += ["--append-system-prompt", str(soul)]
+            # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
+            args += [
+                "--append-system-prompt",
+                (f"Aktif kullanıcı: {mem_user}. "
+                 f"Hafıza yolun: {MEMORY_DIR}/users/{mem_user}/ "
+                 f"(notlar: notes/, profil: profile.md). "
+                 f"Ortak aile hafızası: {MEMORY_DIR}/family.md."),
+            ]
     skills = REPO_ROOT / PI_SKILLS_DIR
     if skills.exists():
         args += ["--skill", str(skills)]
     # LOKAL pi extension: family-memory (memory_add/memory_search + reminder_* +
     # memory_consolidate). Sadece worker'ın pi'sinde yüklenir (global DEĞİL). Guest'te de
     # yüklenebilir — tool'lar MEM_USER boşsa kendini reddeder. Dosya yoksa graceful.
-    mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
-    if mem_ext.is_file():
-        args += ["-e", str(mem_ext)]
+    # family-memory SADECE normal modda (dev sohbeti hafızaya yazamasın).
+    if not dev:
+        mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
+        if mem_ext.is_file():
+            args += ["-e", str(mem_ext)]
+    # mode-switch: enter_dev_mode/exit_dev_mode tool'ları. İKİ modda da yüklenir (normal →
+    # enter'ı, dev → exit'i sunar). DEV_MODE_ENABLED=false → hiç yüklenmez (mekanizma kapalı).
+    if DEV_MODE_ENABLED:
+        ms_ext = REPO_ROOT / "pi" / "extensions" / "mode-switch" / "index.ts"
+        if ms_ext.is_file():
+            args += ["-e", str(ms_ext)]
     # ---- WEB ERİŞİMİ (2026-07-14: Qwant → SearXNG) ---------------------------
     # ESKİ YOL (DEVRE DIŞI, dosya duruyor): pi/extensions/websearch/index.ts = anahtarsız
     # Qwant kazıması. Qwant CAPTCHA döndürmeye başladı → `web_search` canlıda ÖLÜYDÜ.
@@ -619,7 +956,11 @@ def _build_pi_args(
     web_access_ext = PI_NPM_DIR / "pi-web-access" / "index.ts"
     if web_access_ext.is_file():
         args += ["-e", str(web_access_ext)]
-    args += ["--session-dir", PI_SESSION_DIR, "--session-id", session_id]
+    # Session dizini: dev'de pi'nın cwd'si worktree olduğu için RELATİF "sessions" worktree'ye
+    # düşerdi → ANA repo'nun sessions/'ına sabitle (dev session'ı ayrı ID ile orada, normal
+    # sohbete KARIŞMAZ). Normal modda cwd=REPO_ROOT olduğundan sonuç bugünküyle aynı dizin.
+    session_dir = str(REPO_ROOT / PI_SESSION_DIR) if dev else PI_SESSION_DIR
+    args += ["--session-dir", session_dir, "--session-id", session_id]
     return args
 
 
@@ -636,16 +977,26 @@ class PiRpcClient:
         session_id: str,
         model: Optional[str] = None,
         thinking: Optional[str] = None,
+        cwd: Optional[Path] = None,
+        dev: bool = False,
     ):
-        self._args = _build_pi_args(persona, session_id, model, thinking)
-        # Alt-sürece geçecek hafıza kimliği (guest → ""). memory-skill $MEM_USER'ı okur.
-        self._mem_user = _mem_user(session_id)
+        self._args = _build_pi_args(persona, session_id, model, thinking, dev=dev)
+        # cwd: normal → REPO_ROOT (bugünkü); dev → izole worktree (kod EDIT'leri orada kalır).
+        self._cwd = Path(cwd) if cwd is not None else REPO_ROOT
+        self._dev = dev
+        # Alt-sürece geçecek hafıza kimliği. Dev'de family-memory yüklenmez → boş (hafıza yok).
+        self._mem_user = "" if dev else _mem_user(session_id)
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._pending: dict[str, asyncio.Future] = {}
         self._turn_q: Optional[asyncio.Queue] = None
         self._turn_lock = asyncio.Lock()
         self._start_lock = asyncio.Lock()
+        # Bu SÜREÇ hiç text_delta üretti mi? False iken ilk tur "soğuk" sayılır
+        # (oturum geçmişi baştan yüklenir, KV cache soğuk) → uzun stall toleransı.
+        # İlk delta ile True olur ve süreç ölene kadar öyle kalır (yeni PiRpcClient =
+        # yeni süreç = yeniden False; swap zaten yeni nesne kurar).
+        self.warmed_up = False
 
     @property
     def started(self) -> bool:
@@ -657,7 +1008,7 @@ class PiRpcClient:
                 return
             self._proc = await asyncio.create_subprocess_exec(
                 *self._args,
-                cwd=str(REPO_ROOT),
+                cwd=str(self._cwd),
                 env={**os.environ, "MEM_USER": self._mem_user},
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -892,6 +1243,17 @@ if _HAS_LIVEKIT:
                 _emit(scripted)
                 return
 
+            # Sohbet sıfırlama komutu ("candan, yeni sohbet başlat") — wake gibi
+            # DETERMİNİSTİK ifade eşleşmesi, pi'ya GİTMEZ. Modele tool olarak
+            # bırakılmaz: ölçüldü, model bu sınıf talimatı çağırmak yerine "tamam"
+            # deyip geçiyor → sıfırlama hiç olmazdı. Guest dahil herkese SERBEST
+            # (guest'in zaten hafızası yok; sıfırlanan sadece sohbet geçmişi).
+            # Yakın-ıska (benziyor ama emin değil) → yürütmez, SORAR: bkz. _reset_line.
+            scripted = await self._brain._reset_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
@@ -911,34 +1273,94 @@ if _HAS_LIVEKIT:
                 try:
                     await self._client.send({"type": "prompt", "message": text})
                     # Watchdog: her ilerlemede (text_delta / herhangi olay) sıfırlanan
-                    # inaktivite sayacı. PI_TURN_STALL_TIMEOUT boyunca HİÇ olay gelmezse
-                    # (WebSocket 1000 gibi ~33-40s takılma) turu temiz kapat.
+                    # inaktivite sayacı. Tolerans boyunca HİÇ olay gelmezse (WebSocket
+                    # 1000 gibi ~33-40s takılma) turu temiz kapat.
+                    #
+                    # SOĞUK İLK TUR: taze süreç henüz delta üretmediyse tolerans
+                    # PI_FIRST_TURN_STALL_TIMEOUT (uzun) — prefill 9-17s sürebilir ve bu
+                    # SAĞLIKLIDIR. İlk delta gelir gelmez PI_TURN_STALL_TIMEOUT'a (kısa)
+                    # düşeriz: akış başladıysa duraklama artık gerçek takılmadır.
+                    cold = not self._client.warmed_up
+                    compacting = False   # compaction_start..end penceresi
+                    def _budget() -> float:
+                        # Compaction penceresi HER ŞEYİ ezer: bu sessizlik sağlıklı,
+                        # takılma değil (bkz. PI_COMPACTION_STALL_TIMEOUT).
+                        if compacting:
+                            return PI_COMPACTION_STALL_TIMEOUT
+                        return (
+                            PI_FIRST_TURN_STALL_TIMEOUT
+                            if (cold and not got_delta)
+                            else PI_TURN_STALL_TIMEOUT
+                        )
+
+                    # Soğuk beklemede kullanıcıyı sessiz bırakma: tek kısa cümle söyle.
+                    # notice_at None → ya kapalı ya da zaten söylendi/gerek kalmadı.
+                    notice_at: Optional[float] = (
+                        time.monotonic() + PI_COLD_NOTICE_DELAY
+                        if (cold and PI_COLD_NOTICE_DELAY > 0)
+                        else None
+                    )
+                    last_progress = time.monotonic()
                     while True:
+                        now = time.monotonic()
+                        # Tolerans her turda YENİDEN hesaplanır: ilk delta geldiği anda
+                        # uzun → kısa geçiş burada yürürlüğe girer.
+                        stall_at = last_progress + _budget()
+                        # En yakın uyanma anına kadar bekle (stall ya da bildirim).
+                        wake_at = stall_at if notice_at is None else min(stall_at, notice_at)
                         try:
                             obj = await asyncio.wait_for(
-                                q.get(), timeout=PI_TURN_STALL_TIMEOUT
+                                q.get(), timeout=max(0.05, wake_at - now)
                             )
                         except asyncio.TimeoutError:
+                            if notice_at is not None and time.monotonic() >= notice_at:
+                                # Soğuk yükleme uzuyor → TEK cümle, sonra beklemeye devam.
+                                # got_delta'yı DEĞİŞTİRMEZ: bu pi'nın cevabı değil, bizim
+                                # ara sözümüz; watchdog hâlâ uzun toleransta kalmalı.
+                                notice_at = None
+                                logger.info(
+                                    "pi soğuk yükleme %.0fs+ → kullanıcıya ara söz",
+                                    PI_COLD_NOTICE_DELAY,
+                                )
+                                _emit(PI_COLD_NOTICE_TEXT)
+                                continue
                             logger.warning(
                                 "pi tur stall: %.0fs ilerleme yok → tur kapatılıyor "
-                                "(got_delta=%s)", PI_TURN_STALL_TIMEOUT, got_delta,
+                                "(got_delta=%s cold=%s)", _budget(), got_delta, cold,
                             )
                             stalled = True
                             break
+                        # İlerleme var → inaktivite sayacını sıfırla.
+                        last_progress = time.monotonic()
                         if obj is None:  # süreç öldü
                             break
                         etype = obj.get("type")
-                        # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). Olayın TİPİNE
-                        # bakmıyoruz, MESAJINA bakıyoruz: hem assistant (toolCall) hem
-                        # toolResult mesajları `message` alanıyla gelir. Tekrar id ile
-                        # elenir; yayın hatası turu BOZMAZ (best-effort).
-                        self._brain._publish_tool_msg(obj.get("message"))
+                        # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). SADECE mesaj
+                        # KESİNLEŞİNCE (message_end/turn_end): message_update akışında
+                        # toolCall.arguments PARÇA PARÇA dolar (önce {}, sonra {"text":"Ç"}…).
+                        # Erken yayınlarsak dedupe "ilk gelen kazanır" mantığıyla dolu hâli
+                        # eler → kartta argümanlar boş görünürdü. Hem assistant (toolCall) hem
+                        # toolResult mesajları message_end ile TAM gelir. Aynı olay
+                        # message_end + turn_end ile iki kez gelebilir → id ile elenir;
+                        # yayın hatası turu BOZMAZ (best-effort).
+                        if etype in ("message_end", "turn_end"):
+                            self._brain._publish_tool_msg(obj.get("message"))
+                        # Dev tool sinyali (enter_dev_mode/exit_dev_mode) → mod isteği.
+                        # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
+                        # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
+                        self._brain._detect_mode_signal(obj.get("message"))
                         if etype == "message_update":
                             ame = obj.get("assistantMessageEvent") or {}
                             if ame.get("type") == "text_delta":
                                 delta = ame.get("delta") or ""
                                 if delta:
-                                    got_delta = True
+                                    if not got_delta:
+                                        # İlk delta: süreç ısındı (KV cache dolu) →
+                                        # sonraki turlar kısa toleransla başlar. Bekleyen
+                                        # ara söz varsa iptal (cevap zaten akmaya başladı).
+                                        got_delta = True
+                                        notice_at = None
+                                        self._client.warmed_up = True
                                     _emit(delta)
                         elif etype in ("message_end", "turn_end"):
                             msg = obj.get("message")
@@ -953,6 +1375,30 @@ if _HAS_LIVEKIT:
                                     # (33s takılabilir); turu hemen kapat/fallback ver.
                                     stalled = True
                                     break
+                        elif etype == "compaction_start":
+                            # Bağlam doldu → pi geçmişi özetliyor. Pencere boyunca
+                            # HİÇ olay gelmez → watchdog'u uzun toleransa al.
+                            compacting = True
+                            reason = obj.get("reason") or "?"
+                            # Kullanıcı bu turda cevabın bir kısmını DUYDUYSA (got_delta)
+                            # sıkıştırma onun için görünmez (cevap bitti, tur sonu işi) →
+                            # SUSMAK doğru. Hiç duymadıysa cevabını bekliyor demektir →
+                            # sessiz bırakma. Bekleyen soğuk-yükleme ara sözünü de iptal
+                            # et: iki ara söz üst üste söylenmesin.
+                            logger.info(
+                                "pi compaction başladı (reason=%s got_delta=%s) → %s",
+                                reason, got_delta,
+                                "sessiz (cevap zaten akmıştı)" if got_delta else "ara söz",
+                            )
+                            if not got_delta:
+                                notice_at = None
+                                _emit(PI_COMPACTION_NOTICE_TEXT)
+                        elif etype == "compaction_end":
+                            compacting = False
+                            logger.info(
+                                "pi compaction bitti (aborted=%s willRetry=%s)",
+                                obj.get("aborted"), obj.get("willRetry"),
+                            )
                         elif etype == "agent_settled":
                             break
                     # Fallback: hiç delta gelmediyse ama tam-content varsa onu stream et.
@@ -1000,9 +1446,26 @@ if _HAS_LIVEKIT:
             brain: Optional[str] = None,
         ):
             super().__init__()
+            # _default_persona TAHMİNDEN ETKİLENMEZ: tanınmayan/guest konuşmacının
+            # hedefi (bkz. _target) hep bu kalmalı. Tahmin sadece hangi süreci
+            # ISITTIĞIMIZI değiştirir, kimin kim olduğunu DEĞİL.
             self._default_persona = persona
             self._persona = persona
             self._session_id = session_id or persona
+            # PREWARM TAHMİNİ: son bilinen konuşmacıyı ısıt (bkz. read_last_speaker).
+            # SADECE speaker-ID açıkken (speaker_state) ve çağıran açıkça bir session_id
+            # dayatmadıysa. speaker_state None iken _current_client swap YAPMAZ → yanlış
+            # tahmin oturum boyunca YAPIŞIR; o yüzden guard şart.
+            # _last_noted: işaret dosyasına EN SON yazılan slug (tekrar yazımı eler).
+            # Tahmin tuttuysa dosya zaten o değerde → gereksiz yazım hiç olmaz.
+            self._last_noted = ""
+            if speaker_state is not None and session_id is None:
+                # speaker_id PARAMETREDEN geçer: self._speaker_id bu noktada henüz
+                # atanmadı (aşağıda) — self'ten okumak sessizce None tahmin üretirdi.
+                guess = self._prewarm_guess(speaker_id)
+                if guess:
+                    self._persona, self._session_id = guess
+                    self._last_noted = guess[1]
             # Beyin seçimi (oturum başı; web dispatch metadata'sı → agent.py). Geçersiz/
             # yoksa .env varsayılanına düşer. Konuşmacı değişiminde (pi swap) de KORUNUR.
             self._model, self._thinking = resolve_brain(brain)
@@ -1018,6 +1481,13 @@ if _HAS_LIVEKIT:
                 self._persona, self._session_id, self._model, self._thinking
             )
             self._swap_lock = asyncio.Lock()
+            # SESLE GELİŞTİRME modu durumu. _mode: aktif mod ("normal"|"dev"). _pending_mode:
+            # dev tool sinyali (enter/exit) ile istenen mod; bir sonraki tur başında uygulanır
+            # (mevcut tur, komutu söyleyen pi'da temiz biter). _saved_normal: dev'e geçerken
+            # normal (persona, session) yedeği → çıkışta bire bir geri dönmek için.
+            self._mode = "normal"
+            self._pending_mode: Optional[str] = None
+            self._saved_normal: Optional[tuple[str, str]] = None
             # `mate.tool` yayıncısı (agent.py bağlar; None → yayın YOK, eski davranış).
             # Tool çağrısı/sonucu olayları buradan odaya gider; hata konuşmayı BOZMAZ.
             self._tool_publisher: Optional[Callable[[dict], None]] = None
@@ -1034,11 +1504,13 @@ if _HAS_LIVEKIT:
             self._enroll_name: Optional[str] = None
             self._enroll_emb: Any = None                  # tetikleyen sözün embed'i
             self._enroll_name_emb: Any = None             # ismi söylerkenki embed
-            self._enroll_retried = False                  # isim bir kez tekrar soruldu mu
+            self._enroll_retried = 0                      # isim kaç kez tekrar soruldu
             self._enroll_match: Optional[str] = None      # sese benzeyen mevcut kişi
             self._onboarding_asked = False                # bu bağlantıda soruldu mu
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
+            # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
+            self._reset_pending = False
             # Wake word gate (konuşma penceresi). Kapalıysa gate yok (mevcut davranış).
             self._wake = WakeGate()
             self._wake_task: Optional[asyncio.Task] = None
@@ -1056,7 +1528,11 @@ if _HAS_LIVEKIT:
 
             Hiçbir koşulda turu bozmaz: yayıncı yoksa/patlarsa sessizce (en fazla warning)
             geçilir. Aynı olay iki kez gelebilir (message_end + turn_end aynı mesajı
-            taşıyabilir) → id ile elenir."""
+            taşıyabilir) → id ile elenir.
+
+            DİKKAT: yalnızca KESİNLEŞMİŞ mesajla çağır (message_end/turn_end). message_update
+            akışındaki mesaj yarımdır (toolCall.arguments henüz dolmamış olabilir) ve
+            "ilk gelen kazanır" dedupe'u yüzünden boş argüman kalıcı olur."""
             cb = self._tool_publisher
             if cb is None:
                 return
@@ -1279,7 +1755,7 @@ if _HAS_LIVEKIT:
             self._enroll_name = None
             self._enroll_emb = None
             self._enroll_name_emb = None
-            self._enroll_retried = False
+            self._enroll_retried = 0
             self._enroll_match = None
 
         async def _enrollment_line(self, text: str) -> Optional[str]:
@@ -1325,13 +1801,25 @@ if _HAS_LIVEKIT:
                 return "Peki, gerek yok."
             name = parse_spoken_name(text)
             if not name:
-                if not self._enroll_retried:
-                    self._enroll_retried = True
-                    return "Adını anlayamadım, tekrar söyler misin?"
-                # İkinci kez de anlaşılmadı → vazgeç, sözü normal akışa bırak.
+                # Başarısız METNİ logla — canlıda evin annesi kaydedilemedi ve
+                # log yalnız "anlaşılamadı" yazdığı için ne dediğini transkriptten
+                # çıkarmak zorunda kaldık. Bir daha kör kalmayalım.
+                if self._enroll_retried < 2:
+                    self._enroll_retried += 1
+                    logger.info("enrollment: isim anlaşılamadı (%d. kez): %r",
+                                self._enroll_retried, text[:60])
+                    # 2. deneme daha DAR bir soru sorar: kullanıcı ilk seferde
+                    # genelde adını bir cümlenin içinde söylüyor (canlı hata:
+                    # "Havi adım. Az önce kocam sana söyledi...").
+                    return ("Adını anlayamadım, tekrar söyler misin?"
+                            if self._enroll_retried == 1
+                            else "Sadece adını söyler misin?")
+                # Üçüncü kez de anlaşılmadı → vazgeç, sözü normal akışa bırak.
+                # Sessizce guest'e düşme: kullanıcı kaydolduğunu sanıyordu.
                 self._reset_enroll()
-                logger.info("enrollment: isim anlaşılamadı (2. kez) → guest")
-                return None
+                logger.info("enrollment: isim anlaşılamadı (3. kez) → guest: %r",
+                            text[:60])
+                return "Adını anlayamadım, seni kaydedemedim. İstersen sonra 'beni kaydet' de."
             # En güncel ham embedding'i (ismi söylerkenki) örnek olarak sakla.
             self._enroll_name = name
             self._enroll_name_emb = getattr(self._speaker_state, "last_embedding", None)
@@ -1513,17 +2001,124 @@ if _HAS_LIVEKIT:
             persona `<isim>.md` (yoksa default) + kişiye-özel session `<isim>`.
             Unknown/kapalı → default persona + default session."""
             name = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            return self._target_for(name)
+
+        def _target_for(self, name: Optional[str]) -> tuple[str, str]:
+            """İsimden (persona, session_id). _target ile prewarm tahmini AYNI kuralı
+            paylaşsın diye ayrıldı → ısıttığımız süreç ile turda hedeflenen süreç
+            birebir aynı isimleri üretir (yoksa tahmin hep ıskalar)."""
             slug = _slug(name) if name else ""
             if not slug:
                 return self._default_persona, self._default_persona
             persona = slug if _persona_exists(slug) else self._default_persona
             return persona, slug  # session hep kişiye özel (memory ayrışsın)
 
+        def _prewarm_guess(self, speaker_id: Any = None) -> Optional[tuple[str, str]]:
+            """Isıtılacak (persona, session_id) tahmini; tahmin yoksa None (varsayılan).
+
+            Sıra: (1) işaret dosyası — son TANINAN konuşmacı; (2) dosya yoksa ve
+            kayıtlı TEK kişi varsa o (ev senaryosunda en olası konuşan odur, ilk
+            oturumda da tutar). Birden çok kişi + işaret yok → tahmin YOK, varsayılan.
+            Best-effort: hata → None (davranış bugünküyle aynı)."""
+            try:
+                slug = read_last_speaker()
+                src = "işaret dosyası"
+                if not slug and speaker_id is not None:
+                    names = speaker_id.names() or []
+                    if len(names) == 1:
+                        slug, src = _slug(names[0]), "tek kayıtlı kişi"
+                if not slug:
+                    return None
+                target = self._target_for(slug)
+                logger.info("prewarm tahmini: %s/%s (%s)", target[0], target[1], src)
+                return target
+            except Exception:  # noqa: BLE001 — tahmin ASLA başlatmayı bozmasın
+                logger.debug("prewarm tahmini başarısız", exc_info=True)
+                return None
+
+        def _note_last_speaker(self, name: Optional[str]) -> None:
+            """Tanınan konuşmacıyı bir sonraki oturumun prewarm'ı için işaretle.
+            Sadece DEĞİŞİNCE yazar (her tur disk'e vurmasın) ve sadece GERÇEK kişi
+            için (tanınmayan/guest → varsayılana düşmeli, işaret bozulmasın)."""
+            slug = _slug(name) if name else ""
+            if not slug or slug == self._last_noted:
+                return
+            self._last_noted = slug
+            write_last_speaker(slug)
+
+        def _detect_mode_signal(self, message: Any) -> None:
+            """pi mesajındaki enter_dev_mode/exit_dev_mode toolCall'ını yakala → mod isteği.
+            Best-effort; ayrıştırma hatası turu BOZMAZ."""
+            if not DEV_MODE_ENABLED or not isinstance(message, dict):
+                return
+            if message.get("role") != "assistant":
+                return
+            for c in message.get("content", []) or []:
+                if isinstance(c, dict) and c.get("type") == "toolCall":
+                    name = c.get("name") or ""
+                    if name == "enter_dev_mode":
+                        self.request_mode("dev")
+                    elif name == "exit_dev_mode":
+                        self.request_mode("normal")
+
+        def request_mode(self, mode: str) -> None:
+            """Dev tool sinyalini kaydet ("dev" | "normal"). Event akışından (PiStream)
+            çağrılır; swap BİR SONRAKİ tur başında _current_client'ta uygulanır. Idempotent."""
+            if not DEV_MODE_ENABLED:
+                return
+            if mode not in ("dev", "normal"):
+                return
+            if mode != self._mode:
+                self._pending_mode = mode
+                logger.info("mod isteği alındı: %s (aktif=%s)", mode, self._mode)
+
+        async def _switch_mode(self, target: str) -> None:
+            """Warm pi sürecini mod'lar arasında swap et. _swap_lock TUTULUYORKEN çağrılır."""
+            old = self._client
+            if target == "dev":
+                await asyncio.to_thread(_ensure_dev_worktree)
+                self._saved_normal = (self._persona, self._session_id)
+                persona, session_id = DEV_PERSONA, DEV_SESSION_ID
+                new = PiRpcClient(
+                    persona, session_id, DEV_MODEL, DEV_THINKING,
+                    cwd=DEV_WORKTREE, dev=True,
+                )
+            else:  # → normal: oturum başı persona/session'a bire bir dön
+                persona, session_id = self._saved_normal or (
+                    self._default_persona, self._default_persona
+                )
+                new = PiRpcClient(persona, session_id, self._model, self._thinking)
+            logger.info(
+                "mod swap: %s → %s (persona=%s session=%s)",
+                self._mode, target, persona, session_id,
+            )
+            self._client = new
+            self._persona, self._session_id = persona, session_id
+            self._mode = target
+            self._pending_mode = None
+            await new.start()
+            await old.stop()
+
         async def _current_client(self) -> "PiRpcClient":
-            """Turluk çözüm: konuşmacı değiştiyse warm pi sürecini swap et; aynıysa
-            mevcut warm süreci koru (her tur spawn etme)."""
+            """Turluk çözüm: (1) bekleyen mod geçişi varsa uygula (dev↔normal); (2) dev
+            modunda konuşmacı-swap YOK (tek dev oturumu); (3) normalde konuşmacı değiştiyse
+            warm pi sürecini swap et; aynıysa mevcut warm süreci koru."""
+            # (1) Mod geçişi — konuşmacı çözümünden ÖNCE (dev tool sinyali önceliklidir).
+            if self._pending_mode is not None and self._pending_mode != self._mode:
+                async with self._swap_lock:
+                    if self._pending_mode is not None and self._pending_mode != self._mode:
+                        await self._switch_mode(self._pending_mode)
+            # (2) Dev modunda konuşmacıya göre swap ETME → dev oturumu tek ve izole.
+            if self._mode == "dev":
+                return self._client
             if self._speaker_state is None:
                 return self._client
+            # Kim konuşuyorsa bir sonraki oturumun prewarm'ı için işaretle (sadece
+            # değişince yazar). Swap'tan ÖNCE: tahmin tuttuğunda swap HİÇ olmaz ama
+            # işaret yine de güncel kalmalı.
+            self._note_last_speaker(
+                getattr(self._speaker_state, "current", None)
+            )
             persona, session_id = self._target()
             if persona == self._persona and session_id == self._session_id:
                 return self._client  # aynı kişi sürüyor → warm kalsın
@@ -1541,6 +2136,109 @@ if _HAS_LIVEKIT:
                 await self._client.start()
                 await old.stop()
                 return self._client
+
+        # ── Sohbet sıfırlama (TEK yol: sesli komut + web butonu buraya iner) ──
+        async def new_session(self) -> bool:
+            """Sohbet geçmişini sıfırla, YENİ oturum başlat. Başarılıysa True.
+
+            İki tetikleyici de (sesli komut → PiStream, web butonu → agent.py RPC)
+            AYNI bu metoda iner → davranış tek yerde.
+
+            Ne yapar: (1) warm pi sürecini durdur; (2) eski jsonl'in header id'sini
+            döndür (_rotate_session_id — SİLMEZ, dosya kalır); (3) AYNI persona/
+            session-id ile taze pi süreci doğur → pi o id'yi bulamaz, sıfırdan açar.
+
+            Ne yapmaz: hafızaya (memory/) DOKUNMAZ — memory_add/soul_add ile
+            kaydedilenler kalıcıdır; sıfırlanan yalnız SOHBET geçmişidir. Wake
+            durumu, konuşmacı/persona ve mod (dev/normal) da KORUNUR."""
+            async with self._swap_lock:
+                old = self._client
+                persona, session_id = self._persona, self._session_id
+                dev = self._mode == "dev"
+                # Dev modunda session dizini ana repo'ya sabitlenir (_build_pi_args ile
+                # AYNI kural) → dev oturumu da doğru dosyada sıfırlanır.
+                session_dir = REPO_ROOT / PI_SESSION_DIR if dev else Path(PI_SESSION_DIR)
+                if not session_dir.is_absolute():
+                    session_dir = REPO_ROOT / session_dir
+                logger.info(
+                    "sohbet sıfırlama: persona=%s session=%s mod=%s", persona, session_id, self._mode
+                )
+                # Sıra önemli: ÖNCE süreci durdur (dosyayı bırakmalı), SONRA döndür,
+                # en son taze süreci doğur.
+                await old.stop()
+                try:
+                    archived = await asyncio.to_thread(_rotate_session_id, session_id, session_dir)
+                except Exception:  # noqa: BLE001 — döndürme patlarsa oturumu YARIDA bırakma
+                    logger.warning("oturum döndürme başarısız", exc_info=True)
+                    archived = None
+                    ok = False
+                else:
+                    ok = True
+                    logger.info(
+                        "eski geçmiş korundu: %s",
+                        archived.name if archived else "(dosya yok — zaten temizdi)",
+                    )
+                # Süreci HER KOŞULDA geri getir: döndürme başarısız olsa bile beyinsiz
+                # kalmayalım (kullanıcı konuşmaya devam edebilsin).
+                if dev:
+                    new = PiRpcClient(
+                        persona, session_id, DEV_MODEL, DEV_THINKING,
+                        cwd=DEV_WORKTREE, dev=True,
+                    )
+                else:
+                    new = PiRpcClient(persona, session_id, self._model, self._thinking)
+                self._client = new
+                await new.start()
+                # Taze oturum = pi bu bağlantıda kimseyi selamlamadı → ismiyle-selam
+                # direktifi tekrar verilebilsin (yoksa yeni sohbet selamsız başlar).
+                self._greeted.discard(
+                    getattr(self._speaker_state, "current", None) or ""
+                )
+                return ok
+
+        def is_reset_command(self, text: str) -> bool:
+            """Metin sohbet-sıfırlama komutu mu (deterministik, LLM YOK). Bkz. reset_match."""
+            return reset_match(text)
+
+        async def _reset_line(self, text: str) -> Optional[str]:
+            """Sıfırlama kararı. Scripted TR satır döndürürse pi ATLANIR; None →
+            normal pi akışı (mevcut davranış). Üç yol:
+              tam eşleşme  → SORMADAN sıfırla (bugünkü davranış, korunur)
+              yakın-ıska   → sıfırlama, SOR; onayı bir sonraki turda bekle
+              onay bekliyor→ evet → sıfırla | hayır → vazgeç | başka → durumu düşür
+
+            Onay durumu TURA ÖZEL: bir sonraki söz onay/ret değilse durum düşer ve
+            metin normal prompt olarak işlenir (kullanıcı konuyu değiştirmiş olabilir)
+            — kullanıcı "evet" demeye mecbur bırakılmaz."""
+            if not RESET_ENABLED:
+                return None
+            if self._reset_pending:
+                self._reset_pending = False  # her koşulda düşür (tek tur yaşar)
+                if is_affirmative_reply(text):
+                    logger.info("sıfırlama onaylandı (%r) → yürütülüyor", text[:40])
+                    return await self.new_session_spoken()
+                if _is_decline_enroll(text):
+                    logger.info("sıfırlama reddedildi (%r) → vazgeçildi", text[:40])
+                    return RESET_CONFIRM_NO
+                # Onay/ret DEĞİL → düşür ve aşağıdaki normal kontrollere devam et
+                # (söz taze bir sıfırlama komutu OLABİLİR).
+                logger.info("sıfırlama onayı gelmedi (%r) → normal akış", text[:40])
+            if reset_match(text):
+                return await self.new_session_spoken()
+            if reset_near_match(text):
+                self._reset_pending = True
+                logger.info("sıfırlamaya yakın-ıska (%r) → onay soruluyor", text[:60])
+                return RESET_CONFIRM_ASK
+            return None
+
+        async def new_session_spoken(self) -> str:
+            """Sesli komut yolu: sıfırla + söylenecek KISA onay satırını döndür."""
+            try:
+                ok = await self.new_session()
+            except Exception:  # noqa: BLE001 — sıfırlama hatası turu/oturumu BOZMASIN
+                logger.warning("sohbet sıfırlama başarısız", exc_info=True)
+                return RESET_FAIL
+            return RESET_ACK if ok else RESET_FAIL
 
         async def start(self) -> None:
             """Pre-warm: participant katılınca çağrılabilir (isteğe bağlı)."""
@@ -1674,6 +2372,224 @@ def _wake_test() -> int:
         ok = ok and good
         print(f"{text!r:<26} {str(got_wake):<6} {got_rem!r:<18} {'PASS' if good else 'FAIL'}")
     print(f"[wake] RESULT: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def _reset_test() -> int:
+    """reset_match birim testi (token harcamaz). Kasıtlı komut × yanlış-pozitif.
+
+    Kritik olan NEGATİF sütun: sıfırlama yıkıcı-hissi bir işlem, cümle içinde geçen
+    aynı kelimeler ("dün sana yeni sohbet başlat demiştim") TETİKLEMEMELİ."""
+    ps = _reset_phrases()
+    cases = [
+        # Kasıtlı komut (wake ayıklandıktan SONRAKİ metin) → sıfırla
+        ("yeni sohbet başlat", True), ("Yeni sohbet başlat.", True),
+        ("YENİ SOHBET BAŞLAT", True), ("yeni sohbete başla", True),
+        ("sohbeti sıfırla", True), ("Sohbeti sıfırla!", True),
+        ("geçmişi temizle", True), ("yeni konuşma başlat", True),
+        ("baştan başla", True), ("sohbeti resetle", True),
+        # STT'nin ASCII yazımı (noktasız-ı yerine düz i) → aynı komut sayılmalı
+        ("sohbeti sifirla", True), ("gecmisi sifirla", True),
+        ("yeni sohbet baslat", True), ("bastan basla", True),
+        # STT'nin geçmiş-zaman kayması: "başlat" → "başladı" (mesafe 2). Türkçe'de
+        # emir kipi ile geçmiş zaman tek-iki harfle ayrışır → tolerans 1 ıskalıyordu.
+        # CANLI HATA: bu ıska yüzünden metin LLM'e gitti, model sıfırlamadan
+        # "yaptım" dedi, kullanıcı sıfırladım sandı (iki tur üst üste).
+        ("yeni sohbet başladı", True), ("yeni sohbete başladı", True),
+        # Sonradan eklenen ifadeler (kullanıcı "oturum"/"sayfa" da diyor)
+        ("yeni oturum aç", True), ("yeni oturum başlat", True),
+        ("oturumu yenile", True), ("oturumu sıfırla", True),
+        ("yeni sayfa aç", True),
+        # Yanlış-pozitif koruması: uzun cümle / alakasız söz → sıfırlama YOK
+        ("hava nasıl", False), ("sohbet", False), ("başlat", False),
+        ("dün sana yeni sohbet başlat demiştim ama olmadı", False),
+        ("dün yeni sohbet başlat demiştim", False),
+        ("yeni bir sohbet uygulaması yazalım mı acaba", False),
+        ("bugün yeni sayfa açtık galiba", False),
+        ("bana yeni bir şarkı çal", False), ("", False),
+    ]
+    # Yakın-ıska bandı: SORULACAK (True) / sorulmayacak (False). Tam eşleşen bir
+    # komut yakın-ıska DEĞİLDİR (zaten sormadan yürütülür) → bantlar ÇAKIŞMAZ.
+    near_cases = [
+        # Benziyor ama tam değil → sor (sessizce LLM'e gitmesin)
+        ("yeni sohbet başlasın", True), ("yeni oturum açalım", True),
+        # Tam eşleşme → sorma, yürüt
+        ("yeni sohbet başlat", False), ("yeni sohbet başladı", False),
+        ("sohbeti sıfırla", False),
+        # Alakasız / uzun → ne yürüt ne sor
+        ("hava nasıl", False), ("bana yeni bir şarkı çal", False),
+        ("bugün yeni sayfa açtık galiba", False),
+        ("dün sana yeni sohbet başlat demiştim ama olmadı", False), ("", False),
+    ]
+    print(f"[reset] phrases={sorted(ps)}")
+    print(f"{'text':<48} {'reset':<6} result")
+    ok = True
+    for text, exp in cases:
+        got = reset_match(text)
+        good = got == exp
+        ok = ok and good
+        print(f"{text!r:<48} {str(got):<6} {'PASS' if good else 'FAIL'}")
+    print(f"\n{'text':<48} {'near':<6} result")
+    for text, exp in near_cases:
+        got = reset_near_match(text)
+        good = got == exp
+        ok = ok and good
+        print(f"{text!r:<48} {str(got):<6} {'PASS' if good else 'FAIL'}")
+        # Bantlar ayrık olmalı: aynı söz hem yürüt hem sor OLAMAZ.
+        if got and reset_match(text):
+            ok = False
+            print(f"  !! BANT ÇAKIŞMASI: {text!r} hem tam hem yakın eşleşiyor")
+    print(f"[reset] RESULT: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def _compaction_test() -> int:
+    """Compaction ara sözü + watchdog toleransı testi. SAHTE pi olayları — süreç
+    doğmaz, token harcanmaz.
+
+    Doğrular:
+      (a) bağlam taşıp cevap ÜRETİLEMEDEN compaction → kullanıcı sessiz beklemesin,
+          ara söz söylensin;
+      (b) cevap zaten aktıysa (acil olmayan, tur sonu compaction) → SUSSUN;
+      (c) compaction penceresi normal stall toleransından UZUN sürse bile tur
+          ABORT EDİLMESİN. (c) şart: compaction_start ile compaction_end arasında pi
+          HİÇ olay yaymaz → tolerans yükseltilmezse watchdog sağlıklı sıkıştırmayı
+          keser, kullanıcı cevabını kaybederdi."""
+    if not _HAS_LIVEKIT:
+        print("[compaction] SKIP: livekit yok")
+        return 0
+
+    class FakeClient:
+        """PiRpcClient yerine: send() çağrılınca scripted olayları kuyruğa akıtır."""
+        def __init__(self, script):
+            self._turn_q = None
+            self._turn_lock = asyncio.Lock()
+            self.warmed_up = True   # sıcak → soğuk-yükleme ara sözü karışmasın
+            self._script = script
+            self.writes: list[dict] = []
+
+        async def start(self) -> None:
+            pass
+
+        async def send(self, obj) -> None:
+            async def feed():
+                for delay, ev in self._script:
+                    await asyncio.sleep(delay)
+                    if self._turn_q is not None:
+                        self._turn_q.put_nowait(ev)
+            asyncio.create_task(feed())
+
+        def _write(self, obj) -> None:
+            self.writes.append(obj)
+
+    def _delta(t: str) -> dict:
+        return {"type": "message_update",
+                "assistantMessageEvent": {"type": "text_delta", "delta": t}}
+
+    def _cstart(reason: str) -> dict:
+        return {"type": "compaction_start", "reason": reason}
+
+    _CEND = {"type": "compaction_end", "aborted": False, "willRetry": True}
+    _SETTLED = {"type": "agent_settled"}
+
+    async def drive(script) -> tuple[str, list[dict]]:
+        brain = PiBrain(persona=PI_DEFAULT_PERSONA)
+        fc = FakeClient(script)
+        brain._client = fc
+        async def _cc():
+            return fc
+        brain._current_client = _cc      # swap/spawn yolunu devre dışı bırak
+        ctx = llm.ChatContext.empty()
+        ctx.add_message(role="user", content=f"{WAKE_WORD} merhaba")  # wake gate'i geç
+        st = PiStream(brain, chat_ctx=ctx, tools=[],
+                      conn_options=DEFAULT_API_CONNECT_OPTIONS)
+        out = []
+        async for ch in st:
+            d = ch.delta
+            if d and d.content:
+                out.append(d.content)
+        return "".join(out), fc.writes
+
+    async def run() -> bool:
+        ok = True
+        notice = PI_COMPACTION_NOTICE_TEXT
+
+        # (a) overflow: cevap YOK → ara söz söylensin, sonra cevap gelsin
+        txt, _ = await drive([
+            (0.02, _cstart("overflow")), (0.05, _CEND),
+            (0.02, _delta("Merhaba!")), (0.02, _SETTLED),
+        ])
+        good = txt == notice + "Merhaba!"
+        ok = ok and good
+        print(f"(a) overflow, cevap YOK  → ara söz   {txt!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (b) threshold: cevap AKMIŞ → sus (pi zaten tur sonuna saklamış)
+        txt, _ = await drive([
+            (0.02, _delta("Merhaba!")), (0.02, _cstart("threshold")),
+            (0.05, _CEND), (0.02, _SETTLED),
+        ])
+        good = txt == "Merhaba!"
+        ok = ok and good
+        print(f"(b) threshold, cevap VAR → sessiz    {txt!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (c) uzun compaction → watchdog KESMESİN. Testi hızlandırmak için normal
+        # toleransı 0.3s'e indiriyoruz; compaction 1.0s (3 katı) sürüyor.
+        global PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT
+        old = (PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT)
+        PI_TURN_STALL_TIMEOUT = PI_FIRST_TURN_STALL_TIMEOUT = 0.3
+        try:
+            txt, writes = await drive([
+                (0.02, _delta("Merhaba!")), (0.02, _cstart("threshold")),
+                (1.0, _CEND), (0.02, _delta(" Devam.")), (0.02, _SETTLED),
+            ])
+        finally:
+            PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT = old
+        good = txt == "Merhaba! Devam." and not writes  # writes boş = abort YOK
+        ok = ok and good
+        print(f"(c) uzun compaction      → kesilmez  {txt!r:<46} {'PASS' if good else 'FAIL'}")
+        return ok
+
+    ok = asyncio.run(run())
+    print(f"[compaction] RESULT: {'PASS' if ok else 'FAIL'}")
+    return 0 if ok else 1
+
+
+def _rotate_test() -> int:
+    """_rotate_session_id birim testi — GEÇİCİ dizinde, gerçek sessions/'a DOKUNMAZ.
+
+    Doğrular: (1) eski dosya SİLİNMEZ, yerinde kalır; (2) mesaj satırları AYNEN durur
+    (geçmiş kaybolmaz); (3) header id döner → pi artık o slug'ı bulamaz (taze oturum);
+    (4) slug'a ait dosya yoksa None (çökme yok)."""
+    import tempfile
+    ok = True
+    with tempfile.TemporaryDirectory() as d:
+        sd = Path(d)
+        p = sd / "2026-07-16T11-11-30-090Z_ayhan.jsonl"
+        hdr = {"type": "session", "version": 1, "id": "ayhan", "cwd": "/x"}
+        msg = {"type": "message", "id": "m1", "role": "user", "content": "merhaba"}
+        p.write_text(json.dumps(hdr) + "\n" + json.dumps(msg) + "\n", encoding="utf-8")
+
+        got = _rotate_session_id("ayhan", sd)
+        lines = p.read_text(encoding="utf-8").splitlines()
+        new_hdr = json.loads(lines[0])
+        checks = [
+            ("dosya yerinde kalır", p.is_file()),
+            ("döndürülen dosya doğru", got == p),
+            ("header id değişti", new_hdr["id"] != "ayhan"),
+            ("id slug ile başlar", new_hdr["id"].startswith("ayhan-eski-")),
+            ("id pi kuralına uyar", bool(re.fullmatch(
+                r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?", new_hdr["id"]))),
+            ("geçmiş korundu", json.loads(lines[1]) == msg),
+            ("başka alan bozulmadı", new_hdr["cwd"] == "/x" and new_hdr["version"] == 1),
+            ("slug artık bulunmaz", _find_session_file("ayhan", sd) is None),
+            ("eski id ile bulunur", _find_session_file(new_hdr["id"], sd) == p),
+            ("tmp dosya kalmadı", not list(sd.glob("*.tmp"))),
+            ("dosya yoksa None", _rotate_session_id("yok-boyle-biri", sd) is None),
+        ]
+        for name, good in checks:
+            ok = ok and good
+            print(f"{name:<28} {'PASS' if good else 'FAIL'}")
+    print(f"[rotate] RESULT: {'PASS' if ok else 'FAIL'}")
     return 0 if ok else 1
 
 
@@ -2574,8 +3490,68 @@ def _soul_test() -> int:
     return 0 if all_ok else 1
 
 
+def _name_test() -> int:
+    """parse_spoken_name birim testi — gerçek Türkçe konuşma + reddedilecekler.
+
+    Canlı hata (16:53): evin annesi "Havi adım. Az önce kocam sana söyledi..."
+    dedi, parser None döndü → guest → aile hafızası açılmadı. Aynı parser
+    "Efendim"/"Anlamadım" gibi cevapları İSİM sanıyordu. Hem katı hem geçirgendi.
+    Sherpa/model/token GEREKMEZ — saf fonksiyon testi."""
+    cases: list[tuple[str, Optional[str]]] = [
+        # ── isim ÇIKARILMALI (doğal konuşma) ──
+        ("Havi adım", "Havi"),                       # canlı hata: "X adım" biçimi
+        ("Havva ben", "Havva"),
+        ("Adım Havva", "Havva"),
+        ("Adım Havva, evin annesiyim", "Havva"),
+        ("Ben Havva, Ayhan'ın eşiyim", "Havva"),
+        ("Havva adım. Az önce kocam sana söyledi benim kim olduğumu. Evin annesiyim.",
+         "Havva"),                                   # canlı hata, birebir
+        ("Havva'yım", "Havva"),                      # koşaç eki + kesme
+        ("Havvayım", "Havva"),                       # koşaç eki, kesmesiz
+        ("Ben Havva'yım", "Havva"),
+        ("Zeynep'im", "Zeynep"),
+        ("Benim adım Ayhan", "Ayhan"),
+        ("Ayhan", "Ayhan"),
+        ("Ayhan Karakuş", "Ayhan Karakuş"),
+        ("İsmim Zeynep", "Zeynep"),
+        ("Bana Zeynep de", "Zeynep"),
+        ("Havva diyebilirsin", "Havva"),
+        ("Ben Ayşe, kızıyım", "Ayşe"),
+        ("Adım Mehmet ama bana Memo derler", "Mehmet"),
+        ("Ben Ayhan.", "Ayhan"),
+        ("Ben evin annesiyim, adım Havva", "Havva"),
+        ("my name is Sarah", "Sarah"),
+        ("I'm John", "John"),
+        # ── REDDEDİLMELİ (eskiden İSİM sanılıyordu → yanlış kişi kaydı) ──
+        ("Efendim", None),
+        ("Anlamadım", None),
+        ("Ne dedin", None),
+        ("Bilmiyorum", None),
+        ("Hava nasıl", None),
+        ("Tamam", None),
+        ("Bir dakika", None),
+        ("Ne diyorsun sen", None),
+        ("Adını anlayamadım", None),
+        ("Söylemek istemiyorum", None),
+        # ── ECHO: asistanın KENDİ sözü mikrofona girerse isim sanılmamalı ──
+        ("Adını anlayamadım. Abi.", None),           # canlı hata: birebir echo
+        ("Seni tanıyamadım, adını söyler misin?", None),
+        ("Sadece adını söyler misin?", None),
+    ]
+    all_ok = True
+    for text, expected in cases:
+        got = parse_spoken_name(text)
+        ok = got == expected
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {text!r} → {got!r} (beklenen {expected!r})")
+    print(f"[name] RESULT: {'PASS' if all_ok else 'FAIL'}  ({len(cases)} örnek)")
+    return 0 if all_ok else 1
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "name":
+        raise SystemExit(_name_test())
     if cmd == "soul":
         raise SystemExit(_soul_test())
     if cmd == "proactive":
@@ -2588,10 +3564,17 @@ if __name__ == "__main__":
         raise SystemExit(_wake_timer_test())
     if cmd == "wake":
         raise SystemExit(_wake_test())
+    if cmd == "reset":
+        raise SystemExit(_reset_test())
+    if cmd == "compaction":
+        raise SystemExit(_compaction_test())
+    if cmd == "rotate":
+        raise SystemExit(_rotate_test())
     if cmd == "smoke":
         raise SystemExit(asyncio.run(_smoke()))
     if cmd == "prompt":
         msg = sys.argv[2] if len(sys.argv) > 2 else "merhaba de"
         raise SystemExit(asyncio.run(_prompt_test(msg)))
     print("usage: python pi_brain.py "
-          "[smoke|prompt <text>|wake|waketimer|policy|proactive|soul|e2e]")
+          "[smoke|prompt <text>|wake|waketimer|reset|compaction|rotate|policy|"
+          "proactive|soul|e2e|name]")
