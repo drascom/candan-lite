@@ -187,12 +187,20 @@ export default function webSearchExtension(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "web_search",
 		label: "Web Search",
+		// Açıklama BİLEREK geniş: eski hali aramayı yalnız "güncel bilgi"ye kilitliyordu →
+		// model bilmediği bir yeri (kişi/kurum/ürün) aramak yerine UYDURUYORDU.
+		// Ölçüm (26B, N=6): "Potterspar nedir?" eski 0/6 → yeni 6/6; "Potter's Bar nerede?"
+		// eski 0/6 → yeni 6/6. Aşırı tetikleme YOK: "Merhaba, nasılsın?" ikisinde de 0/6.
 		description:
-			"İnternette güncel bilgi ara. Eğitim verinde olmayan ya da güncel olabilecek " +
-			"şeyler (haber, hava durumu, skor, fiyat, 'şu an', 'bugün', 'son durum') için kullan. " +
+			"İnternette bilgi ara. ŞU DURUMLARDA MUTLAKA kullan: (a) güncel/değişken bilgi " +
+			"(haber, hava durumu, skor, fiyat, 'şu an', 'bugün', 'son durum'); (b) kullanıcı " +
+			"açıkça aramanı istediğinde ('internetten bak', 'ara'); (c) sorulan şeyi BİLMİYORSAN " +
+			"ya da emin değilsen (yer, kişi, kurum, ürün adı vb.) — TAHMİN ETME, ARA. " +
+			"Emin olmadığın bir şeyi uydurmaktansa aramak her zaman doğrudur. " +
 			"Sonuç: ilk birkaç web sonucunun başlık + kısa özeti (sade metin).",
 		promptSnippet:
-			"Güncel/değişken bilgi gerektiğinde web_search çağır (haber, hava, skor, fiyat, son durum). " +
+			"Bilmediğin, emin olmadığın ya da güncel olabilecek bir şey sorulduğunda web_search çağır — " +
+			"tahmin etme. Kullanıcı 'ara/internetten bak' derse mutlaka çağır. " +
 			"Sonuçları KISA ve konuşma diliyle özetle; link/URL okuma.",
 		parameters: Type.Object({
 			query: Type.String({ description: "Arama sorgusu (kullanıcının dilinde, kısa anahtar kelimeler)." }),
