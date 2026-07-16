@@ -14,6 +14,7 @@ import {
   ConversationScrollButton,
 } from '@/components/ai-elements/conversation';
 import { Message, MessageContent, MessageResponse } from '@/components/ai-elements/message';
+import { CopyTranscriptButton } from '@/components/app/copy-transcript-button';
 import { Button } from '@/components/ui/button';
 import { useToolEvents } from '@/hooks/useToolEvents';
 import {
@@ -23,6 +24,7 @@ import {
   stripSystemPrefix,
   writeShowTools,
 } from '@/lib/tool-events';
+import type { CopyRow } from '@/lib/transcript-copy';
 
 /**
  * Props for the AgentChatTranscript component.
@@ -150,35 +152,55 @@ export function AgentChatTranscript({
     }))
     .filter((row) => row.text.length > 0); // sadece sistem notundan ibaret mesaj → gösterme
 
-  const toolRows: Row[] = showTools
-    ? toolEvents.map((event) => ({
-        kind: 'tool' as const,
-        id: `${event.type}:${event.id}`,
-        ts: event.ts,
-        event,
-      }))
-    : [];
+  const allToolRows: Row[] = toolEvents.map((event) => ({
+    kind: 'tool' as const,
+    id: `${event.type}:${event.id}`,
+    ts: event.ts,
+    event,
+  }));
 
-  const rows: Row[] = [...messageRows, ...toolRows].sort((a, b) => a.ts - b.ts);
+  // Render: "detay kapalı" ise tool satırları ÇİZİLMEZ (eski davranış).
+  const rows: Row[] = [...messageRows, ...(showTools ? allToolRows : [])].sort(
+    (a, b) => a.ts - b.ts
+  );
+
+  // Kopyalama: render filtresinden BAĞIMSIZ — eylemler "detay kapalı" olsa da kopyaya girer
+  // (kopyalamanın amacı hangi sözden sonra hangi tool'un çağrıldığını gösterebilmek).
+  const copyRows: CopyRow[] = [...messageRows, ...allToolRows]
+    .sort((a, b) => a.ts - b.ts)
+    .map((row) =>
+      row.kind === 'message'
+        ? {
+            kind: 'message' as const,
+            ts: row.ts,
+            isUser: row.message.from?.isLocal === true,
+            text: row.text,
+          }
+        : { kind: 'tool' as const, ts: row.ts, event: row.event }
+    );
 
   return (
     <Conversation className={className} {...props}>
-      {showTools !== null && (
-        <Button
-          size="xs"
-          variant={showTools ? 'secondary' : 'ghost'}
-          aria-pressed={showTools}
-          onClick={() => {
-            const next = !showTools;
-            writeShowTools(next);
-            setShowTools(next);
-          }}
-          className="absolute top-2 right-3 z-20 rounded-full font-mono"
-          title="Tool çağrılarını ve sonuçlarını göster/gizle"
-        >
-          🔧 {showTools ? 'detay açık' : 'detay kapalı'}
-        </Button>
-      )}
+      {/* Transkript araç çubuğu: kopyala + tool detay anahtarı (app'teki pill deseni). */}
+      <div className="border-border bg-background/80 absolute top-2 right-3 z-20 flex items-center gap-1 rounded-full border p-1 backdrop-blur">
+        <CopyTranscriptButton rows={copyRows} />
+        {showTools !== null && (
+          <Button
+            size="xs"
+            variant={showTools ? 'secondary' : 'ghost'}
+            aria-pressed={showTools}
+            onClick={() => {
+              const next = !showTools;
+              writeShowTools(next);
+              setShowTools(next);
+            }}
+            className="rounded-full font-mono"
+            title="Tool çağrılarını ve sonuçlarını göster/gizle"
+          >
+            🔧 {showTools ? 'detay açık' : 'detay kapalı'}
+          </Button>
+        )}
+      </div>
       <ConversationContent>
         {rows.map((row) => {
           if (row.kind === 'tool') {

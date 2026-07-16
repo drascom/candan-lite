@@ -8,6 +8,7 @@ import type { AppConfig } from '@/app-config';
 import { AgentSessionProvider } from '@/components/agents-ui/agent-session-provider';
 import { StartAudioButton } from '@/components/agents-ui/start-audio-button';
 import { BrainSelector } from '@/components/app/brain-selector';
+import { NewSessionButton } from '@/components/app/new-session-button';
 import { ViewController } from '@/components/app/view-controller';
 import { Toaster } from '@/components/ui/sonner';
 import { useAgentErrors } from '@/hooks/useAgentErrors';
@@ -69,6 +70,7 @@ export function App({ appConfig }: AppProps) {
           <ViewController appConfig={appConfig} />
         </main>
         <BrainSelector sessionBrain={sessionBrain} />
+        <NewSessionButton />
         <StartAudioButton label="Start Audio" />
         <Toaster
           icons={{
