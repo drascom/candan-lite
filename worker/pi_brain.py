@@ -375,9 +375,21 @@ RESET_ENABLED = (os.environ.get("RESET_ENABLED", "true") or "").strip().lower() 
 # Sıfırlama ifadeleri (virgülle). Eşleşme aksan/case/noktalama duyarsız (_wake_squash).
 RESET_PHRASES = os.environ.get(
     "RESET_PHRASES",
-    "yeni sohbet başlat,yeni sohbete başla,yeni sohbet,sohbeti sıfırla,sohbeti resetle,"
-    "geçmişi sıfırla,geçmişi temizle,sohbeti temizle,yeni konuşma başlat,baştan başla,"
-    "yeni oturum aç,yeni oturum başlat,oturumu yenile,oturumu sıfırla,yeni sayfa aç",
+    # ÇIKARMA ÖLÇÜTÜ = MUĞLAKLIK, "gereksiz tekrar" DEĞİL. Ölçüldü: listeden düşen bir
+    # ifade yakın-ıska bandına (2,4] DÜŞMÜYOR, çok uzak kalıyor → sessizce LLM'e gider
+    # → model "yaptım" der (sabah 2 kez yaşandı). Yani zararsız eşanlamlıyı silmek
+    # sessiz-ıska deliğini geri AÇAR; maliyeti sıfır olanı listede tutmak bedava sigorta.
+    # ÇIKARILANLAR (yalnız muğlak olanlar):
+    #   "baştan başla"  → "baştan anlat" ile mesafe 3 = yakın-ıska → her seferinde
+    #                     gereksiz soru. Canlı doğrulandı (18:29:27).
+    #   "yeni sayfa aç" → kitap/tarayıcı açmak da olabilir.
+    #   "yeni sohbet"   → iki kelime; tolerans 2 ile fazla gevşek.
+    # "her şeyi sil"/"her şeyi sıfırla" BİLEREK YOK: sıfırlama hiçbir şey SİLMEZ
+    # (memory/ korunur, dosya arşivlenir) → kullanıcı hafızası silindi SANIRDI. Ayrıca
+    # ileride gerçek bir "beni unut" özelliği yapılırsa o ifade ONA ait olmalı.
+    "yeni oturum aç,yeni oturum başlat,yeni sohbet başlat,yeni sohbete başla,"
+    "sohbeti sıfırla,oturumu sıfırla,sıfırdan başlayalım,sohbeti resetle,"
+    "geçmişi sıfırla,geçmişi temizle,sohbeti temizle,yeni konuşma başlat,oturumu yenile",
 )
 # Sıfırlama sonrası sesli/görsel onay (kullanıcı komutun İŞLEDİĞİNİ duysun).
 RESET_ACK = os.environ.get("RESET_ACK", "Tamam, yeni sohbet başlattım. Seni dinliyorum.")
@@ -2387,10 +2399,12 @@ def _reset_test() -> int:
         ("YENİ SOHBET BAŞLAT", True), ("yeni sohbete başla", True),
         ("sohbeti sıfırla", True), ("Sohbeti sıfırla!", True),
         ("geçmişi temizle", True), ("yeni konuşma başlat", True),
-        ("baştan başla", True), ("sohbeti resetle", True),
+        ("sohbeti resetle", True),
+        # Listeden ÇIKTI (muğlak): yürütülmemeli.
+        ("baştan başla", False), ("yeni sayfa aç", False), ("yeni sohbet", False),
         # STT'nin ASCII yazımı (noktasız-ı yerine düz i) → aynı komut sayılmalı
         ("sohbeti sifirla", True), ("gecmisi sifirla", True),
-        ("yeni sohbet baslat", True), ("bastan basla", True),
+        ("yeni sohbet baslat", True), ("bastan basla", False),  # "baştan başla" listeden çıktı
         # STT'nin geçmiş-zaman kayması: "başlat" → "başladı" (mesafe 2). Türkçe'de
         # emir kipi ile geçmiş zaman tek-iki harfle ayrışır → tolerans 1 ıskalıyordu.
         # CANLI HATA: bu ıska yüzünden metin LLM'e gitti, model sıfırlamadan
@@ -2399,7 +2413,6 @@ def _reset_test() -> int:
         # Sonradan eklenen ifadeler (kullanıcı "oturum"/"sayfa" da diyor)
         ("yeni oturum aç", True), ("yeni oturum başlat", True),
         ("oturumu yenile", True), ("oturumu sıfırla", True),
-        ("yeni sayfa aç", True),
         # Yanlış-pozitif koruması: uzun cümle / alakasız söz → sıfırlama YOK
         ("hava nasıl", False), ("sohbet", False), ("başlat", False),
         ("dün sana yeni sohbet başlat demiştim ama olmadı", False),
