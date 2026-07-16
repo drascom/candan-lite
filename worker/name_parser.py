@@ -31,6 +31,43 @@ _BOUNDARY_WORDS = {
     "me",
 }
 _NAME_TOKEN_RE = re.compile(r"^[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]{1,31}$")
+
+# İsim OLAMAYACAK yaygın Türkçe cevap/soru sözcükleri. Canlı hata: parser
+# "Efendim" / "Anlamadım" / "Ne dedin" gibi cevapları İSİM sanıyordu (bare-name
+# modu ilk sözcüğe bakıp geçiriyordu) → yanlış kişi kaydı riski.
+_NON_NAME_WORDS = {
+    "efendim", "efendi", "anlamadım", "anlamadim", "anladım", "anladim",
+    "anlayamadım", "anlayamadim", "duymadım", "duymadim", "duydun", "dedim",
+    "dedin", "diyorsun", "diyorum", "bilmiyorum", "biliyorum", "bilmem",
+    "ne", "kim", "kimsin", "kimim", "nasıl", "nasil", "nerede", "neden",
+    "niye", "niçin", "nicin", "hangi", "hani", "hava", "bir", "iki", "dakika",
+    "saniye", "adını", "adini", "adımı", "adimi", "adın", "adin", "ismini",
+    "söylemek", "soylemek", "söyle", "soyle", "söyler", "soyler", "söyledim",
+    "istemiyorum", "istiyorum", "sen", "sana", "seni", "senin", "bana",
+    "beni", "bende", "bu", "şu", "su", "var", "yok", "lütfen", "lutfen",
+    "tekrar", "misin", "mısın", "misiniz", "musun", "müsün", "galiba",
+    "sanırım", "sanirim", "tabii", "tabi", "peki", "hadi", "haydi", "oldu",
+    "olur", "dur", "bekle", "canım", "canim", "abi", "abla", "anne", "baba",
+    "kocam", "eşim", "esim", "hayır", "hayir", "sonra", "şimdi", "simdi",
+    "değil", "degil", "günaydın", "gunaydin", "hoşgeldin", "hosgeldin",
+    "what", "who", "sorry", "again", "know", "understand", "nothing",
+}
+
+# Fiil çekim eki taşıyan sözcük isim olamaz ("Anlamadım", "Bilmiyorum").
+# İsim + koşaç eki (-yım/-yim) BU KONTROLDEN ÖNCE soyulur → çakışmaz.
+_VERBISH_RE = re.compile(
+    r"(?:yorum|yorsun|yoruz|yorlar|madım|madim|medim|medım|mıyorum|miyorum"
+    r"|muyorum|müyorum|acağım|eceğim|acagim|ecegim|mişim|misim|mişsin"
+    r"|abilir|ebilir|malıyım|meliyim|dınız|diniz|siniz|sınız)$",
+    re.IGNORECASE,
+)
+
+# Türkçe ek soyma: "Havva'yım" → Havva, "Zeynep'im" → Zeynep, "Ayhan'ın" → Ayhan.
+_APOS_SUFFIX_RE = re.compile(r"['’][a-zçğıöşü]{1,4}$")
+# Kesme işaretsiz koşaç: "Havvayım" → Havva. Yalnız ünlüden sonraki "y" tamponu
+# ile → "Selim"/"Kerim" gibi gerçek isimler bozulmaz.
+_COPULA_BARE_RE = re.compile(r"(?<=[aeıioöuüAEIİOÖUÜ])y[ıiuü]m$")
+
 _PREFIX_PATTERNS = (
     r"\b(?:benim\s+)?(?:adım|adim|ismim|isimim)\s+(.+)$",
     r"\bben\s+([A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]*(?:\s+[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]*)?)\b",
@@ -39,6 +76,36 @@ _PREFIX_PATTERNS = (
     r"\bi\s*(?:am|'m|m)\s+(.+)$",
     r"\b(?:call\s+me|it's|it\s+is|this\s+is)\s+(.+)$",
 )
+
+# İSİM-ÖNDE kalıpları (prefix'ler tutmazsa denenir). Canlı hata: evin annesi
+# "Havi adım" dedi — kalıplar yalnız "adım X" biçimini biliyordu, "X adım"
+# biçimini bilmiyordu → isim anlaşılamadı → guest'e düştü.
+_SUFFIX_PATTERNS = (
+    r"^(.+?)\s+(?:adım|adim|ismim|isimim|adımdır|adimdir|ismimdir)\b",
+    r"^(?:bana\s+)?(.+?)\s+(?:diyebilirsin|dersin|derler|diye\s+çağır"
+    r"|diye\s+cagir|olarak\s+kaydet)\b",
+)
+
+
+def _strip_suffix(word: str) -> str:
+    """Koşaç/iyelik ekini soy: "Havva'yım" → "Havva", "Havvayım" → "Havva"."""
+    stripped = _APOS_SUFFIX_RE.sub("", word)
+    if stripped != word and len(stripped) >= 2:
+        return stripped
+    stripped = _COPULA_BARE_RE.sub("", word)
+    if stripped != word and len(stripped) >= 3:
+        return stripped
+    return word
+
+
+def _looks_like_name(word: str) -> bool:
+    """Sözcük isim OLABİLİR mi? (biçim + kara liste + fiil eki)"""
+    if not _NAME_TOKEN_RE.match(word):
+        return False
+    low = word.casefold()
+    if low in _NON_NAME_WORDS or low in _FILLER_WORDS or low in _BOUNDARY_WORDS:
+        return False
+    return not _VERBISH_RE.search(low)
 
 
 def _normalize_for_match(text: str) -> str:
@@ -73,7 +140,8 @@ def _clean_candidate(candidate: str) -> list[str]:
             continue
         if low in _BOUNDARY_WORDS:
             break
-        if not _NAME_TOKEN_RE.match(word):
+        word = _strip_suffix(word)
+        if not _looks_like_name(word):
             break
         words.append(word)
         if len(words) == 2:
@@ -103,7 +171,7 @@ def parse_spoken_name(text: str) -> Optional[str]:
     normalized = _normalize(match_text)
     if not normalized:
         return None
-    for pattern in _PREFIX_PATTERNS:
+    for pattern in _PREFIX_PATTERNS + _SUFFIX_PATTERNS:
         match = re.search(pattern, match_text, flags=re.IGNORECASE)
         if not match:
             continue
@@ -115,9 +183,12 @@ def parse_spoken_name(text: str) -> Optional[str]:
             return name
 
     words = _clean_candidate(normalized)
-    # Bare-name mode is intentionally strict: only "Ayşe" or "Ayşe Yılmaz",
-    # not a sentence whose first word merely looks like a name.
-    if len(words) in {1, 2} and len(words) == len(normalized.split()):
+    # Bare-name modu: dolgu sözcükleri ("ben", "adım", "evet") atıldıktan sonra
+    # geriye 1–2 isim-benzeri sözcük kalmalı → "Havva ben" / "Havva'yım" geçer.
+    # Uzun doğal cümle bare mod'dan GEÇMEZ (isim orada ancak kalıpla çıkarılır)
+    # — böylece "Ne diyorsun sen" gibi sözler isim sanılmaz.
+    core = [w for w in normalized.split() if w.casefold() not in _FILLER_WORDS]
+    if words and len(words) == len(core) <= 2:
         return _format_name(words)
     return None
 
