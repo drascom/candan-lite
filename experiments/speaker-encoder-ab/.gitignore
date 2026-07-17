@@ -1,0 +1,3 @@
+# Büyük ikili varlıklar git'e GİRMEZ: indirilen encoder ağırlıkları + ses klipleri.
+models/
+audio/

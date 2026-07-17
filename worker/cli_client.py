@@ -66,6 +66,7 @@ import threading
 import time
 import unicodedata
 import uuid
+import wave
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -686,6 +687,23 @@ class Speaker:
         self._stream.close()
 
 
+def _write_dump_wav(path: Path, pcm: bytes, in_rate: int) -> None:
+    """Biriken giden PCM'i (mono int16 @in_rate) 16k mono WAV'a yaz. Speaker-encoder
+    A/B harness'ının girdisi. Resample stdlib audioop.ratecv ile (numpy'sız); audioop
+    3.13'te kalkacağı için LAZY import — bayrak kapalıyken uyarı bile çıkmaz."""
+    import audioop  # noqa: PLC0415 — yalnız --dump-audio açıkken, deprecation gürültüsü olmasın
+
+    out_rate = 16000
+    if in_rate != out_rate:
+        pcm, _ = audioop.ratecv(pcm, 2, CHANNELS, in_rate, out_rate, None)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(CHANNELS)
+        w.setsampwidth(2)
+        w.setframerate(out_rate)
+        w.writeframes(pcm)
+
+
 class Microphone:
     """Mikrofon → odaya yayın.
 
@@ -695,13 +713,18 @@ class Microphone:
     """
 
     def __init__(self, *, device: str | int | None, sample_rate: int, loop: asyncio.AbstractEventLoop,
-                 aec: EchoCanceller | None = None, gate: Callable[[], bool] | None = None) -> None:
+                 aec: EchoCanceller | None = None, gate: Callable[[], bool] | None = None,
+                 dump_path: Path | None = None) -> None:
         import sounddevice as sd
 
         self._loop = loop
         self._sample_rate = sample_rate
         self._aec = aec
         self._gate = gate  # yarı-çift yönlü: True dönerse mikrofon susturulur
+        # --dump-audio (opt-in): odaya GİDEN frame'lerin bir kopyasını biriktir, kapanışta
+        # WAV'a yaz. None ise HİÇBİR ek iş yok (varsayılan davranış birebir aynı).
+        self._dump_path = dump_path
+        self._dump: bytearray | None = bytearray() if dump_path else None
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=100)
         self.source = rtc.AudioSource(sample_rate, CHANNELS)
         self.track = rtc.LocalAudioTrack.create_audio_track("cli-mic", self.source)
@@ -744,6 +767,8 @@ class Microphone:
     async def _pump(self) -> None:
         while True:
             data = await self._queue.get()
+            if self._dump is not None:
+                self._dump.extend(data)  # odaya giden frame'in kopyası (dump için)
             frame = rtc.AudioFrame(
                 data=data,
                 sample_rate=self._sample_rate,
@@ -761,6 +786,12 @@ class Microphone:
         self._task.cancel()
         await asyncio.gather(self._task, return_exceptions=True)
         await self.source.aclose()
+        if self._dump_path is not None and self._dump:
+            try:
+                _write_dump_wav(self._dump_path, bytes(self._dump), self._sample_rate)
+                _info(f"--dump-audio: {len(self._dump) // (2 * CHANNELS)} örnek → {self._dump_path}")
+            except Exception:  # noqa: BLE001 — dump kapanışı ana akışı BOZMASIN
+                log.debug("dump WAV yazılamadı", exc_info=True)
 
 
 # ── İstemci ─────────────────────────────────────────────────────────────────────
@@ -981,10 +1012,17 @@ class TerminalClient:
             # Yarı-çift yönlü kapı SADECE APM yolu kapalıyken takılır: ikisi birlikte
             # anlamsız olurdu (mikrofon zaten susturulmuşsa çıkaracak yankı yok).
             gate = self._speaker.is_playing if (aec is None and a.half_duplex) else None
+            # --dump-audio: sabit os-zaman damgalı dosya (Date.now değil, strftime).
+            dump_path = (
+                WORKER_DIR / "logs" / f"dump-{time.strftime('%Y%m%d-%H%M%S')}.wav"
+                if a.dump_audio else None
+            )
             self._mic = Microphone(
                 device=a.input_device, sample_rate=a.sample_rate, loop=asyncio.get_running_loop(),
-                aec=aec, gate=gate,
+                aec=aec, gate=gate, dump_path=dump_path,
             )
+            if dump_path is not None:
+                _info(f"--dump-audio AÇIK: giden PCM kopyası → {dump_path} (Ctrl+C'de yazılır)")
             if aec is not None:
                 # delay = (t_render - t_analyze) + (t_process - t_capture) (apm.py:100-110).
                 # Referansı hoparlör callback'inde, mikrofonu yakalama callback'inde
@@ -1078,6 +1116,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    default=os.environ.get("MATE_CLI_HALF_DUPLEX", "") in ("1", "true"),
                    help="APM yerine YEDEK yol: Candan konuşurken mikrofonu sustur. "
                         "Yankıyı kesin bitirir AMA sözünü kesemezsin (barge-in gider)")
+    p.add_argument("--dump-audio", action="store_true",
+                   help="OPT-IN: odaya giden mikrofon PCM'inin kopyasını worker/logs/dump-*.wav'a "
+                        "(16k mono) yaz. Varsayılan KAPALI. Speaker-encoder A/B harness girdisi için")
     p.add_argument("--no-color", action="store_true",
                    help="ANSI rengi kapat (NO_COLOR env de aynı işi yapar; TTY değilse zaten kapalı)")
     p.add_argument("--verbose", action="store_true", help="debug logları")
