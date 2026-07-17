@@ -2593,9 +2593,12 @@ if _HAS_LIVEKIT:
             roster = self._speaker_id.names() if self._speaker_id else []
             if name:
                 note = (
-                    f"(Sistem — ses tanıma: şu an konuşanı SES TANIMAYLA {name} olarak "
-                    f"tanıyorum. 'Beni tanıyor musun / ben kimim / adım ne' sorulursa "
-                    f"notlara değil buna güvenerek yanıt ver."
+                    f"(Sistem — ses tanıma: şu an SENİNLE KONUŞAN kişinin kimliği KESİN "
+                    f"= {name} (ses tanımayla doğrulandı). Ona YALNIZCA {name} diye hitap "
+                    f"et. Hafızanda/aile notlarında (family.md) geçen BAŞKA isimler (ör. "
+                    f"diğer aile üyeleri, 'annenin adı ...' gibi satırlar) bu kişi DEĞİLDİR "
+                    f"— konuşmacıyı onlarla KARIŞTIRMA. 'Beni tanıyor musun / ben kimim / "
+                    f"adım ne' sorulursa cevap {name}."
                 )
             else:
                 note = (
