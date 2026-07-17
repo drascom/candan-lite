@@ -15,9 +15,15 @@ TASARIM KARARLARI (bilerek):
   • Yalnızca STANDART KÜTÜPHANE. Yeni bağımlılık YOK, build adımı YOK, tek dosya.
   • REAL-TIME DEĞİL. Sayfa yenilenince veri yenilenir — websocket/polling yok.
       İSTİSNA: /log sayfası. Amacı canlı izlemek (worker'ın terminaline artık kimse
-      bakamıyor); "yenile"ye basmak zorunda kalmak sayfayı işe yaramaz kılar. Çözüm
-      basit tutuldu: kullanıcının AÇIP KAPATABİLDİĞİ <meta http-equiv=refresh>.
-      Websocket/SSE YOK — bağımlılık ve karmaşıklık getirir, kazancı yok.
+      bakamıyor); "yenile"ye basmak zorunda kalmak sayfayı işe yaramaz kılar.
+      Önce <meta http-equiv=refresh> denendi, KALDIRILDI: sayfayı komple yeniden
+      yüklüyordu → kaydırma pozisyonu başa fırlıyor, filtre menüsü kullanıcının
+      elinden kapanıyordu. Yerine: kullanıcının AÇIP KAPATABİLDİĞİ, 5 sn'de bir
+      /log/rows'tan SADECE tablo gövdesini çeken 30 satırlık vanilla JS (fetch).
+      Bağımlılık/CDN/framework YOK; hâlâ tek dosya, build adımı YOK.
+      Websocket/SSE YOK — bağımlılık ve karmaşıklık getirir, kazancı yok:
+      saniyede birkaç satırlık bir log için 5 sn'lik poll fazlasıyla yeter ve
+      "değişmedi" turu 204 ile bedavaya yakın kapanır.
   • 0.0.0.0'a bağlanır (ev LAN'ı), kimlik doğrulama YOK — kullanıcı böyle İSTEDİ.
       NEDEN: pano artık sunucuda (.25) çalışıyor, çünkü baktığı veri (sessions/,
       memory/, worker/logs/) ORADA. Kullanıcı Mac'ten/telefondan bakıyor →
@@ -391,14 +397,14 @@ table.log td.m{white-space:pre-wrap;word-break:break-word}
 table.log .extra{color:var(--mut);opacity:.8}
 """
 
-def page(title: str, active: str, body: str, extra_js: str = "", head: str = "") -> bytes:
+def page(title: str, active: str, body: str, extra_js: str = "") -> bytes:
     nav = [("/sessions", "Oturumlar"), ("/memory", "Hafıza (salt-okunur)"), ("/log", "Worker Log")]
     links = "".join(
         f'<a href="{h}" class="{"on" if h == active else ""}">{E(t)}</a>' for h, t in nav
     )
     now = datetime.now().strftime("%H:%M:%S")
     return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">{head}
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{E(title)} — Candan panosu</title><style>{CSS}</style></head><body>
 <header><b>Candan panosu</b><nav>{links}</nav>
 <span class="mut" style="margin-left:auto">yenilendi {now} · <a href="" style="color:var(--acc)">yenile</a></span>
@@ -539,37 +545,43 @@ Ailenin gerçek hafızası burada; pano yalnızca gösterir.</span></p>
     return page("Hafıza", "/memory", body)
 
 
-def render_log(q: dict) -> bytes:
-    """Worker Log — worker/logs/agent.log kuyruğu. SALT-OKUNUR (yazan endpoint YOK)."""
+def log_params(q: dict) -> dict:
+    """/log ve /log/rows AYNI parametreleri okusun diye tek yerde çözülür."""
     def one(k: str, default: str = "") -> str:
         return (q.get(k) or [default])[0]
 
-    level = one("level")
-    logger = one("logger")
-    auto = one("auto") == "1"
-    show_json = one("json") == "1"
     try:
         n = int(one("n", "300"))
     except ValueError:
         n = 300
-    n = max(10, min(n, 5000))
+    return {"level": one("level"), "logger": one("logger"), "auto": one("auto") == "1",
+            "show_json": one("json") == "1", "n": max(10, min(n, 5000)), "sig": one("sig")}
 
-    if not WORKER_LOG.is_file():
-        return page("Worker Log", "/log",
-                    f'<h2>Worker Log <small>{E(str(WORKER_LOG))}</small></h2>'
-                    '<div class="box">Log dosyası yok. Worker bu makinede hiç çalışmamış olabilir '
-                    '— log sunucudaysa (.25) panoyu orada çalıştır.</div>')
 
-    raw, truncated = tail_lines(WORKER_LOG, n)
+def log_sig() -> str:
+    """UCUZ "değişti mi?" sinyali: boyut+mtime. Log yalnızca sona eklenir → boyut
+    değişmediyse yeni satır da yoktur. Dosya yoksa "0-0" (worker başlayınca değişir).
+    Aynı sig geri gelirse /log/rows 204 döner → boşuna DOM değiştirilmez."""
+    try:
+        st = WORKER_LOG.stat()
+        return f"{st.st_size}-{st.st_mtime_ns}"
+    except OSError:
+        return "0-0"
+
+
+def log_tbody(p: dict) -> tuple[str, list[str], dict]:
+    """Log tablosunun GÖVDESİ (<tbody>…</tbody>) — hem sayfa hem fragment bunu kullanır.
+
+    Sayaçlar ve sig, tbody'de data-* olarak taşınır: JS ayrı bir istek atmadan
+    kartları güncelleyebilsin ve bir sonraki turda sig'i geri gönderebilsin.
+    Döner: (tbody_html, logger_listesi, durum). SALT-OKUNUR.
+    """
+    raw, truncated = tail_lines(WORKER_LOG, p["n"])
     rows_all = [parse_log_line(ln) for ln in raw if ln.strip()]
-    if not rows_all:
-        return page("Worker Log", "/log",
-                    f'<h2>Worker Log <small>{E(str(WORKER_LOG))}</small></h2>'
-                    '<div class="box">Log dosyası boş.</div>')
-
     loggers = sorted({r["logger"] for r in rows_all if r["logger"]})
     rows = [r for r in rows_all
-            if (not level or r["level"] == level) and (not logger or r["logger"] == logger)]
+            if (not p["level"] or r["level"] == p["level"])
+            and (not p["logger"] or r["logger"] == p["logger"])]
     rows.reverse()   # EN YENİ ÜSTTE — kullanıcı kaydırmasın
 
     trs = "".join(
@@ -577,10 +589,101 @@ def render_log(q: dict) -> bytes:
         f'<td class="lv">{E(r["level"])}</td>'
         f'<td class="lg">{E(r["logger"])}</td>'
         f'<td class="m">{E(r["msg"])}'
-        + (f'<div class="extra">{E(r["extra"])}</div>' if show_json and r["extra"] else "")
+        + (f'<div class="extra">{E(r["extra"])}</div>' if p["show_json"] and r["extra"] else "")
         + "</td></tr>"
         for r in rows
-    ) or '<tr><td class="mut" colspan="4">Bu filtreye uyan satır yok.</td></tr>'
+    )
+    if not trs:
+        trs = ('<tr><td class="mut" colspan="4">'
+               + ("Log dosyası yok — worker bu makinede hiç çalışmamış olabilir."
+                  if not WORKER_LOG.is_file() else
+                  ("Log dosyası boş." if not rows_all else "Bu filtreye uyan satır yok."))
+               + "</td></tr>")
+
+    try:
+        size = WORKER_LOG.stat().st_size / 1024
+    except OSError:
+        size = 0.0
+    state = {
+        "shown": len(rows),
+        "warn": sum(1 for r in rows_all if r["level"] == "WARNING"),
+        "err": sum(1 for r in rows_all if r["level"] in ("ERROR", "CRITICAL")),
+        "size": size,
+        "truncated": truncated,
+    }
+    # E() her hücrede korunuyor: log'da kullanıcı konuşması geçiyor (< & → XSS).
+    tb = (f'<tbody id="logrows" data-sig="{E(log_sig())}" data-shown="{state["shown"]}" '
+          f'data-warn="{state["warn"]}" data-err="{state["err"]}" '
+          f'data-size="{state["size"]:.0f}">{trs}</tbody>')
+    return tb, loggers, state
+
+
+LOG_JS = """
+// Otomatik yenileme: SADECE tablo gövdesini tazeler (sayfa yeniden YÜKLENMEZ).
+(function () {
+  var box = document.getElementById('logrows');
+  var auto = document.getElementById('auto');
+  var dot = document.getElementById('canli');
+  if (!box || !auto || !dot) return;
+  var timer = null;
+
+  function say(t, cls) { dot.textContent = t; dot.className = 'tag ' + (cls || ''); }
+
+  function apply(html) {
+    var t = document.createElement('table');
+    t.innerHTML = html;                       // sunucu kaçışlı HTML üretir (html.escape)
+    var yeni = t.querySelector('tbody');
+    if (!yeni) return;
+    box.replaceWith(yeni);
+    box = yeni;
+    var d = box.dataset;
+    document.getElementById('c-shown').textContent = d.shown;
+    document.getElementById('c-warn').textContent = d.warn;
+    document.getElementById('c-err').textContent = d.err;
+    document.getElementById('c-size').textContent = d.size;
+  }
+
+  function tick() {
+    // Kullanıcı aşağı kaydırdıysa DOKUNMA: tabloyu değiştirmek onu yerinden eder.
+    if (window.scrollY > 40) { say('duraklatıldı — yukarı çık', 'warn'); return; }
+    var p = new URLSearchParams(location.search);
+    p.delete('auto');
+    p.set('sig', box.dataset.sig || '');      // değişmediyse sunucu 204 döner
+    fetch('/log/rows?' + p.toString(), { cache: 'no-store' })
+      .then(function (r) {
+        if (r.status === 204) { say('canlı', 'ok'); return null; }   // log büyümemiş
+        if (!r.ok) throw new Error(r.status);
+        return r.text();
+      })
+      .then(function (h) { if (h !== null) { apply(h); } say('canlı', 'ok'); })
+      .catch(function () { say('bağlantı yok — deneniyor', 'err'); });  // pano/worker restart: sayfa ölmesin
+  }
+
+  function sync() {
+    if (timer) { clearInterval(timer); timer = null; }
+    var u = new URL(location.href);
+    if (auto.checked) {
+      u.searchParams.set('auto', '1');
+      timer = setInterval(tick, 5000);
+      tick();
+    } else {
+      u.searchParams.delete('auto');
+      say('kapalı', '');
+    }
+    history.replaceState(null, '', u);        // elle yenilemede seçim korunsun
+  }
+
+  auto.addEventListener('change', sync);
+  sync();
+})();
+"""
+
+
+def render_log(q: dict) -> bytes:
+    """Worker Log — worker/logs/agent.log kuyruğu. SALT-OKUNUR (yazan endpoint YOK)."""
+    p = log_params(q)
+    tb, loggers, st = log_tbody(p)
+    level, logger, auto, show_json, n = p["level"], p["logger"], p["auto"], p["show_json"], p["n"]
 
     def opts(vals, cur: str) -> str:
         return "".join(f'<option value="{E(str(v))}"{" selected" if str(v) == cur else ""}>'
@@ -594,28 +697,25 @@ def render_log(q: dict) -> bytes:
 <label>Logger <select name="logger" onchange="this.form.submit()">{opts(["", *loggers], logger)}</select></label>
 <label>Satır <select name="n" onchange="this.form.submit()">{opts(LOG_LINE_CHOICES, str(n))}</select></label>
 <label><input type="checkbox" name="json" value="1"{ck(show_json)} onchange="this.form.submit()"> JSON eki</label>
-<label><input type="checkbox" name="auto" value="1"{ck(auto)} onchange="this.form.submit()"> Otomatik yenile (5 sn)</label>
+<label><input type="checkbox" id="auto" name="auto" value="1"{ck(auto)}> Otomatik yenile (5 sn)</label>
+<span id="canli" class="tag">kapalı</span>
 <button type="submit">Uygula</button></form>"""
 
-    warn = sum(1 for r in rows_all if r["level"] == "WARNING")
-    err = sum(1 for r in rows_all if r["level"] in ("ERROR", "CRITICAL"))
-    size = WORKER_LOG.stat().st_size / 1024
-    note = " · dosya daha uzun, sadece kuyruk okundu" if truncated else ""
-
-    # REAL-TIME DEĞİL kuralının BİLİNÇLİ istisnası (gerekçe: dosya başındaki docstring).
-    head = '<meta http-equiv="refresh" content="5">' if auto else ""
+    note = " · dosya daha uzun, sadece kuyruk okundu" if st["truncated"] else ""
     body = f"""
-<h2>Worker Log <small>worker/logs/agent.log · {size:.0f} KB · salt-okunur{E(note)}</small></h2>
+<h2>Worker Log <small>worker/logs/agent.log · <span id="c-size">{st["size"]:.0f}</span> KB ·
+salt-okunur{E(note)}</small></h2>
 {bar}
 <div class="cards">
-  <div class="card"><div class="n">{len(rows)}</div><div class="l">gösterilen satır</div></div>
-  <div class="card"><div class="n" style="color:var(--warn)">{warn}</div><div class="l">WARNING (kuyrukta)</div></div>
-  <div class="card"><div class="n" style="color:var(--err)">{err}</div><div class="l">ERROR (kuyrukta)</div></div>
+  <div class="card"><div class="n" id="c-shown">{st["shown"]}</div><div class="l">gösterilen satır</div></div>
+  <div class="card"><div class="n" id="c-warn" style="color:var(--warn)">{st["warn"]}</div><div class="l">WARNING (kuyrukta)</div></div>
+  <div class="card"><div class="n" id="c-err" style="color:var(--err)">{st["err"]}</div><div class="l">ERROR (kuyrukta)</div></div>
 </div>
-<p class="mut">En yeni üstte. Son {n} satırın kuyruğu okunur (dosya komple belleğe ALINMAZ).</p>
-<div class="wrap"><table class="log"><tbody>{trs}</tbody></table></div>
+<p class="mut">En yeni üstte. Son {n} satırın kuyruğu okunur (dosya komple belleğe ALINMAZ).
+Otomatik yenilemede sayfa YENİDEN YÜKLENMEZ, yalnızca tablo tazelenir.</p>
+<div class="wrap"><table class="log">{tb}</table></div>
 """
-    return page("Worker Log", "/log", body, head=head)
+    return page("Worker Log", "/log", body, extra_js=LOG_JS)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -631,6 +731,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_204(self) -> None:
+        """"Değişmedi" — gövde yok, JS DOM'a dokunmaz."""
+        self.send_response(204)
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _redirect(self, to: str) -> None:
         self.send_response(303)
@@ -652,6 +758,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(render_memory())
             elif u.path == "/log":
                 self._send(render_log(q))
+            elif u.path == "/log/rows":
+                # AJAX parçası: SADECE tablo gövdesi. Salt-okunur, /log ile aynı filtreler.
+                p = log_params(q)
+                if p["sig"] and p["sig"] == log_sig():
+                    self._send_204()          # log büyümemiş → gövde bile gönderme
+                else:
+                    self._send(log_tbody(p)[0].encode())
             elif u.path == "/favicon.ico":
                 self._send(b"", 404)
             else:
