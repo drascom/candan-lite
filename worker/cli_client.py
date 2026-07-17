@@ -51,10 +51,12 @@ köprüsü için `bridge/` adını ayırmış — şimdi `clients/` açmak o kar
 from __future__ import annotations
 
 import argparse
+import array
 import asyncio
 import datetime
 import json
 import logging
+import math
 import os
 import shutil
 import signal
@@ -84,6 +86,9 @@ TRANSCRIPTION_TOPIC = "lk.transcription"
 # Stream header'ındaki "bu segment kesinleşti mi" bayrağı (agents/types.py:9).
 # Kullanıcı satırını AYIKLAMAK için şart — bkz. _on_transcription.
 ATTR_TRANSCRIPTION_FINAL = "lk.transcription_final"
+# `candan.awake` — worker'ın uyku/uyanıklık yayını (agent.py:382, _apply_wake_state).
+# Değeri sadece "true"/"false"; başka bir şey gelirse yok sayılır.
+WAKE_ATTR = "candan.awake"
 # Beyin seçimi — web/lib/brain.ts BRAINS ile aynı küme.
 BRAINS = ("local", "remote")
 
@@ -527,6 +532,68 @@ class EchoCanceller:
             self._complain("set_stream_delay_ms")
 
 
+# ── Uyku/uyanıklık çanı ─────────────────────────────────────────────────────────
+# NEDEN web ile BİREBİR aynı ses (web/components/app/debug-status.tsx playChime): evde
+# iki istemci dolaşıyor (tarayıcı + terminal) ve kullanıcı çanı SESİNDEN tanıyor —
+# terminalde farklı bir tını "başka bir şey oldu" diye okunurdu. Bu yüzden sabitler
+# Web Audio çağrılarının birebir karşılığı; değiştirirken web'i de değiştir.
+# NEDEN dosya değil sentez: .wav eklemek Pi'ye taşırken (docs/MULTI-CLIENT-PLAN.md)
+# taşınacak bir varlık daha demek; math + array zaten stdlib.
+CHIME_F0 = 660.0                        # ikisi de aynı yerden başlar → aynı "aile" duyulur
+CHIME_F1 = {"wake": 990.0, "sleep": 440.0}  # yükselen = uyandı, alçalan = uyudu
+CHIME_SWEEP_S = 0.18                    # f0→f1 üstel geçiş (exponentialRampToValueAtTime)
+CHIME_ATTACK_S = 0.02
+CHIME_DECAY_END_S = 0.35
+CHIME_TOTAL_S = 0.37                    # osc.stop(now + 0.37)
+# Web Audio'nun ÜSTEL rampası sıfıra inemez (0 → çalışmaz), o yüzden zarf 0.0001'den
+# başlayıp 0.0001'e döner. Aynı sayıyı taşıyoruz ki zarfın eğrisi birebir çıksın.
+CHIME_FLOOR = 0.0001
+CHIME_PEAK = 32767  # int16 tam ölçek; web'de gain 1.0'a çıkıyor → aynı yükseklik
+
+_CHIME_CACHE: dict[tuple[str, int], bytes] = {}
+
+
+def _chime_gain(t: float) -> float:
+    """Zarf: 0.0001 →(0.02 sn)→ 1.0 →(0.35 sn)→ 0.0001, hepsi ÜSTEL.
+
+    Web Audio'da her rampa bir ÖNCEKİ olayın anından başlar; sönüm bu yüzden 0.02'den
+    0.35'e uzanır (0.35 sn SÜRMEZ). Kuyruktaki 0.35→0.37 aralığı taban değerde sabit.
+    """
+    if t < CHIME_ATTACK_S:
+        return CHIME_FLOOR * (1.0 / CHIME_FLOOR) ** (t / CHIME_ATTACK_S)
+    if t < CHIME_DECAY_END_S:
+        return CHIME_FLOOR ** ((t - CHIME_ATTACK_S) / (CHIME_DECAY_END_S - CHIME_ATTACK_S))
+    return CHIME_FLOOR
+
+
+def _chime_pcm(kind: str, sample_rate: int) -> bytes:
+    """Çanın int16 PCM'i, istemcinin ÇALIŞTIĞI oranda (48k varsayma — --sample-rate var).
+
+    Faz artımlı toplanıyor, sin(2πft) DEĞİL: frekans süpürülürken t'yi doğrudan çarpmak
+    fazı kırar (klik/cızırtı). Sonuç önbelleklenir — çan her uyku/uyanışta çalıyor,
+    aynı diziyi her seferinde yeniden üretmenin anlamı yok.
+    """
+    key = (kind, sample_rate)
+    cached = _CHIME_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    ratio = CHIME_F1[kind] / CHIME_F0
+    samples = array.array("h")
+    phase = 0.0
+    for i in range(int(sample_rate * CHIME_TOTAL_S)):
+        t = i / sample_rate
+        freq = CHIME_F0 * ratio ** min(t / CHIME_SWEEP_S, 1.0)  # süpürme bitince sabit
+        value = int(CHIME_PEAK * _chime_gain(t) * math.sin(phase))
+        phase += 2 * math.pi * freq / sample_rate
+        value = max(-32768, min(32767, value))  # zarf tepesi tam ölçek → yuvarlama taşmasın
+        for _ in range(CHANNELS):
+            samples.append(value)
+    pcm = samples.tobytes()
+    _CHIME_CACHE[key] = pcm
+    return pcm
+
+
 # ── Ses G/Ç — sounddevice (PortAudio). Pi'de de aynı kod. ───────────────────────
 class Speaker:
     """Candan'ın sesi → hoparlör.
@@ -542,6 +609,7 @@ class Speaker:
         self._buf = bytearray()
         self._lock = threading.Lock()
         self._aec = aec
+        self._sample_rate = sample_rate  # çan bu oranda sentezlenir (bkz. play_chime)
         self._bytes_per_frame = 2 * CHANNELS
         self._max_bytes = sample_rate * self._bytes_per_frame * SPEAKER_BUFFER_MAX_MS // 1000
         self._silent_since = time.monotonic()  # yarı-çift yönlü kapı için (bkz. is_playing)
@@ -596,6 +664,22 @@ class Speaker:
             if len(self._buf) > self._max_bytes:
                 # Taşma: ESKİ sesi at. Gecikmeli konuşma çalmaktansa kesmek yeğdir.
                 del self._buf[: len(self._buf) - self._max_bytes]
+
+    def play_chime(self, kind: str) -> None:
+        """Uyku/uyanış çanını Candan'ın sesiyle AYNI akıştan çal.
+
+        NEDEN ayrı bir ses cihazı/akış AÇMIYORUZ: bu akıştan geçen her şey `_callback`'te
+        AEC'nin referansına da giriyor (process_render). Çanı oradan geçirmezsek mikrofona
+        dönen çan APM'e görünmez → Candan kendi çanını "kullanıcı konuşması" sanar, yani
+        uyku çanı onu anında geri uyandırabilirdi. Kendi akışını açmak bunu garanti bozardı.
+
+        Kuyruğa EKLENİR (araya girmez): Candan konuşurken çan zaten çalmaz, çünkü çan
+        yalnızca uyku/uyanış geçişinde gelir.
+        """
+        try:
+            self.push(_chime_pcm(kind, self._sample_rate))
+        except Exception:  # noqa: BLE001 — çan süs; oturumu ÖLDÜRMESİN
+            log.warning("çan çalınamadı (%s)", kind, exc_info=True)
 
     def close(self) -> None:
         self._stream.stop()
@@ -690,6 +774,7 @@ class TerminalClient:
         self._speaker: Speaker | None = None
         self._tasks: set[asyncio.Task] = set()  # RUF006: task referansı kaybolmasın
         self._seen_tools: set[str] = set()      # yeniden bağlanmada çift kart basma
+        self._awake: str | None = None          # `candan.awake` son değeri; None = hiç görülmedi
 
     def _spawn(self, coro) -> None:
         task = asyncio.create_task(coro)
@@ -788,6 +873,44 @@ class TerminalClient:
         self._seen_tools.add(key)
         self.out.card(event)
 
+    # ── Uyku/uyanıklık ─────────────────────────────────────────────────────────
+    def _on_attributes_changed(self, changed: dict[str, str], participant: rtc.Participant) -> None:
+        """`participant_attributes_changed` — worker'ın uyku/uyanış yayını.
+
+        İmza SDK'dan doğrulandı (rtc/room.py:936 → emit(changed_attributes, participant)).
+        Kendi özniteliklerimizi eleriz: bu olay LOCAL katılımcı için de atar, `candan.awake`
+        bize ait olmasa da eleme ucuz ve niyeti açık.
+        """
+        if participant.identity == self.identity:
+            return
+        value = changed.get(WAKE_ATTR)
+        if value is not None:
+            self._apply_awake(value)
+
+    def _apply_awake(self, value: str) -> None:
+        """Durumu bas + geçişte çan çal.
+
+        İLK değerde ÇAN YOK (web/debug-status.tsx ile aynı kural: `prev === undefined`):
+        bağlanır bağlanmaz çan çalması "bir şey oldu" yanılgısı yaratır — oysa sadece
+        odanın hâlini öğrendik. Satır yine basılır; kullanıcı bağlanınca durumu görmeli.
+        """
+        if value not in ("true", "false"):
+            return  # sözleşme dışı değer → yok say (agent.py sadece true/false yayar)
+        prev, self._awake = self._awake, value
+        if prev == value:
+            return
+        self.out.info("👂 Uyanık — dinliyorum" if value == "true" else "😴 Uykuda — 'candan' de")
+        if prev is not None and self._speaker is not None:
+            self._speaker.play_chime("wake" if value == "true" else "sleep")
+
+    def _sync_awake_from_room(self) -> None:
+        """İlk değeri KAÇIRMA: agent biz bağlanmadan önce özniteliği set etmiş olabilir →
+        o olay bize hiç düşmez, sadece katılımcının mevcut `attributes`'ında durur."""
+        for participant in self.room.remote_participants.values():
+            value = (participant.attributes or {}).get(WAKE_ATTR)
+            if value is not None:
+                self._apply_awake(value)
+
     # ── Ses aboneliği ──────────────────────────────────────────────────────────
     def _on_track_subscribed(self, track: rtc.Track, *_rest) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO or self._speaker is None:
@@ -846,6 +969,7 @@ class TerminalClient:
         self.room.register_text_stream_handler(TRANSCRIPTION_TOPIC, self._on_transcription)
         self.room.register_text_stream_handler(TOOL_TOPIC, self._on_tool_event)
         self.room.on("track_subscribed", self._on_track_subscribed)
+        self.room.on("participant_attributes_changed", self._on_attributes_changed)
         self.room.on("disconnected", lambda *_: stop.set())
 
         await self.room.connect(a.url, token)
@@ -882,6 +1006,10 @@ class TerminalClient:
             _info("mikrofon yayında — konuşabilirsin. Çıkış: Ctrl+C")
         else:
             _info("--no-audio: ses açılmadı (yalnız bağlantı/transkript). Çıkış: Ctrl+C")
+
+        # Hoparlör KURULDUKTAN sonra tara: aksi halde bu tarama sırasında düşen bir geçiş
+        # `self._speaker is None` diye çanını kaybederdi. (--no-audio'da çan yok, satır var.)
+        self._sync_awake_from_room()
 
         await stop.wait()
 

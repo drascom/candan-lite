@@ -126,15 +126,18 @@ class SpeakerID:
         sims = self._centroids @ q  # centroid'ler zaten L2-normalize
         order = np.argsort(sims)[::-1]
         ranking = [(self._names[i], float(sims[i])) for i in order]
-        log.info(
-            "speaker-ID skorlar: %s (eşik=%.2f marj=%.2f)",
-            ", ".join(f"{n}={s:.3f}" for n, s in ranking),
-            self.threshold, self.margin,
-        )
         best = ranking[0][1]
         second = ranking[1][1] if len(ranking) > 1 else -1.0
+        # Her çağrıda (saniyede bir) INFO basmak log'u boğuyordu; skor dökümü
+        # sadece hata ayıklarken lazım, o yüzden unknown'da DEBUG'a indi.
         if best < self.threshold or (best - second) < self.margin:
+            log.debug(
+                "speaker-ID skorlar: %s (eşik=%.2f marj=%.2f)",
+                ", ".join(f"{n}={s:.3f}" for n, s in ranking),
+                self.threshold, self.margin,
+            )
             return None, best
+        log.info("speaker-ID tanındı: %s (skor=%.3f)", ranking[0][0], best)
         return ranking[0][0], best
 
     def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
