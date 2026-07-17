@@ -32,6 +32,12 @@ log.addFilter(DedupeFilter())
 # Bu dosyanın dizini = worker/. Relative env yollarını buna göre çöz.
 WORKER_DIR = Path(__file__).resolve().parent
 
+# speaker_samples.source ayrımı: makinenin kendi kendine eklediği örnekler. Geri
+# kalan her şey ('voice-enroll', 'voice-enroll-merge', NULL) İNSAN onaylı kabul
+# edilir = kimlik çapası. Beyaz liste değil kara liste: yeni bir enroll kaynağı
+# eklenirse yanlışlıkla auto sayılıp ağırlığını kaybetmesin.
+_AUTO_SOURCES = frozenset({"auto-learn"})
+
 
 # ---------------------------------------------------------------------------
 # yardımcılar
@@ -78,6 +84,8 @@ class SpeakerID:
         margin: float = 0.05,
         num_threads: int = 1,
         merge_low: float = 0.35,
+        enroll_weight: float = 0.7,
+        drift_warn_frac: float = 0.10,
     ):
         import sherpa_onnx
 
@@ -92,6 +100,11 @@ class SpeakerID:
         # Enroll koruması: bu skorun ALTI "gerçekten yeni kişi", arası belirsiz bant
         # (kullanıcıya "Sen X misin?" diye sorulur), threshold üstü = zaten kayıtlı.
         self.merge_low = merge_low
+        # Centroid'de enroll grubunun payı (auto-learn grubu 1-w). Örnek sayısından
+        # bağımsız → 109 auto-learn bile enroll'ü boğamaz.
+        self.enroll_weight = min(1.0, max(0.0, enroll_weight))
+        # Çapadan `threshold` kadar uzak auto-learn oranı bunu AŞARSA WARNING.
+        self.drift_warn_frac = drift_warn_frac
         self._lock = threading.Lock()  # extractor stream'i seri kullanılsın
         self._names: list[str] = []
         self._centroids = np.zeros((0, self.dim), dtype=np.float32)  # L2-normalize
@@ -162,7 +175,15 @@ class SpeakerID:
 
     def reload(self, speakers: list[dict]) -> None:
         """DB'deki kişileri belleğe al: örnek embedding'leri normalize et, ortala,
-        normalize et = centroid. model_id/dim uyuşmayanı atla (tutarlılık kilidi)."""
+        normalize et = centroid. model_id/dim uyuşmayanı atla (tutarlılık kilidi).
+
+        Centroid DÜZ ortalama DEĞİL: enroll örnekleri ile auto-learn örnekleri ayrı
+        ortalanıp `enroll_weight` ile harmanlanır. Neden: düz ortalamada ağırlık örnek
+        SAYISINA gider; canlı DB'de 2 enroll vs 109 auto-learn = gerçek kimliğin sözü
+        %1.8'e düşmüştü ve geri-besleme döngüsü (tanı → örnek ekle → centroid kay)
+        centroid'i "duyulan her şeyin ortalaması"na çevirmişti. Grup ağırlığıyla enroll'ün
+        payı örnek sayısından BAĞIMSIZ sabit kalır → kayma matematiksel olarak sınırlı.
+        """
         names: list[str] = []
         cents: list[np.ndarray] = []
         name_to_id: dict[str, int] = {}
@@ -173,15 +194,52 @@ class SpeakerID:
                     sp.get("name"), sp["model_id"], self.model_id,
                 )
                 continue
-            embs = []
-            for b in sp.get("embeddings", []):
+            sources = sp.get("sources") or []
+            enroll: list[np.ndarray] = []
+            auto: list[np.ndarray] = []
+            for i, b in enumerate(sp.get("embeddings", [])):
                 v = np.frombuffer(b, dtype="<f4").astype(np.float32)
                 if v.shape[0] != self.dim:
                     continue
-                embs.append(_l2(v))
-            if not embs:
+                src = sources[i] if i < len(sources) else None
+                # `sources` yoksa (eski çağıran) hepsi enroll sayılır → eski düz-ortalama
+                # davranışı; sessizce auto muamelesi yapıp ağırlığı bozmaktan iyi.
+                (auto if src in _AUTO_SOURCES else enroll).append(_l2(v))
+            if not enroll and not auto:
                 continue
-            cents.append(_l2(np.mean(np.stack(embs), axis=0)))
+            if enroll and auto:
+                w = self.enroll_weight
+                mean = w * np.mean(np.stack(enroll), axis=0) + (1.0 - w) * np.mean(
+                    np.stack(auto), axis=0
+                )
+            else:
+                mean = np.mean(np.stack(enroll or auto), axis=0)
+            cent = _l2(mean)
+            # Kaçış tespiti. Ölçülen şey: auto-learn örneklerinin KAÇTA KAÇI enroll
+            # çapasına `threshold`'dan uzak — yani "bu kişi değil" diyeceğimiz kadar.
+            #
+            # Neden bu, "centroid çapadan ne kadar saptı" DEĞİL: (a) grup ağırlığı o
+            # mesafeyi matematiksel olarak yukarı kilitler → metrik ölü doğar;
+            # (b) meşru uyum (nezle/mikrofon) ile kirlenmeyi AYIRAMAZ — ikisi de
+            # "çapadan uzaklaşma"dır, hatta ölçümde nezle kirlenmeden daha uzak çıktı.
+            # Kümenin BÖLÜNMESİ ayırt edici: aynı kişinin sesi kaysa da örnekleri
+            # birlikte taşınır (hepsi çapaya makul yakın kalır); yabancı girdiğinde
+            # örneklerin bir kısmı çapadan tamamen kopar. Canlı kirlenmiş DB'de bu oran
+            # %14 (109 örneğin 15'i < 0.45), sağlıklı/uyum simülasyonunda %0.
+            if enroll and auto:
+                anchor = _l2(np.mean(np.stack(enroll), axis=0))
+                sims = np.stack(auto) @ anchor
+                frac = float(np.mean(sims < self.threshold))
+                if frac > self.drift_warn_frac:
+                    log.warning(
+                        "speaker %r auto-learn kirlenmiş olabilir: %d/%d örnek (%.0f%%)"
+                        " enroll çapasına %.2f'den uzak (min=%.3f, ort=%.3f) — bu örnekler"
+                        " %r değil. auto-learn örneklerini temizleyip yeniden enroll düşünün.",
+                        sp.get("name"), int((sims < self.threshold).sum()), len(auto),
+                        frac * 100, self.threshold, float(sims.min()), float(sims.mean()),
+                        sp.get("name"),
+                    )
+            cents.append(cent)
             names.append(sp["name"])
             if sp.get("id") is not None:
                 name_to_id[sp["name"]] = sp["id"]
@@ -311,14 +369,61 @@ class SpeakerStore:
         finally:
             conn.close()
 
-    def _embeddings(self, speaker_id: int) -> list[bytes]:
+    def _add_auto_sample(self, speaker_id: int, embedding: bytes, dim: int,
+                         model_id: str, max_total: int) -> tuple[int, int]:
+        """auto-learn örneği ekle + kişi başına KÜRESEL (kalıcı) tavanı uygula.
+
+        Tavan neden burada, çağıranda değil: LiveKit her oda oturumu için yeni bir
+        job süreci açar → süreç-içi sayaç sıfırlanır ve tavan hiç dolmaz (canlı DB'de
+        ~55 oturum × 2 = 109 örnek böyle birikti). Tek güvenilir sayaç DB'nin kendisi,
+        ve insert+budama tek transaction'da olmalı ki eşzamanlı job'lar tavanı aşmasın.
+
+        FIFO: tavan dolunca en ESKİ auto-learn örneği düşer. `source` filtresi sayesinde
+        'voice-enroll'/'voice-enroll-merge' örnekleri ASLA silinmez — onlar kimlik çapası.
+        Döner: (eklenen_satır_id, atılan_örnek_sayısı).
+        """
+        now = time.time()
+        keep = max(0, int(max_total))
+        conn = self._connect()
+        try:
+            with conn:  # tek transaction: insert + budama atomik
+                cur = conn.execute(
+                    "INSERT INTO speaker_samples (speaker_id, embedding, source, created_at)"
+                    " VALUES (?, ?, 'auto-learn', ?)",
+                    (speaker_id, embedding, now),
+                )
+                new_id = cur.lastrowid
+                # En yeni `keep` tanesini tut, geri kalan auto-learn'leri at.
+                # LIMIT -1 OFFSET n = "ilk n satırdan sonrasının tamamı" (sqlite).
+                dropped = conn.execute(
+                    "DELETE FROM speaker_samples WHERE id IN ("
+                    "  SELECT id FROM speaker_samples"
+                    "   WHERE speaker_id = ? AND source = 'auto-learn'"
+                    "   ORDER BY id DESC LIMIT -1 OFFSET ?"
+                    ")",
+                    (speaker_id, keep),
+                ).rowcount
+                conn.execute(
+                    "UPDATE speakers SET"
+                    "  sample_count = (SELECT COUNT(*) FROM speaker_samples WHERE speaker_id = ?),"
+                    "  dim = COALESCE(dim, ?),"
+                    "  model_id = COALESCE(model_id, ?),"
+                    "  updated_at = ?"
+                    " WHERE id = ?",
+                    (speaker_id, dim, model_id, now, speaker_id),
+                )
+            return int(new_id), int(max(0, dropped))
+        finally:
+            conn.close()
+
+    def _embeddings(self, speaker_id: int) -> list[tuple[bytes, str | None]]:
         conn = self._connect()
         try:
             cur = conn.execute(
-                "SELECT embedding FROM speaker_samples WHERE speaker_id = ? ORDER BY id",
+                "SELECT embedding, source FROM speaker_samples WHERE speaker_id = ? ORDER BY id",
                 (speaker_id,),
             )
-            return [r["embedding"] for r in cur.fetchall()]
+            return [(r["embedding"], r["source"]) for r in cur.fetchall()]
         finally:
             conn.close()
 
@@ -326,7 +431,11 @@ class SpeakerStore:
         out = []
         for sp in self._list_speakers():
             sp = dict(sp)
-            sp["embeddings"] = self._embeddings(sp["id"])
+            rows = self._embeddings(sp["id"])
+            # `embeddings` şekli değişmedi (eski çağıranlar bozulmaz); `sources` ek
+            # bilgi — reload() enroll/auto ayrımını buradan yapıyor.
+            sp["embeddings"] = [b for b, _ in rows]
+            sp["sources"] = [s for _, s in rows]
             out.append(sp)
         return out
 
@@ -362,6 +471,13 @@ class SpeakerStore:
     async def add_speaker_sample(self, speaker_id: int, embedding: bytes, dim: int,
                                  model_id: str, source: str | None = None) -> int:
         return await asyncio.to_thread(self._add_sample, speaker_id, embedding, dim, model_id, source)
+
+    async def add_auto_learn_sample(self, speaker_id: int, embedding: bytes, dim: int,
+                                    model_id: str, max_total: int) -> tuple[int, int]:
+        """auto-learn örneği ekle, kişi başına küresel tavanı FIFO ile uygula."""
+        return await asyncio.to_thread(
+            self._add_auto_sample, speaker_id, embedding, dim, model_id, max_total
+        )
 
     async def list_speakers(self) -> list[dict]:
         return await asyncio.to_thread(self._list_speakers)
@@ -408,10 +524,14 @@ def build_speaker_id() -> "SpeakerID | None":
             _f("SPEAKER_THRESHOLD", 0.45),
             _f("SPEAKER_MARGIN", 0.05),
             merge_low=_f("SPEAKER_MERGE_LOW", 0.35),
+            enroll_weight=_f("SPEAKER_ENROLL_WEIGHT", 0.7),
+            drift_warn_frac=_f("SPEAKER_DRIFT_WARN_FRAC", 0.10),
         )
         log.info(
-            "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f)",
+            "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f,"
+            " enroll_w=%.2f, drift_warn_frac=%.2f)",
             model_path, sp.dim, sp.threshold, sp.margin, sp.merge_low,
+            sp.enroll_weight, sp.drift_warn_frac,
         )
         return sp
     except Exception as e:  # noqa: BLE001

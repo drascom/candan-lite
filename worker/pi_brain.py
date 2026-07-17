@@ -31,6 +31,7 @@ from name_parser import (
     parse_spoken_name,
     is_affirmative_reply,
     _is_decline_enroll,
+    _is_enroll_command,
 )
 from log_utils import DedupeFilter
 
@@ -163,7 +164,11 @@ PI_TOOLS_ALLOWLIST = os.environ.get(
     "PI_TOOLS_ALLOWLIST",
     # web_search    → @oresk/pi-searxng (kendi SearXNG'miz, .25:8888)
     # fetch_content → pi-web-access (doğrudan HTTP + Readability; sağlayıcı yok)
-    "reminder_add,memory_add,soul_add,memory_search,"
+    # enroll_speaker EN BAŞTA: kritik EYLEM tool'u → web_search'ten ÖNCE olmalı
+    # (yukarıdaki ölçülmüş kural). reminder_add'in de önüne kondu: çağrılmama riski en
+    # yüksek olan bu — canlıda eş "beni ses olarak kaydet" dedi, model sohbet etti,
+    # HİÇBİR ŞEY kaydedilmedi. Sıra dekoratif değil, davranışı ölçülü biçimde değiştiriyor.
+    "enroll_speaker,reminder_add,memory_add,soul_add,memory_search,"
     "reminder_list,reminder_cancel,web_search,fetch_content,memory_consolidate",
 )
 
@@ -415,6 +420,153 @@ _RESET_FUZZY_DIST = 2
 # olduğundan 4 mesafe zaten uzunlukları 4 içine hapseder → ayrı uzunluk guard'ı
 # gerekmez. Bant genişletmenin maliyeti yanlış SİLME değil, fazladan bir SORU.
 _RESET_NEAR_DIST = 4
+
+# ── Sesli kayıt: çok-örnekli toplama + kalite seçimi ─────────────────────────
+# NEDEN: kayıt yalnızca 2 pencere alıyordu → centroid zayıf doğuyor, sonra
+# auto-learn geri besleme döngüsüyle kayıyor (canlıda ölçüldü: gerçek Ayhan'ın 2
+# 'voice-enroll' örneğine göre 109 auto-learn örneğinin ortalaması 0.528, 15'i
+# eşiğin ALTINDA; kirlenmiş centroid ↔ gerçek centroid = 0.753). Zayıf centroid,
+# yabancıyı "Ayhan" sanmanın kök sebebi. Çözüm: kayıt boyunca birkaç pencere
+# topla, tutarsızları AT, sağlam bir çekirdekten centroid kur.
+# Toplama üst sınırı (bellek + hesap sınırı; uzun kayıt diyaloğu penceresi taşırmasın).
+SPEAKER_ENROLL_MAX = int(os.environ.get("SPEAKER_ENROLL_MAX", "24") or 24)
+# Çekirdek bundan küçükse KAYIT YAPMA. Kötü kayıt yapmaktansa kayıt yapmamak yeğdir:
+# kirli centroid'i sonradan temizlemek, kullanıcıya tekrar sormaktan çok daha pahalı.
+SPEAKER_ENROLL_MIN_CORE = int(os.environ.get("SPEAKER_ENROLL_MIN_CORE", "3") or 3)
+# Çekirdek üyeliği: en merkezî pencereye (seed) bu kadar benzeyenler kalır.
+# DİKKAT — bu 0.60 ÖLÇÜLMÜŞ DEĞİL, ihtiyatlı bir TAHMİN: 0.45 tanıma eşiğinin
+# belirgin üstünde ama aynı-kişi pencerelerini elemeyecek kadar altında olsun diye
+# seçildi. Aşağıdaki "kayıt ölçümü" log satırı tam da bu sayıyı veriden türetmek
+# için var: yeterli kayıt biriktiğinde çekirdek-içi min/medyan'a bakıp düzeltilecek.
+SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60") or 0.60)
+# Toplayıcının yoklama aralığı (sn). speaker_tap ~1 sn'de bir pencere üretiyor.
+SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
+
+# ── EMNİYET AĞI: model tool'u hiç çağırmazsa kod devreye girer ────────────────
+# NEDEN: kayıt sihirbazını MODEL sürüyor (bkz. _enroll_hint) → model işini yapmazsa
+# HİÇBİR ŞEY olmaz, üstelik SESSİZCE. Canlıda tam olarak bu oldu (2026-07-17): eş
+# "Benim adım Havi, beni ses olarak kaydet" dedi, model sohbet etti, kayıt olmadı,
+# kimse fark etmedi. Bu, bu repo'da ölçülmüş bir hata sınıfı (model "yaptım" der,
+# yapmaz). Ağ, kaydolmak İSTEYEN kişi N tur boyunca kaydedilmediyse ismi
+# deterministik olarak sorar — ama yazma yolu DEĞİŞMEZ (aynı _enroll_apply kapısı).
+#
+# N=5 bir YARGI, ölçüm DEĞİL. Alt sınırı model'in sağlıklı sihirbazı belirliyor:
+# rıza(1) → isim(2) → ses örneği(3) → isim onayı(4) → tool(5). Yani çalışan bir
+# sihirbazda tool 5. turda gelir; N<5 seçmek kodun ÇALIŞAN sihirbazı yarıda kesmesi
+# = iki ses birbirine karışır demek. N=5 → ağ ancak 6. turda konuşur: sağlıklı akışı
+# kesmez, bozuk akışta da kullanıcıyı 5 turdan fazla oyalamaz.
+SPEAKER_ENROLL_NET_TURNS = int(os.environ.get("SPEAKER_ENROLL_NET_TURNS", "5") or 5)
+
+# Onay sorusuna gelen RET + DÜZELTME'nin ("hayır, Havi") başındaki olumsuzlama.
+# NEDEN soyuluyor: parse_spoken_name ilk isim-olmayan sözcükte DURUR → "hayır, Havi"den
+# ismi çıkaramaz; _is_decline_enroll ise bunu "vazgeçti" sanıp kaydı iptal ederdi.
+# Düzeltme, reddin en olası biçimi — önce onu dene (ölçüldü: parse_spoken_name
+# ("hayır, Havi") → None, ama önek soyulunca → "Havi").
+_ENROLL_NEG_PREFIX_RE = re.compile(
+    r"^\s*(?:hayır|hayir|yok|no|nope|değil|degil|yanlış|yanlis|olmadı|olmadi)"
+    r"[\s,.!:;-]+",
+    re.IGNORECASE,
+)
+
+
+def _parse_correction_name(text: str) -> Optional[str]:
+    """Onay sorusuna gelen sözden DÜZELTİLMİŞ ismi çıkar ("hayır, Havi" → Havi).
+    Olumsuzlama yoksa düz isim ayrıştırması yapar ("Havi" → Havi)."""
+    return parse_spoken_name(_ENROLL_NEG_PREFIX_RE.sub("", text or "", count=1))
+
+
+def _wants_enroll(text: str) -> bool:
+    """Kullanıcı kaydolmak İSTİYOR mu? (emniyet ağının tetik şartı)
+
+    NEDEN işaret aranıyor: misafir gelip sohbet edebilir — bilinmeyen HER sesi N tur
+    sonra kaydolmaya zorlamak rahatsız edici olur. Ağ yalnız isteyene açılır.
+
+    İki işaret (ölçüldü, bkz. aşağıdaki gerekçe):
+      1. açık komut: "beni kaydet" / "sesimi tanı" (_is_enroll_command)
+      2. kendini tanıtma: "Benim adım Havi" (parse_spoken_name bir isim çıkarıyor)
+    (2) şart: canlı arıza cümlesi "Benim adım Havi, beni ses olarak kaydet" 8 kelime
+    olduğu için _is_enroll_command'ın 6-kelime kapısından GEÇMİYOR (False döner) —
+    tek başına (1) o vakayı KAÇIRIRDI. parse_spoken_name ise 'Havi' çıkarıyor.
+    DİKKAT: buradaki isim yalnız İŞARET; kayıt için KULLANILMAZ ("beni ses olarak
+    kaydet" → parse_spoken_name 'Ses' döndürüyor!). Ağ ismi kendi, sıfırdan sorar."""
+    return _is_enroll_command(text) or parse_spoken_name(text) is not None
+# Kabul edilen isim biçimi: TEK kelime, yalnız harf (+ kesme/tire). Canlıda Whisper
+# aynı ismi üç türlü yazdı ("Javi" / "Haber" / "Havi" — doğrusu Havi) çünkü isim uzun
+# cümlenin içindeydi. Model'e "tek kelime iste" dedirtiyoruz; BU regex ise dediğini
+# yapmazsa (cümleyi isim diye gönderirse) tool'u REDDEDEN deterministik kapı.
+_NAME_ONLY_RE = re.compile(r"^[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]{1,31}$")
+
+
+def _pairwise_stats(embs: list) -> dict:
+    """L2-normalize edilmiş embed listesinin ikili kosinüs benzerlik özeti."""
+    import numpy as np
+
+    if len(embs) < 2:
+        return {"n": len(embs), "min": 0.0, "avg": 0.0, "med": 0.0, "max": 0.0}
+    m = np.stack(embs) @ np.stack(embs).T
+    iu = np.triu_indices(len(embs), k=1)
+    v = m[iu]
+    return {
+        "n": len(embs),
+        "min": float(v.min()),
+        "avg": float(v.mean()),
+        "med": float(np.median(v)),
+        "max": float(v.max()),
+    }
+
+
+def select_core_embeddings(
+    embs: list,
+    min_core: int = SPEAKER_ENROLL_MIN_CORE,
+    core_min: float = SPEAKER_ENROLL_CORE_MIN,
+) -> tuple[list, dict]:
+    """Toplanan pencerelerden TUTARLI çekirdeği seç; aykırıları at.
+
+    Döner: (çekirdek embed listesi — çok küçükse BOŞ, ölçüm sözlüğü).
+
+    Algoritma — "en merkezî pencereyi seed al, ona benzemeyeni at":
+    ikili kosinüs matrisi kurulur, her pencerenin DİĞERLERİNE medyan benzerliği
+    hesaplanır, medyanı en yüksek olan seed olur, seed'e `core_min` altında
+    benzeyenler atılır. NEDEN medyan (ortalama değil): medyan aykırıya dayanıklı —
+    8 pencerenin 2'si başkasının sesiyse ortalama seed seçimini bozabilir, medyan
+    bozmaz. NEDEN küme değil de seed: çoğunluk zaten kaydolan kişidir (mikrofona o
+    konuşuyor); aykırı = araya giren başka biri, gürültü ya da yankıyla dönen
+    Candan'ın kendi sesi. Bunlar centroid'i ZEHİRLİYOR — kaydedilmemeli.
+    """
+    import numpy as np
+
+    if not embs:
+        return [], {"toplanan": 0, "cekirdek": 0, "atilan": [], "seed_med": 0.0}
+    norm = [_l2_np(e) for e in embs]
+    n = len(norm)
+    if n == 1:
+        return ([], {"toplanan": 1, "cekirdek": 0, "atilan": [], "seed_med": 0.0}) \
+            if min_core > 1 else (embs, {"toplanan": 1, "cekirdek": 1, "atilan": [], "seed_med": 1.0})
+    sim = np.stack(norm) @ np.stack(norm).T
+    # Kendine benzerliği (1.0) medyandan çıkar; yoksa her pencere şişer.
+    meds = np.array([float(np.median(np.delete(sim[i], i))) for i in range(n)])
+    seed = int(np.argmax(meds))
+    keep = [i for i in range(n) if float(sim[seed][i]) >= core_min]
+    drop = [(i, float(sim[seed][i])) for i in range(n) if i not in keep]
+    core = [embs[i] for i in keep]
+    stats = {
+        "toplanan": n,
+        "cekirdek": len(core),
+        "atilan": [round(s, 3) for _, s in drop],
+        "seed_med": float(meds[seed]),
+        "ic": _pairwise_stats([norm[i] for i in keep]),
+    }
+    if len(core) < min_core:
+        return [], stats
+    return core, stats
+
+
+def _l2_np(v):
+    import numpy as np
+
+    a = np.asarray(v, dtype=np.float32)
+    n = float(np.linalg.norm(a))
+    return a / n if n > 0 else a
 
 
 def _reset_squash(s: str) -> str:
@@ -930,6 +1082,12 @@ def _build_pi_args(
         mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
         if mem_ext.is_file():
             args += ["-e", str(mem_ext)]
+    # speaker-enroll: enroll_speaker tool'u (sesle kayıt). SADECE normal modda — dev
+    # sohbetinde kimse kaydedilmez. Tool bir SİNYAL; kaydı worker yapar (_enroll_tool).
+    if not dev:
+        se_ext = REPO_ROOT / "pi" / "extensions" / "speaker-enroll" / "index.ts"
+        if se_ext.is_file():
+            args += ["-e", str(se_ext)]
     # mode-switch: enter_dev_mode/exit_dev_mode tool'ları. İKİ modda da yüklenir (normal →
     # enter'ı, dev → exit'i sunar). DEV_MODE_ENABLED=false → hiç yüklenmez (mekanizma kapalı).
     if DEV_MODE_ENABLED:
@@ -1269,6 +1427,9 @@ if _HAS_LIVEKIT:
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
+            # Bilinmeyen ses → kayıt sihirbazı direktifi (konuşmayı MODEL sürer;
+            # kaydı enroll_speaker tool'u üzerinden KOD yapar).
+            text = self._brain._enroll_hint(text)
             # ZAMAN: warm pi süreci GÜNLERCE yaşar → boot'ta enjekte edilen tarih BAYATLAR.
             # Her tura güncel saati (Europe/London) iliştir. Model yine de due_at HESAPLAMAZ
             # (onu reminder_add server-side çözer); bu satır "bugün/yarın/şu an" için.
@@ -1361,6 +1522,9 @@ if _HAS_LIVEKIT:
                         # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
                         # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
                         self._brain._detect_mode_signal(obj.get("message"))
+                        # Kayıt tool'u sinyali → tur SONUNDA kod kaydı yapar/reddeder.
+                        if etype in ("message_end", "turn_end"):
+                            self._brain._detect_enroll_signal(obj.get("message"))
                         if etype == "message_update":
                             ame = obj.get("assistantMessageEvent") or {}
                             if ame.get("type") == "text_delta":
@@ -1431,6 +1595,13 @@ if _HAS_LIVEKIT:
                                 "pi boş yanıt (error): %s",
                                 final_msg.get("errorMessage") or "(bilinmiyor)",
                             )
+                    # Kayıt tool'u çağrıldıysa: kaydı KOD yapar ve sonucu KOD söyler.
+                    # Model'in kendi cümlesinden SONRA konur → model "kaydettim" dese
+                    # bile son sözü gerçek karar söyler; ret de duyulur (sessiz
+                    # başarısızlık yok). Kayıt hiç yapılmadıysa satır YOK.
+                    enroll_line = await self._brain._run_pending_enroll()
+                    if enroll_line:
+                        _emit((" " if got_delta else "") + enroll_line)
                     # Stall'da pi hâlâ arka planda çalışıyor olabilir → abort ile durdur.
                     if stalled:
                         self._client._write({"type": "abort"})
@@ -1509,16 +1680,34 @@ if _HAS_LIVEKIT:
             self._speaker_id = speaker_id
             self._speaker_store = speaker_store
             self._enroll_ok = bool(speaker_state and speaker_id and speaker_store)
-            # Enrollment state machine (bağlantı ömrü boyunca yaşar).
-            # verify_existing: ses mevcut bir kişiye "belirsiz bant"ta benziyor →
-            # "Sen X misin?" diye sorup onayı bekliyoruz (kimlik bölünmesi koruması).
-            self._enroll_stage: Optional[str] = None      # None|"ask_name"|"confirm"|"verify_existing"
+            # Sesle kayıt (bağlantı ömrü boyunca yaşar). SİHİRBAZI MODEL sürer
+            # (bkz. _enroll_hint); KOD yazma anını tutar (bkz. _enroll_apply).
+            # _enroll_stage — KOD'un sürdüğü deterministik adımlar:
+            #   verify_existing → ses mevcut birine "belirsiz bant"ta benziyor →
+            #     "Sen X misin?". Kimlik BÖLÜNMESİ koruması, sohbet tercihi değil.
+            #   net_name / net_confirm → EMNİYET AĞI (model tool'u çağırmadı; bkz.
+            #     SPEAKER_ENROLL_NET_TURNS). Ağ da aynı yazma kapısını kullanır.
+            self._enroll_stage: Optional[str] = None
             self._enroll_name: Optional[str] = None
             self._enroll_emb: Any = None                  # tetikleyen sözün embed'i
             self._enroll_name_emb: Any = None             # ismi söylerkenki embed
-            self._enroll_retried = 0                      # isim kaç kez tekrar soruldu
+            self._enroll_retried = 0                      # kaç kez netleştirme soruldu
             self._enroll_match: Optional[str] = None      # sese benzeyen mevcut kişi
-            self._onboarding_asked = False                # bu bağlantıda soruldu mu
+            self._enroll_core: list = []                  # seçilmiş çekirdek (yazılacak)
+            self._pending_enroll: Optional[str] = None    # tool çağrıldı, tur sonunda işlenecek
+            self._enroll_hinted = False                   # kayıt direktifi verildi mi
+            self._enroll_name_tries = 0                   # isim onayı kaç kez düzeltildi
+            # Emniyet ağı sayaçları. _enroll_wanted/_enroll_net_done BAĞLANTI ömürlü
+            # (_reset_enroll onları TEMİZLEMEZ): "istemiyorum" diyene bir daha sorulmaz,
+            # ısrar kötü ürün.
+            self._enroll_wanted = False                   # kaydolmak istediğine dair işaret
+            self._enroll_no_tool_turns = 0                # tool'suz geçen tur sayısı
+            self._enroll_net_done = False                 # ağ işini bitirdi/reddedildi
+            # Kayıt boyunca toplanan HAM pencere embed'leri (çok-örnekli kayıt).
+            # _enroll_collector, kayıt diyaloğu sürerken speaker_state'i yoklayıp
+            # burayı doldurur; onayda tutarlı çekirdek seçilip yalnızca O yazılır.
+            self._enroll_embs: list = []
+            self._enroll_collector: Optional[asyncio.Task] = None
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
@@ -1763,86 +1952,387 @@ if _HAS_LIVEKIT:
 
         # ── Faz 3.1: sesli oto-enrollment state machine ──────────────────────
         def _reset_enroll(self) -> None:
+            self._stop_collect()
             self._enroll_stage = None
             self._enroll_name = None
             self._enroll_emb = None
             self._enroll_name_emb = None
+            self._enroll_embs = []
+            self._enroll_core = []
             self._enroll_retried = 0
+            self._enroll_name_tries = 0
             self._enroll_match = None
+            # DİKKAT: _enroll_wanted / _enroll_no_tool_turns / _enroll_net_done BURADA
+            # SIFIRLANMAZ — bilerek bağlantı ömürlü. "İstemiyorum" diyene bir daha
+            # sorulmamalı; kayıt bitince de ağ tekrar tetiklenmemeli.
 
+        # ── Çok-örnekli toplama ──────────────────────────────────────────────
+        def _start_collect(self) -> None:
+            """Kayıt diyaloğu boyunca ses penceresi biriktirmeye başla.
+
+            NEDEN yoklama (polling): speaker_tap her ~1 sn'lik KONUŞMA penceresinde
+            `state.last_embedding`i tazeliyor ama olay yayınlamıyor; ona dokunmadan
+            çok örnek almanın yolu bu alanı okumak. Yeni nesne kimliği = yeni pencere.
+            Kullanıcı adını söylerken + onaylarken geçen sürede tipik olarak birkaç
+            pencere birikir; tek turun tek embed'inden çok daha sağlam."""
+            if self._enroll_collector is not None or self._speaker_state is None:
+                return
+            self._enroll_embs = []
+            self._enroll_collector = asyncio.create_task(self._collect_loop())
+
+        def _stop_collect(self) -> None:
+            task, self._enroll_collector = self._enroll_collector, None
+            if task is not None and not task.done():
+                task.cancel()
+
+        async def _collect_loop(self) -> None:
+            last = None
+            try:
+                while len(self._enroll_embs) < SPEAKER_ENROLL_MAX:
+                    emb = getattr(self._speaker_state, "last_embedding", None)
+                    # `is not` ile karşılaştır: numpy dizisinde `!=` eleman-bazlı
+                    # dizi döndürür (truth value ambiguous). Kimlik değişimi zaten
+                    # "tap yeni pencere yazdı" demek.
+                    if emb is not None and emb is not last:
+                        last = emb
+                        self._enroll_embs.append(emb)
+                    await asyncio.sleep(SPEAKER_ENROLL_POLL_S)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # noqa: BLE001 — toplama asla kaydı bozmasın
+                logger.debug("enrollment örnek toplama hata: %s", e)
+
+        def _enroll_pool(self) -> list:
+            """Toplanan pencereler + akışın kilit anlarındaki embed'ler (tetikleyen
+            söz, ismi söylerkenki). Kilit anlar buffer'da zaten olabilir → kimlikle
+            elenir."""
+            pool = list(self._enroll_embs)
+            for emb in (self._enroll_emb, self._enroll_name_emb):
+                if emb is not None and not any(emb is p for p in pool):
+                    pool.append(emb)
+            return pool
+
+        def _select_enroll_core(self) -> list:
+            """Havuzdan tutarlı çekirdeği seç + ÖLÇÜMÜ logla. Yetersizse boş liste.
+
+            Log satırı bilerek ayrıntılı: 0.45 eşiğinin nereden geldiği bilinmiyor;
+            "aynı kişi, aynı oturumda ne kadar benzer?" sorusunun ölçülmüş cevabı
+            biriktikçe eşik TAHMİNLE değil VERİYLE düzeltilebilecek."""
+            self._stop_collect()
+            pool = self._enroll_pool()
+            core, st = select_core_embeddings(pool)
+            ic = st.get("ic") or {}
+            logger.info(
+                "kayıt ölçümü: toplanan=%d çekirdek=%d atılan=%d%s | "
+                "çekirdek-içi benzerlik: min=%.3f ort=%.3f medyan=%.3f maks=%.3f "
+                "(seed medyanı=%.3f, çekirdek eşiği=%.2f, tanıma eşiği=%.2f)",
+                st["toplanan"], st["cekirdek"], len(st["atilan"]),
+                (" skorlar=" + ", ".join(f"{s:.3f}" for s in st["atilan"])
+                 if st["atilan"] else ""),
+                ic.get("min", 0.0), ic.get("avg", 0.0), ic.get("med", 0.0),
+                ic.get("max", 0.0), st.get("seed_med", 0.0),
+                SPEAKER_ENROLL_CORE_MIN,
+                float(getattr(self._speaker_id, "threshold", 0.45)),
+            )
+            if not core:
+                logger.info(
+                    "kayıt ölçümü: çekirdek < %d → KAYIT YAPILMIYOR (kirli centroid "
+                    "kurmaktansa tekrar sor)", SPEAKER_ENROLL_MIN_CORE,
+                )
+            return core
+
+        # ── Sihirbazı MODEL sürer, yazma anını KOD tutar ─────────────────────
         async def _enrollment_line(self, text: str) -> Optional[str]:
-            """Enrollment kararı. Scripted TR satır döndürürse pi ATLANIR; None →
-            normal pi akışı. Kapalıysa hep None (Faz 2 davranışı)."""
+            """Kayıt akışında KOD'un elinde kalan tek konuşma adımı + toplama tetiği.
+
+            MİMARİ: kayıt sihirbazının KONUŞMASINI (rıza, "tek kelimeyle adını söyle",
+            yönlendirme, düzeltme, iptal) MODEL sürüyor — katı durum makinesi esnek
+            değildi. KOD ise YAZMA ANINI tutuyor: kalıcı kayıt yalnız enroll_speaker
+            tool'u üzerinden, _enroll_tool'un deterministik denetiminden geçerek olur.
+            Model "kaydettim" DİYEREK kayıt yapamaz.
+
+            Döner: scripted TR satır (pi ATLANIR) veya None (normal pi akışı)."""
             if not self._enroll_ok:
                 return None
             async with self._enroll_lock:
-                if self._enroll_stage is not None:
-                    return await self._continue_enrollment(text)
-                # Tetik: bilinmeyen ses (current None) + birikmiş embedding +
-                # bu bağlantıda henüz sorulmadı.
+                # KOD'a ait tek deterministik alt-akış: kimlik AYRIMI onayı. Bu bir
+                # sohbet tercihi değil, "iki kimliğe bölünme" koruması → modele
+                # bırakılmaz (bkz. _enroll_tool'daki belirsiz bant).
+                if self._enroll_stage == "verify_existing":
+                    match = self._enroll_match or ""
+                    name = self._enroll_name or ""
+                    if is_affirmative_reply(text):
+                        return await self._merge_into(match)
+                    if _is_decline_enroll(text) or parse_spoken_name(text):
+                        logger.info("enrollment: %r değilmiş → yeni kişi açılıyor", match)
+                        return await self._enroll_new(name)
+                    # Ne evet ne hayır → bir kez netleştir, sonra bırak (kilitlenme yok).
+                    self._enroll_retried += 1
+                    if self._enroll_retried >= 2:
+                        self._reset_enroll()
+                        return "Boş ver, sonra kaydederiz."
+                    return f"Sen {match} misin? Evet ya da hayır de."
+                # EMNİYET AĞI konuşması (kod sürüyor; model tool'u çağırmadı). Bu
+                # turlarda pi ATLANIR (scripted döner) → model ile çakışma İMKÂNSIZ.
+                if self._enroll_stage in ("net_name", "net_confirm"):
+                    return await self._enroll_net_step(text)
+                # Bilinmeyen ses → TOPLAMAYA BAŞLA (tool'un ihtiyacı olan pencereler
+                # şimdiden birikmeli; kullanıcı zaten konuşuyor). Konuşmayı model sürer
+                # → None döndür, söz pi'ya gitsin. AMA model tool'u N tur boyunca hiç
+                # çağırmazsa emniyet ağı devreye girer.
                 current = getattr(self._speaker_state, "current", None)
                 emb = getattr(self._speaker_state, "last_embedding", None)
-                if current is None and emb is not None and not self._onboarding_asked:
-                    self._onboarding_asked = True
-                    self._enroll_stage = "ask_name"
-                    self._enroll_emb = emb
-                    logger.info("enrollment: bilinmeyen ses → isim soruluyor")
-                    return "Seni tanıyamadım, adını söyler misin?"
+                if current is None and emb is not None:
+                    if self._enroll_emb is None:
+                        self._enroll_emb = emb
+                    self._enroll_name_emb = emb  # en güncel pencere
+                    self._start_collect()
+                    net = self._maybe_trip_net(text)
+                    if net is not None:
+                        return net
                 return None
 
-        async def _continue_enrollment(self, text: str) -> Optional[str]:
-            """ask_name → confirm → (verify_existing) → finish akışı.
+        def _maybe_trip_net(self, text: str) -> Optional[str]:
+            """Emniyet ağı tetiği. Kayıt İSTEYEN ses N tur boyunca tool'suz geçtiyse
+            kod devreye girer ve ismi deterministik olarak sorar.
+
+            Yalnız İSTEYENE açılır (misafir sohbetini kaydolmaya zorlamak rahatsız
+            edici olurdu). İşaret bir kez görülünce bağlantı boyunca kalıcı: kullanıcı
+            başta 'beni kaydet' der, sonraki turlarda sohbet ederken de sayacı işler.
             _enroll_lock altında çağrılır."""
-            if self._enroll_stage == "verify_existing":
-                match = self._enroll_match or ""
-                if is_affirmative_reply(text):
-                    # Aynı kişi: yeni kimlik AÇMA, mevcut kişiye örnek ekle.
-                    return await self._merge_into(match)
-                logger.info("enrollment: %r değilmiş → yeni kişi açılıyor", match)
-                return await self._enroll_new(self._enroll_name or "")
-            if self._enroll_stage == "confirm":
-                if is_affirmative_reply(text):
-                    return await self._finish_enrollment()
-                self._reset_enroll()
-                logger.info("enrollment: onaylanmadı (%r) → iptal", text[:40])
-                return "Tamam, kaydetmedim."
-            # ask_name aşaması
+            if self._enroll_net_done:
+                return None
+            if _wants_enroll(text):
+                if not self._enroll_wanted:
+                    logger.info("enrollment: kayıt İSTEĞİ işareti görüldü → sayaç başladı")
+                self._enroll_wanted = True
+            if not self._enroll_wanted:
+                return None
+            self._enroll_no_tool_turns += 1
+            # > (>=  değil): sağlıklı sihirbaz tool'u ~5. turda çağırır; ağ ancak onu
+            # bir tur AŞINCA (6.) konuşur → çalışan akışı finiş çizgisinde kesmez.
+            if self._enroll_no_tool_turns <= SPEAKER_ENROLL_NET_TURNS:
+                return None
+            # Tetik: kod artık akışı devralıyor. net_done=True → bir daha tetiklenmez;
+            # bundan sonra ağı net_name/net_confirm adımları sürer.
+            self._enroll_net_done = True
+            self._enroll_stage = "net_name"
+            self._enroll_name_tries = 0
+            logger.info(
+                "EMNİYET AĞI devrede: %d tur tool çağrılmadı → isim deterministik soruluyor",
+                self._enroll_no_tool_turns,
+            )
+            return "Seni kaydedeyim istersen. Adını söyler misin? Sadece adını, tek kelimeyle."
+
+        async def _enroll_net_step(self, text: str) -> str:
+            """Emniyet ağının kod-güdümlü adımları: net_name → net_confirm → yazma.
+            Yazma yine _enroll_apply'dan (kilit ZATEN tutuluyor). _enroll_lock altında.
+
+            İsim onayı burada da ŞART: STT ismi bozuyor ("Havi/Javi/Haber" canlı
+            örnek), yanlış isim yanlış hafıza dizini demek. Onay olmadan yazma YOK."""
+            # Her adımda vazgeçme serbest (kullanıcı esir alınmasın).
             if _is_decline_enroll(text):
                 self._reset_enroll()
-                logger.info("enrollment: reddedildi (%r) → sessiz guest", text[:40])
+                logger.info("EMNİYET AĞI: reddedildi → bir daha sorulmayacak")
                 return "Peki, gerek yok."
-            name = parse_spoken_name(text)
-            if not name:
-                # Başarısız METNİ logla — canlıda evin annesi kaydedilemedi ve
-                # log yalnız "anlaşılamadı" yazdığı için ne dediğini transkriptten
-                # çıkarmak zorunda kaldık. Bir daha kör kalmayalım.
-                if self._enroll_retried < 2:
-                    self._enroll_retried += 1
-                    logger.info("enrollment: isim anlaşılamadı (%d. kez): %r",
-                                self._enroll_retried, text[:60])
-                    # 2. deneme daha DAR bir soru sorar: kullanıcı ilk seferde
-                    # genelde adını bir cümlenin içinde söylüyor (canlı hata:
-                    # "Havi adım. Az önce kocam sana söyledi...").
-                    return ("Adını anlayamadım, tekrar söyler misin?"
-                            if self._enroll_retried == 1
-                            else "Sadece adını söyler misin?")
-                # Üçüncü kez de anlaşılmadı → vazgeç, sözü normal akışa bırak.
-                # Sessizce guest'e düşme: kullanıcı kaydolduğunu sanıyordu.
+            if self._enroll_stage == "net_name":
+                name = parse_spoken_name(text)
+                if not name:
+                    self._enroll_name_tries += 1
+                    if self._enroll_name_tries >= 3:
+                        self._reset_enroll()
+                        logger.info("EMNİYET AĞI: isim 3 kez anlaşılmadı → bırakılıyor")
+                        return "Adını anlayamadım, seni kaydedemedim. İstersen sonra 'beni kaydet' de."
+                    logger.info("EMNİYET AĞI: isim anlaşılmadı (%d. kez): %r",
+                                self._enroll_name_tries, text[:60])
+                    return "Adını anlayamadım. Sadece adını, tek kelimeyle söyler misin?"
+                self._enroll_name = name
+                self._enroll_name_tries = 0
+                self._enroll_stage = "net_confirm"
+                return f"Adını {name} olarak anladım, doğru mu?"
+            # net_confirm
+            if is_affirmative_reply(text):
+                return await self._enroll_apply(self._enroll_name or "")
+            # Düzeltme mi ("hayır, Havi") — reddin en olası biçimi; önce onu dene.
+            corrected = _parse_correction_name(text)
+            if corrected:
+                self._enroll_name = corrected
+                self._enroll_name_tries += 1
+                if self._enroll_name_tries >= 3:
+                    # Çok tur düzeltildi → yaz gitsin (kullanıcıyı döngüde tutma),
+                    # ama son anladığını onayla-yazma yerine doğrudan uygula.
+                    return await self._enroll_apply(corrected)
+                return f"Pardon, adını {corrected} olarak mı anladım, doğru mu?"
+            # Ne evet ne düzeltme → bir kez daha oku.
+            self._enroll_name_tries += 1
+            if self._enroll_name_tries >= 3:
                 self._reset_enroll()
-                logger.info("enrollment: isim anlaşılamadı (3. kez) → guest: %r",
-                            text[:60])
-                return "Adını anlayamadım, seni kaydedemedim. İstersen sonra 'beni kaydet' de."
-            # En güncel ham embedding'i (ismi söylerkenki) örnek olarak sakla.
+                return "Adını tam anlayamadım, sonra tekrar deneriz."
+            return f"Adını {self._enroll_name} olarak anladım, doğru mu? Evet ya da düzelt."
+
+        def _enroll_hint(self, text: str) -> str:
+            """Bilinmeyen ses → pi'ya giden mesaja kayıt sihirbazı direktifi ekle.
+
+            NEDEN direktif: model tool'u KENDİLİĞİNDEN çağırmıyor — bu kod tabanında
+            ölçüldü (soul_add 0/8; canlıda eş "beni ses olarak kaydet" dedi, model
+            sohbet etti, hiçbir şey kaydedilmedi). AGENTS.md'ye konan açık kuralın
+            aynı sınıf hatayı 0/12 → 12/12'ye çıkardığı ölçülmüş → aynı ilaç.
+            Direktif her turda DEĞİL, yalnız bilinmeyen sesin ilk turunda eklenir."""
+            if not self._enroll_ok or self._enroll_hinted:
+                return text
+            if getattr(self._speaker_state, "current", None) is not None:
+                return text
+            self._enroll_hinted = True
+            logger.info("enrollment: bilinmeyen ses → modele kayıt direktifi verildi")
+            return (
+                "<enrollment>\n"
+                "Bu sesi TANIMIYORSUN — kayıtlı kimse değil. Kısa bir kayıt sihirbazı yürüt:\n"
+                "1) Tanıtım/rıza: sesini kaydedersen bundan sonra onu tanıyacağını söyle, "
+                "kaydetmeni isteyip istemediğini sor.\n"
+                "2) İsim: SADECE adını, TEK KELİMEYLE söylemesini iste — cümle kurmasın, "
+                "soyad eklemesin. (Uzun cümlede ses tanıma ismi bozuyor.)\n"
+                "3) Ses örneği: birkaç saniye konuşmasını iste; ne diyeceğini bilmiyorsa "
+                "yirmiye kadar saymasını ya da bugün ne yaptığını anlatmasını öner.\n"
+                "4) İsim onayı: anladığın ismi GERİ OKU ('Adını Havi olarak anladım, doğru mu?') "
+                "ve onaylat. Yanlışsa düzelttir, tekrar onaylat.\n"
+                "5) Onayı ALDIKTAN SONRA enroll_speaker tool'unu çağır. Kaydı tool yapar: "
+                "onu ÇAĞIRMADAN 'kaydettim' DEME. Sonucu tool söyleyecek.\n"
+                "İstemiyorsa ısrar etme, konuyu kapat. Kısa konuş.\n"
+                "</enrollment>\n\n"
+            ) + text
+
+        # ── Deterministik SON DENETLEME (enroll_speaker tool'unun gövdesi) ────
+        def _valid_enroll_name(self, name: str) -> Optional[str]:
+            """İsim makul mü? Hata sebebini döndürür, geçerliyse None.
+
+            NEDEN kodda: isim yalnız etiket DEĞİL — slug'ı memory/users/<slug>/,
+            policy.json anahtarını ve MEM_USER'ı belirliyor. Model cümleyi isim diye
+            geçirirse ("Benim adım Havi beni kaydet") hafıza dizini çöp olur ve
+            'aileye ekle' bile tutmaz (_known_name eşleyemez)."""
+            n = " ".join((name or "").split())
+            if not n:
+                return "isim boş"
+            if len(n.split()) != 1:
+                return f"{n!r} tek kelime değil (cümle/soyad gönderme)"
+            if not (2 <= len(n) <= 32):
+                return f"{n!r} uzunluğu makul değil (2-32 harf)"
+            if not _NAME_ONLY_RE.match(n):
+                return f"{n!r} isim gibi değil (yalnız harf olmalı)"
+            if not parse_spoken_name(n):
+                # Aynı kara liste/fiil-eki kontrolü ("Efendim", "Anlamadım", "Hayır").
+                return f"{n!r} bir isim değil"
+            return None
+
+        async def _enroll_tool(self, name: str) -> str:
+            """Yazma kapısının KİLİTLİ sarmalayıcısı. _run_pending_enroll (tur sonu,
+            kilidi TUTMAZ) buradan girer. Emniyet ağı ise kilidi ZATEN tuttuğu için
+            _enroll_apply'ı DOĞRUDAN çağırır — bu sarmalayıcıyı ikinci kez almak
+            KİLİTLENME olurdu (asyncio.Lock reentrant değil)."""
+            if not self._enroll_ok:
+                return "Ses kaydı şu anda kapalı, seni kaydedemem."
+            async with self._enroll_lock:
+                return await self._enroll_apply(name)
+
+        async def _enroll_apply(self, name: str) -> str:
+            """Kaydın TEK yazma kapısı — kilidin TUTULDUĞUNU varsayar (tek yol: model
+            tool'u ya da emniyet ağı; ikisi de kilit altında). Paralel bir yazma yolu
+            YOK: kim isterse istesin bu kapıdan ve şu denetimlerden geçer.
+
+            Deterministik denetim sırası (herhangi biri düşerse YAZMA YOK):
+              1. isim makul mü (tek kelime, harf, cümle değil)
+              2. ses örnekleri tutarlı mı (aykırılar atılmış, çekirdek >= min)
+              3. bu ses zaten kayıtlı birine mi ait (best_match → merge / belirsiz bant)
+            Döner: kullanıcıya SÖYLENECEK Türkçe satır. Ret hâlinde de satır döner —
+            sessizce başarılı GÖRÜNMEZ."""
+            why = self._valid_enroll_name(name)
+            if why:
+                logger.info("enroll REDDEDİLDİ: %s", why)
+                return "Adını tam anlayamadım. Sadece adını, tek kelimeyle söyler misin?"
+            name = " ".join(name.split())
+            # Kalite kapısı: çekirdek seçimi + ölçüm log'u. Kötü kayıt yapmaktansa
+            # kayıt yapmamak yeğdir — kirli centroid yabancıyı ev halkı sanıyor.
+            core = self._select_enroll_core()
+            if not core:
+                logger.info("enroll REDDEDİLDİ: ses örnekleri tutarsız/yetersiz")
+                self._start_collect()  # yeniden dene: toplamayı sürdür
+                return "Sesini tam alamadım. Biraz daha konuşur musun, tekrar deneyelim?"
+            self._enroll_core = core
             self._enroll_name = name
-            self._enroll_name_emb = getattr(self._speaker_state, "last_embedding", None)
-            self._enroll_stage = "confirm"
-            return f"Seni {name} olarak kaydedeyim mi?"
+            # Kimlik kapısı: mevcut _best_existing/_merge_into mantığı (çekirdek
+            # üzerinden ölçülür — tek pencereden daha güvenilir).
+            match, score = self._best_existing()
+            from speaker_id import name_key
+
+            if match and name_key(match) != name_key(name):
+                thr = float(getattr(self._speaker_id, "threshold", 0.45))
+                low = float(getattr(self._speaker_id, "merge_low", 0.35))
+                if score >= thr:
+                    logger.info(
+                        "enroll: ses zaten %r'a ait gibi (skor=%.3f >= %.2f)"
+                        " → yeni kişi AÇILMIYOR", match, score, thr,
+                    )
+                    return await self._merge_into(match)
+                if score >= low:
+                    logger.info(
+                        "enroll: belirsiz bant (%r skor=%.3f, %.2f-%.2f)"
+                        " → onay soruluyor", match, score, low, thr,
+                    )
+                    self._enroll_match = match
+                    self._enroll_stage = "verify_existing"
+                    self._enroll_retried = 0
+                    return f"Sen {match} misin?"
+                logger.info("enroll: en yakın %r skor=%.3f < %.2f → yeni kişi",
+                            match, score, low)
+            return await self._enroll_new(name)
+
+        def _detect_enroll_signal(self, message: Any) -> None:
+            """pi mesajındaki enroll_speaker toolCall'ını yakala → bekleyen kayıt.
+            Best-effort; ayrıştırma hatası turu BOZMAZ."""
+            if not self._enroll_ok or not isinstance(message, dict):
+                return
+            if message.get("role") != "assistant":
+                return
+            for c in message.get("content", []) or []:
+                if isinstance(c, dict) and c.get("type") == "toolCall" \
+                        and (c.get("name") or "") == "enroll_speaker":
+                    args = c.get("arguments")
+                    if isinstance(args, str):
+                        try:
+                            args = json.loads(args)
+                        except ValueError:
+                            args = {}
+                    if isinstance(args, dict):
+                        self._pending_enroll = str(args.get("name") or "")
+
+        async def _run_pending_enroll(self) -> Optional[str]:
+            """Tur sonunda: enroll_speaker çağrıldıysa kaydı YAP ve sonucu döndür.
+
+            Sonucu KOD söyler, model DEĞİL: tool'un dönüş metnine güvenmek, modelin
+            "kaydettim" deyip geçmesine kapı bırakır (bu repo'da ölçülmüş hata sınıfı).
+            Ret de burada seslendirilir → sessiz başarısızlık yok."""
+            name, self._pending_enroll = self._pending_enroll, None
+            if name is None:
+                return None
+            # Model tool'u çağırdı → emniyet ağı sayacını SIFIRLA. Ağ yalnız model
+            # tool'u HİÇ çağırmazsa devreye girsin; model deneyip reddedilse bile
+            # (kötü isim vb.) ona N tur daha tanı. Böylece net-driven tur ile model
+            # turu asla aynı anda kaydetmeye çalışmaz.
+            self._enroll_no_tool_turns = 0
+            try:
+                return await self._enroll_tool(name)
+            except Exception as e:  # noqa: BLE001 — kayıt hatası turu BOZMASIN
+                logger.warning("enroll_speaker gövdesi patladı (%s)", e, exc_info=True)
+                return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
 
         def _best_existing(self) -> tuple[Optional[str], float]:
             """Enroll embedding'lerini MEVCUT tüm centroid'lere karşı ölç; en yüksek
-            skoru döndür (eşik/marj uygulanmaz). Kimse/emb yoksa (None, 0.0)."""
+            skoru döndür (eşik/marj uygulanmaz). Kimse/emb yoksa (None, 0.0).
+
+            Seçilmiş çekirdek varsa ONUN üzerinden ölçülür: aykırısı atılmış birkaç
+            pencere, tek pencereden daha güvenilir bir "bu ses kime ait" cevabı verir."""
+            pool = self._enroll_core or [self._enroll_name_emb, self._enroll_emb]
             best_name, best_score = None, 0.0
-            for emb in (self._enroll_name_emb, self._enroll_emb):
+            for emb in pool:
                 if emb is None:
                     continue
                 try:
@@ -1854,50 +2344,27 @@ if _HAS_LIVEKIT:
                     best_name, best_score = name, score
             return best_name, best_score
 
-        async def _finish_enrollment(self) -> str:
-            """Onay alındı. YENİ KİMLİK AÇMADAN ÖNCE ses-benzerlik koruması:
-              skor >= threshold → zaten kayıtlı kişi, sessizce ona örnek ekle
-              merge_low <= skor < threshold → belirsiz → "Sen X misin?" diye sor
-              skor < merge_low → gerçekten yeni kişi → normal enroll
-            (Aynı kişinin iki kimliğe bölünmesini engeller.)"""
-            from speaker_id import name_key
+        async def _store_samples(self, sid: int, source: str) -> int:
+            """SEÇİLMİŞ çekirdeği yaz (aykırılar zaten atıldı).
 
-            name = self._enroll_name or ""
-            match, score = self._best_existing()
-            if match and name_key(match) != name_key(name):
-                thr = float(getattr(self._speaker_id, "threshold", 0.45))
-                low = float(getattr(self._speaker_id, "merge_low", 0.35))
-                if score >= thr:
-                    logger.info(
-                        "enrollment: ses zaten %r'a ait gibi (skor=%.3f >= %.2f) → yeni kişi AÇILMIYOR",
-                        match, score, thr,
-                    )
-                    return await self._merge_into(match)
-                if score >= low:
-                    logger.info(
-                        "enrollment: belirsiz bant (%r skor=%.3f, %.2f–%.2f) → onay soruluyor",
-                        match, score, low, thr,
-                    )
-                    self._enroll_match = match
-                    self._enroll_stage = "verify_existing"
-                    return f"Sen {match} misin?"
-                logger.info(
-                    "enrollment: en yakın %r skor=%.3f < %.2f → gerçekten yeni kişi",
-                    match, score, low,
-                )
-            return await self._enroll_new(name)
-
-        async def _store_samples(self, sid: int, source: str) -> None:
+            Eskiden yalnız 2 pencere yazılıyordu → centroid zayıf doğuyor, auto-learn
+            geri beslemesiyle kayıyordu (ölçüldü: kirlenmiş centroid ↔ gerçek = 0.753).
+            Çekirdek boşsa hiçbir şey yazılmaz — çağıran taraf zaten reddetmiş olmalı."""
             from speaker_id import emb_to_bytes
 
             mid, dim = self._speaker_id.model_id, self._speaker_id.dim
-            for emb in (self._enroll_emb, self._enroll_name_emb):
+            wrote = 0
+            for emb in self._enroll_core:
                 if emb is not None:
                     await self._speaker_store.add_speaker_sample(
                         sid, emb_to_bytes(emb), dim, mid, source=source
                     )
+                    wrote += 1
+            logger.info("enrollment: %d örnek yazıldı (kaynak=%s, kişi id=%s)",
+                        wrote, source, sid)
             # Değişiklik hemen etkili olsun: centroid'leri DB'den yeniden kur.
             self._speaker_id.reload(await self._speaker_store.all_speaker_embeddings())
+            return wrote
 
         async def _enroll_new(self, name: str) -> str:
             """Kişi oluştur (isim eşleşiyorsa mevcut kaydı kullanır) + örnek yaz + swap.
@@ -2755,10 +3222,11 @@ def _policy_test() -> int:
 
         # (a) policy BOŞ + ilk enroll → adult
         brain._enroll_name = "Ayhan"
-        brain._enroll_emb = state.last_embedding
-        brain._enroll_name_emb = state.last_embedding
+        # Kayıt artık ÇOK ÖRNEKLİ: tool, tutarlı bir çekirdek bulamazsa yazmaz →
+        # testler de gerçek akış gibi birkaç pencere beslemeli.
+        brain._enroll_embs = [state.last_embedding] * 5
         sid.match = (None, 0.0)  # kayıtlı kimse yok
-        line_a = await brain._finish_enrollment()
+        line_a = await brain._enroll_tool("Ayhan")
         pol = policy()
         ok = pol == {"ayhan": "adult"}
         results.append(("(a) policy boş + ilk enroll → adult", ok,
@@ -2766,10 +3234,9 @@ def _policy_test() -> int:
 
         # (b) policy DOLU + ikinci (farklı) kişi → guest
         state.current = None
-        brain._enroll_name = "Zeynep"
-        brain._enroll_emb = brain._enroll_name_emb = np.array([0, 1, 0, 0], dtype=np.float32)
+        brain._enroll_embs = [np.array([0, 1, 0, 0], dtype=np.float32)] * 5
         sid.match = ("Ayhan", 0.10)  # benzemiyor → gerçekten yeni kişi
-        line_b = await brain._finish_enrollment()
+        line_b = await brain._enroll_tool("Zeynep")
         pol = policy()
         ok = pol == {"ayhan": "adult", "zeynep": "guest"} and "misafir" in line_b
         results.append(("(b) policy dolu + 2. enroll → guest (+ sınır bildirildi)", ok,
@@ -2778,10 +3245,9 @@ def _policy_test() -> int:
         # (c) ses-benzerlik kapısı MEVCUT kişiye merge etti → YENİ policy girdisi YOK
         before = dict(policy())
         state.current = None
-        brain._enroll_name = "Ahmet"
-        brain._enroll_emb = brain._enroll_name_emb = np.array([1, 0, 0, 0], dtype=np.float32)
+        brain._enroll_embs = [np.array([1, 0, 0, 0], dtype=np.float32)] * 5
         sid.match = ("Ayhan", 0.90)  # >= threshold → merge
-        line_c = await brain._finish_enrollment()
+        line_c = await brain._enroll_tool("Ahmet")
         pol = policy()
         ok = (pol == before and "ahmet" not in pol and state.current == "Ayhan")
         results.append(("(c) benzerlik merge → policy'ye YENİ girdi eklenmiyor", ok,

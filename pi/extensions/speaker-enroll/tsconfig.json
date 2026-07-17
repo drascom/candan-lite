@@ -1,0 +1,21 @@
+{
+  // speaker-enroll tip kontrolü. index.ts SADECE pi SDK glue'su (tek tool + before_agent_start);
+  // pure-node mantık yok — gerçek kayıt worker/pi_brain.py'de (embedding'ler orada).
+  // Tool tek dalda `details` döndürüyor → family-memory/index.ts'i dışlayan AgentToolResult
+  // tip borcu BURADA yok → index.ts doğrudan kontrol edilir.
+  //
+  // Modül çözümü: @earendil-works/pi-coding-agent + typebox global pi kurulumundan gelir
+  // (~/.pi/agent/npm/node_modules). Kontrol için o dizini geçici olarak `node_modules`
+  // sembolik bağı yapıp `tsc -p` çalıştır (bkz. docs/self-dev.md). @types/node web/'den ödünç.
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../../../web/node_modules/@types"]
+  },
+  "include": ["index.ts"]
+}

@@ -105,11 +105,23 @@ class SpeakerTap:
         self._learn_min = _f("SPEAKER_LEARN_MIN_SCORE", 0.60)
         self._learn_max_add = _i("SPEAKER_LEARN_MAX_PER_SESSION", 2)
         self._learn_cooldown = _f("SPEAKER_LEARN_COOLDOWN_S", 60.0)
+        # Kişi başına KALICI tavan. Oturum sayacı tek başına yetmez: LiveKit her oda
+        # oturumunda yeni bir job süreci açar → `_learned` sıfırlanır, tavan hiç dolmaz.
+        # Canlı DB'de tam olarak bu oldu: ~55 oturum × 2 = 109 auto-learn örnek.
+        self._learn_max_total = _i("SPEAKER_LEARN_MAX_TOTAL", 20)
+        if self._store is not None and self._learn_max_total <= 0:
+            self._store = None  # tavan 0 = auto-learn kapalı
         self._learned = 0
         self._last_learn = 0.0
 
     async def _maybe_learn(self, name: str, emb) -> None:
-        """Güvenli tanımada örnek ekle (kapalıysa / kota dolduysa no-op)."""
+        """Güvenli tanımada örnek ekle (kapalıysa / kota dolduysa no-op).
+
+        İki ayrı kota: `_learned` oturum-içi hız sınırı (bir oturum centroid'i tek
+        başına domine etmesin), `_learn_max_total` ise DB'ye dayalı kalıcı tavan.
+        Tavanı store uygular (insert+budama atomik) — burada sayıp orada eklemek
+        eşzamanlı job'larda yarış olurdu.
+        """
         if self._store is None or self._learned >= self._learn_max_add:
             return
         now = time.monotonic()
@@ -121,11 +133,15 @@ class SpeakerTap:
         self._last_learn = now
         self._learned += 1
         try:
-            await self._store.add_speaker_sample(
-                sid, emb_to_bytes(emb), self._sp.dim, self._sp.model_id, source="auto-learn"
+            _, dropped = await self._store.add_auto_learn_sample(
+                sid, emb_to_bytes(emb), self._sp.dim, self._sp.model_id,
+                self._learn_max_total,
             )
             self._sp.reload(await self._store.all_speaker_embeddings())
-            log.info("speaker-tap: %r için örnek eklendi (auto-learn)", name)
+            log.info(
+                "speaker-tap: %r için örnek eklendi (auto-learn, tavan=%d, atılan=%d)",
+                name, self._learn_max_total, dropped,
+            )
         except Exception as e:  # noqa: BLE001 — öğrenme asla akışı bozmasın
             log.debug("auto-learn hata: %s", e)
 
