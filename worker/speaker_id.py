@@ -47,6 +47,17 @@ def _l2(v: np.ndarray) -> np.ndarray:
     return v / n if n > 0 else v
 
 
+def _topk_stats(scores: np.ndarray, k: int) -> tuple[float, float]:
+    """AS-norm için: skorların EN YÜKSEK k tanesinin ort/std. std çok küçükse (aynı
+    gömme cohort'ta varsa) 0'a bölmeyi önlemek için tabana bastır. score.py'deki
+    referans uygulamayla BİRE BİR aynı (deneyde kanıtlanan davranış korunsun)."""
+    k = max(2, min(k, scores.size))
+    top = np.sort(scores)[-k:]
+    mu = float(np.mean(top))
+    sd = float(np.std(top))
+    return mu, (sd if sd > 1e-6 else 1e-6)
+
+
 def pcm_to_f32(pcm: bytes, width: int, channels: int) -> np.ndarray:
     """Ham PCM baytlarını [-1,1] float32 mono diziye çevir (s16le veya f32le)."""
     if width == 2:
@@ -86,6 +97,11 @@ class SpeakerID:
         merge_low: float = 0.35,
         enroll_weight: float = 0.7,
         drift_warn_frac: float = 0.10,
+        asnorm_enabled: bool = False,
+        asnorm_cohort_path: str | None = None,
+        asnorm_k: int = 40,
+        asnorm_threshold: float = -1.0,
+        asnorm_margin: float = 1.0,
     ):
         import sherpa_onnx
 
@@ -95,6 +111,7 @@ class SpeakerID:
         self._ex = sherpa_onnx.SpeakerEmbeddingExtractor(cfg)
         self.dim: int = self._ex.dim
         self.model_id = model_id
+        # Ham-kosinüs karar parametreleri (AS-norm kapalı/uyumsuz iken geri-düşüş yolu).
         self.threshold = threshold
         self.margin = margin
         # Enroll koruması: bu skorun ALTI "gerçekten yeni kişi", arası belirsiz bant
@@ -109,6 +126,75 @@ class SpeakerID:
         self._names: list[str] = []
         self._centroids = np.zeros((0, self.dim), dtype=np.float32)  # L2-normalize
         self._name_to_id: dict[str, int] = {}
+
+        # ---- AS-norm skor kalibrasyonu (opsiyonel) ----
+        # Offline ölçümde ham-kosinüs + sabit-eşik ev sahibi ile eşini AYIRAMADI
+        # (marj +0.14, gürültüde eksiye döndü). AS-norm ile marj +2.0 oldu, çapraz-kişi
+        # belirgin NEGATİF → ayrım çalıştı. Cohort'a göre skor normalize edilir:
+        # herkese benzeyen ses cezalandırılır, kişiler-arası karşılaştırılabilir olur.
+        self.asnorm_k = int(asnorm_k)
+        self.asnorm_threshold = asnorm_threshold
+        self.asnorm_margin = asnorm_margin
+        self._cohort: np.ndarray | None = None  # (N, dim) L2-normalize yabancı gömme
+        # Her enrolled centroid için (μ_e, σ_e) — reload/enroll'de BİR KEZ hesaplanır,
+        # her identify()'de yeniden hesaplanmaz (centroid↔cohort skorları sabit).
+        self._cent_asnorm_stats = np.zeros((0, 2), dtype=np.float32)
+        # AS-norm ancak: açık + cohort yüklendi + cohort dim == encoder dim iken aktif.
+        # Aksi halde GÜVENLİ GERİ-DÜŞÜŞ: ham-kosinüs davranışı, çökme yok.
+        self._asnorm_active = False
+        if asnorm_enabled:
+            self._load_cohort(asnorm_cohort_path)
+
+    def _load_cohort(self, path: str | None) -> None:
+        """Cohort .npy'yi yükle + L2-normalize et. Yoksa / dim uyuşmazsa AS-norm'u
+        kapat (bir kez uyar) ve ham-kosinüs geri-düşüşünde kal — mevcut sistemi BOZMA."""
+        if not path:
+            log.warning("AS-norm açık ama cohort yolu boş — ham-kosinüs geri-düşüşü")
+            return
+        cohort_path = _resolve(path)
+        if not os.path.isfile(cohort_path):
+            log.warning("AS-norm cohort yok: %s — ham-kosinüs geri-düşüşü", cohort_path)
+            return
+        try:
+            raw = np.load(cohort_path).astype(np.float32)
+        except Exception as e:  # noqa: BLE001
+            log.warning("AS-norm cohort yüklenemedi (%s) — ham-kosinüs geri-düşüşü", e)
+            return
+        if raw.ndim != 2 or raw.shape[1] != self.dim:
+            # KRİTİK: cohort WeSpeaker (256) ise ve canlı encoder CAM++ (192) ise burada
+            # yakalanır → AS-norm sessizce kapanır, sistem ham-kosinüsle çalışmaya devam eder.
+            log.warning(
+                "AS-norm cohort dim uyuşmuyor (cohort=%s, encoder dim=%d) — AS-norm KAPALI,"
+                " ham-kosinüs geri-düşüşü. Cohort ve canlı encoder AYNI model olmalı.",
+                raw.shape, self.dim,
+            )
+            return
+        # Satırları L2-normalize (zaten normal ama garanti; ham gömme gelirse de çalışsın).
+        norms = np.linalg.norm(raw, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        self._cohort = np.ascontiguousarray(raw / norms, dtype=np.float32)
+        self._asnorm_active = True
+        log.info(
+            "AS-norm etkin: cohort N=%d dim=%d, K=%d, eşik=%.2f, marj=%.2f",
+            self._cohort.shape[0], self._cohort.shape[1], self.asnorm_k,
+            self.asnorm_threshold, self.asnorm_margin,
+        )
+
+    def _recompute_centroid_asnorm_stats(self) -> None:
+        """Her enrolled centroid için cohort'a göre (μ_e, σ_e) önbelleğini yenile.
+        reload()/enroll SONRASI çağrılır — centroid değişince μ_e,σ_e değişir."""
+        n = self._centroids.shape[0]
+        if not self._asnorm_active or self._cohort is None or n == 0:
+            self._cent_asnorm_stats = np.zeros((0, 2), dtype=np.float32)
+            return
+        # se[i] = centroid_i ↔ tüm cohort kosinüs (ikisi de L2-norm).
+        se_all = self._centroids @ self._cohort.T  # (n_centroid, N_cohort)
+        stats = np.empty((n, 2), dtype=np.float32)
+        for i in range(n):
+            mu_e, sd_e = _topk_stats(se_all[i], self.asnorm_k)
+            stats[i, 0] = mu_e
+            stats[i, 1] = sd_e
+        self._cent_asnorm_stats = stats
 
     # ---- embedding ----
 
@@ -136,21 +222,35 @@ class SpeakerID:
         if self._centroids.shape[0] == 0:
             return None, 0.0
         q = _l2(np.asarray(emb, dtype=np.float32))
-        sims = self._centroids @ q  # centroid'ler zaten L2-normalize
-        order = np.argsort(sims)[::-1]
-        ranking = [(self._names[i], float(sims[i])) for i in order]
+        raw_sims = self._centroids @ q  # ham kosinüs (centroid'ler L2-normalize)
+        if self._asnorm_active and self._cohort is not None:
+            # AS-norm: her identify()'de SADECE test gömmenin cohort istatistiği
+            # hesaplanır (N nokta-çarpım, ucuz); centroid'lerin (μ_e,σ_e) önbellekten.
+            # s_norm = 0.5*((s-μ_t)/σ_t + (s-μ_e)/σ_e) — deneyde kanıtlanan simetrik form.
+            st = self._cohort @ q  # test ↔ cohort
+            mu_t, sd_t = _topk_stats(st, self.asnorm_k)
+            mu_e = self._cent_asnorm_stats[:, 0]
+            sd_e = self._cent_asnorm_stats[:, 1]
+            scores = 0.5 * ((raw_sims - mu_t) / sd_t + (raw_sims - mu_e) / sd_e)
+            thr, margin, scale = self.asnorm_threshold, self.asnorm_margin, "asnorm"
+        else:
+            # Geri-düşüş: ham kosinüs + eski eşik/marj (mevcut davranış).
+            scores = raw_sims
+            thr, margin, scale = self.threshold, self.margin, "ham"
+        order = np.argsort(scores)[::-1]
+        ranking = [(self._names[i], float(scores[i])) for i in order]
         best = ranking[0][1]
-        second = ranking[1][1] if len(ranking) > 1 else -1.0
+        second = ranking[1][1] if len(ranking) > 1 else -1e9
         # Her çağrıda (saniyede bir) INFO basmak log'u boğuyordu; skor dökümü
         # sadece hata ayıklarken lazım, o yüzden unknown'da DEBUG'a indi.
-        if best < self.threshold or (best - second) < self.margin:
+        # NOT: dönen skor `scale`'e göre (asnorm ölçeği ham 0-1 DEĞİL, ~[-14,+8]).
+        if best < thr or (best - second) < margin:
             log.debug(
-                "speaker-ID skorlar: %s (eşik=%.2f marj=%.2f)",
-                ", ".join(f"{n}={s:.3f}" for n, s in ranking),
-                self.threshold, self.margin,
+                "speaker-ID skorlar [%s]: %s (eşik=%.2f marj=%.2f)",
+                scale, ", ".join(f"{n}={s:.3f}" for n, s in ranking), thr, margin,
             )
             return None, best
-        log.info("speaker-ID tanındı: %s (skor=%.3f)", ranking[0][0], best)
+        log.info("speaker-ID tanındı [%s]: %s (skor=%.3f)", scale, ranking[0][0], best)
         return ranking[0][0], best
 
     def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
@@ -248,6 +348,9 @@ class SpeakerID:
         self._centroids = (
             np.stack(cents) if cents else np.zeros((0, self.dim), dtype=np.float32)
         )
+        # Centroid'ler değişti → AS-norm (μ_e,σ_e) önbelleğini yenile. enroll/auto-learn
+        # de reload() üzerinden geçtiği için önbellek otomatik güncel kalır.
+        self._recompute_centroid_asnorm_stats()
         log.info("speaker-ID: %d kişi yüklendi (%s)", len(names), ", ".join(names) or "—")
 
 
@@ -526,12 +629,17 @@ def build_speaker_id() -> "SpeakerID | None":
             merge_low=_f("SPEAKER_MERGE_LOW", 0.35),
             enroll_weight=_f("SPEAKER_ENROLL_WEIGHT", 0.7),
             drift_warn_frac=_f("SPEAKER_DRIFT_WARN_FRAC", 0.10),
+            asnorm_enabled=_b("SPEAKER_ASNORM_ENABLED", True),
+            asnorm_cohort_path=os.getenv("SPEAKER_ASNORM_COHORT", "models/asnorm_cohort.npy"),
+            asnorm_k=int(_f("SPEAKER_ASNORM_K", 40)),
+            asnorm_threshold=_f("SPEAKER_ASNORM_THRESHOLD", -1.0),
+            asnorm_margin=_f("SPEAKER_ASNORM_MARGIN", 1.0),
         )
         log.info(
             "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f,"
-            " enroll_w=%.2f, drift_warn_frac=%.2f)",
+            " enroll_w=%.2f, drift_warn_frac=%.2f, asnorm=%s)",
             model_path, sp.dim, sp.threshold, sp.margin, sp.merge_low,
-            sp.enroll_weight, sp.drift_warn_frac,
+            sp.enroll_weight, sp.drift_warn_frac, sp._asnorm_active,
         )
         return sp
     except Exception as e:  # noqa: BLE001
