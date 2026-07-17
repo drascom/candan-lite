@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Candan panosu — oturum dökümü + hafıza (yerel, tarayıcıdan).
+"""Candan panosu — oturum dökümü + hafıza + worker log'u (tarayıcıdan).
 
-    python3 tools/dashboard.py        → http://127.0.0.1:8765
+    python3 tools/dashboard.py        → http://192.168.0.25:8765
 
 NEDEN: pi transkriptlerini (sessions/*.jsonl) ve ailenin hafızasını (memory/)
 terminalden `grep`'le okumak yorucu. Bu pano ikisini de okunur hâlde gösterir.
+Worker artık SUNUCUDA koşuyor; kullanıcı Mac'ten yalnızca CLI istemcisiyle bağlanıyor,
+yani worker'ın terminal çıktısını GÖREMİYOR → "Worker Log" sayfası (worker/logs/agent.log).
 
 NOT: eski "router karar defteri" sayfası KALDIRILDI — küçük tool-router'ın kendisi
 kaldırıldı (tool seçimini artık tek yerel beyin kendi yapıyor).
@@ -12,7 +14,16 @@ kaldırıldı (tool seçimini artık tek yerel beyin kendi yapıyor).
 TASARIM KARARLARI (bilerek):
   • Yalnızca STANDART KÜTÜPHANE. Yeni bağımlılık YOK, build adımı YOK, tek dosya.
   • REAL-TIME DEĞİL. Sayfa yenilenince veri yenilenir — websocket/polling yok.
-  • Yalnızca 127.0.0.1'e bağlanır. Bu bir ev panosu, internete açılmaz.
+      İSTİSNA: /log sayfası. Amacı canlı izlemek (worker'ın terminaline artık kimse
+      bakamıyor); "yenile"ye basmak zorunda kalmak sayfayı işe yaramaz kılar. Çözüm
+      basit tutuldu: kullanıcının AÇIP KAPATABİLDİĞİ <meta http-equiv=refresh>.
+      Websocket/SSE YOK — bağımlılık ve karmaşıklık getirir, kazancı yok.
+  • 0.0.0.0'a bağlanır (ev LAN'ı), kimlik doğrulama YOK — kullanıcı böyle İSTEDİ.
+      NEDEN: pano artık sunucuda (.25) çalışıyor, çünkü baktığı veri (sessions/,
+      memory/, worker/logs/) ORADA. Kullanıcı Mac'ten/telefondan bakıyor →
+      127.0.0.1 panoyu erişilemez yapardı. Adres DASHBOARD_HOST ile değiştirilebilir.
+      ⚠ Bu pano ailenin gerçek konuşmalarını gösterir ve şifre SORMAZ. Ev LAN'ında
+      kalmalı; router'dan port yönlendirme ile internete ASLA açılmamalı.
 
 ═══════════════════════════════════════════════════════════════════════════════
  YAZMA YETKİSİ — DAR VE BİLİNÇLİ
@@ -31,6 +42,7 @@ from __future__ import annotations
 import html
 import json
 import os
+import re
 import shutil
 import sqlite3
 import sys
@@ -46,8 +58,19 @@ TRASH_DIR = SESSIONS_DIR / ".trash"
 MEMORY_DIR = REPO / "memory"
 EVENTS_DB = MEMORY_DIR / "events.db"
 SPEAKERS_DB = REPO / "worker" / "data" / "speakers.db"
+WORKER_LOG = REPO / "worker" / "logs" / "agent.log"
 
 PORT = int(os.environ.get("DASHBOARD_PORT", "8765") or 8765)
+# Varsayılan 0.0.0.0 = ev LAN'ı (gerekçe: dosya başındaki TASARIM KARARLARI).
+HOST = os.environ.get("DASHBOARD_HOST") or "0.0.0.0"  # noqa: S104 — bilinçli, docstring'e bak
+
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+LOG_LINE_CHOICES = (100, 300, 1000, 3000)
+# "2026-07-16 23:54:03 INFO     pid=21232 worker.speaker_tap mesaj... {json-eki}"
+LOG_RE = re.compile(
+    r"^(?P<ts>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\s+(?P<level>[A-Z]+)\s+"
+    r"pid=(?P<pid>\d+)\s+(?P<logger>\S+)\s?(?P<msg>.*)$"
+)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -250,6 +273,64 @@ def read_memory() -> dict:
     return {"family": family, "policy": policy, "users": users}
 
 
+def tail_lines(path: Path, n: int) -> tuple[list[str], bool]:
+    """Dosyanın SONUNDAN geriye doğru blok blok okuyup son n satırı döner.
+
+    NEDEN böyle: agent.log sınırsız büyür. read()/readlines() 500 MB'lık bir log'u
+    belleğe alır ve panoyu kilitler. Burada sadece son ~n satırlık kuyruk okunur:
+    seek(SEEK_END) + geriye doğru 64 KB'lık bloklar, yeterli satır birikince dur.
+    SALT-OKUNUR — dosya "rb" açılır, yazılmaz/döndürülmez.
+
+    Döner: (satırlar, kırpıldı_mı). Dosya yoksa/okunamıyorsa ([], False).
+    """
+    block = 64 * 1024
+    buf = b""
+    pos = 0
+    try:
+        with path.open("rb") as f:
+            f.seek(0, os.SEEK_END)
+            pos = f.tell()
+            while pos > 0 and buf.count(b"\n") <= n:
+                step = min(block, pos)
+                pos -= step
+                f.seek(pos, os.SEEK_SET)
+                buf = f.read(step) + buf
+    except OSError:
+        return [], False
+    lines = buf.decode("utf-8", errors="replace").splitlines()
+    truncated = pos > 0
+    if len(lines) > n:
+        lines = lines[-n:]          # blok sınırında yarım kalan ilk satır da böylece gider
+        truncated = True
+    elif truncated and lines:
+        lines = lines[1:]           # başa ulaşmadık → ilk satır yarım olabilir, atla
+    return lines, truncated
+
+
+def parse_log_line(line: str) -> dict:
+    """Bir log satırını parçala: {ts, level, pid, logger, msg, extra}.
+
+    Sondaki JSON eki (`{"pid": .., "job_id": .., "room": ..}`) her satırda tekrar eder
+    → ayrı tutulur, varsayılan görünümde gösterilmez. Kalıba UYMAYAN satır (traceback
+    devamı vb.) level="" ile ham olarak döner — yutulmaz, gösterilir.
+    """
+    m = LOG_RE.match(line)
+    if not m:
+        return {"ts": "", "level": "", "pid": "", "logger": "", "msg": line, "extra": ""}
+    msg, extra = m["msg"], ""
+    i = msg.rfind(' {"')
+    if i >= 0:
+        cand = msg[i + 1:]
+        try:
+            json.loads(cand)          # gerçekten JSON eki mi? değilse mesajın parçasıdır
+        except ValueError:
+            pass
+        else:
+            msg, extra = msg[:i], cand
+    return {"ts": m["ts"], "level": m["level"], "pid": m["pid"],
+            "logger": m["logger"], "msg": msg, "extra": extra}
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  HTML
 # ═══════════════════════════════════════════════════════════════════════════
@@ -298,16 +379,26 @@ details{margin:6px 0} summary{cursor:pointer;color:var(--mut)}
 .msg.user{border-color:var(--acc)} .msg.assistant{border-color:var(--ok)} .msg.toolResult{border-color:var(--warn)}
 .msg .who{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
 .ro{font-size:12px;color:var(--mut);border:1px dashed var(--line);border-radius:6px;padding:6px 10px;display:inline-block}
+/* Worker log — hata ayıklama aracı: WARNING/ERROR göze çarpsın. */
+table.log td{border-bottom:0;padding:3px 10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+table.log tr:nth-child(even){background:var(--card)}
+table.log td.lv{font-weight:600;white-space:nowrap}
+table.log tr.WARNING td.lv{color:var(--warn)} table.log tr.WARNING{background:var(--warnbg)}
+table.log tr.ERROR td.lv,table.log tr.CRITICAL td.lv{color:var(--err)}
+table.log tr.ERROR,table.log tr.CRITICAL{background:var(--errbg)}
+table.log td.when,table.log td.lg{color:var(--mut);white-space:nowrap}
+table.log td.m{white-space:pre-wrap;word-break:break-word}
+table.log .extra{color:var(--mut);opacity:.8}
 """
 
-def page(title: str, active: str, body: str, extra_js: str = "") -> bytes:
-    nav = [("/sessions", "Oturumlar"), ("/memory", "Hafıza (salt-okunur)")]
+def page(title: str, active: str, body: str, extra_js: str = "", head: str = "") -> bytes:
+    nav = [("/sessions", "Oturumlar"), ("/memory", "Hafıza (salt-okunur)"), ("/log", "Worker Log")]
     links = "".join(
         f'<a href="{h}" class="{"on" if h == active else ""}">{E(t)}</a>' for h, t in nav
     )
     now = datetime.now().strftime("%H:%M:%S")
     return f"""<!doctype html><html lang="tr"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">{head}
 <title>{E(title)} — Candan panosu</title><style>{CSS}</style></head><body>
 <header><b>Candan panosu</b><nav>{links}</nav>
 <span class="mut" style="margin-left:auto">yenilendi {now} · <a href="" style="color:var(--acc)">yenile</a></span>
@@ -448,6 +539,85 @@ Ailenin gerçek hafızası burada; pano yalnızca gösterir.</span></p>
     return page("Hafıza", "/memory", body)
 
 
+def render_log(q: dict) -> bytes:
+    """Worker Log — worker/logs/agent.log kuyruğu. SALT-OKUNUR (yazan endpoint YOK)."""
+    def one(k: str, default: str = "") -> str:
+        return (q.get(k) or [default])[0]
+
+    level = one("level")
+    logger = one("logger")
+    auto = one("auto") == "1"
+    show_json = one("json") == "1"
+    try:
+        n = int(one("n", "300"))
+    except ValueError:
+        n = 300
+    n = max(10, min(n, 5000))
+
+    if not WORKER_LOG.is_file():
+        return page("Worker Log", "/log",
+                    f'<h2>Worker Log <small>{E(str(WORKER_LOG))}</small></h2>'
+                    '<div class="box">Log dosyası yok. Worker bu makinede hiç çalışmamış olabilir '
+                    '— log sunucudaysa (.25) panoyu orada çalıştır.</div>')
+
+    raw, truncated = tail_lines(WORKER_LOG, n)
+    rows_all = [parse_log_line(ln) for ln in raw if ln.strip()]
+    if not rows_all:
+        return page("Worker Log", "/log",
+                    f'<h2>Worker Log <small>{E(str(WORKER_LOG))}</small></h2>'
+                    '<div class="box">Log dosyası boş.</div>')
+
+    loggers = sorted({r["logger"] for r in rows_all if r["logger"]})
+    rows = [r for r in rows_all
+            if (not level or r["level"] == level) and (not logger or r["logger"] == logger)]
+    rows.reverse()   # EN YENİ ÜSTTE — kullanıcı kaydırmasın
+
+    trs = "".join(
+        f'<tr class="{E(r["level"])}"><td class="when">{E(r["ts"][11:])}</td>'
+        f'<td class="lv">{E(r["level"])}</td>'
+        f'<td class="lg">{E(r["logger"])}</td>'
+        f'<td class="m">{E(r["msg"])}'
+        + (f'<div class="extra">{E(r["extra"])}</div>' if show_json and r["extra"] else "")
+        + "</td></tr>"
+        for r in rows
+    ) or '<tr><td class="mut" colspan="4">Bu filtreye uyan satır yok.</td></tr>'
+
+    def opts(vals, cur: str) -> str:
+        return "".join(f'<option value="{E(str(v))}"{" selected" if str(v) == cur else ""}>'
+                       f'{E(str(v) or "hepsi")}</option>' for v in vals)
+
+    def ck(on: bool) -> str:
+        return " checked" if on else ""
+
+    bar = f"""<form class="bar" method="get" action="/log">
+<label>Seviye <select name="level" onchange="this.form.submit()">{opts(["", *LOG_LEVELS], level)}</select></label>
+<label>Logger <select name="logger" onchange="this.form.submit()">{opts(["", *loggers], logger)}</select></label>
+<label>Satır <select name="n" onchange="this.form.submit()">{opts(LOG_LINE_CHOICES, str(n))}</select></label>
+<label><input type="checkbox" name="json" value="1"{ck(show_json)} onchange="this.form.submit()"> JSON eki</label>
+<label><input type="checkbox" name="auto" value="1"{ck(auto)} onchange="this.form.submit()"> Otomatik yenile (5 sn)</label>
+<button type="submit">Uygula</button></form>"""
+
+    warn = sum(1 for r in rows_all if r["level"] == "WARNING")
+    err = sum(1 for r in rows_all if r["level"] in ("ERROR", "CRITICAL"))
+    size = WORKER_LOG.stat().st_size / 1024
+    note = " · dosya daha uzun, sadece kuyruk okundu" if truncated else ""
+
+    # REAL-TIME DEĞİL kuralının BİLİNÇLİ istisnası (gerekçe: dosya başındaki docstring).
+    head = '<meta http-equiv="refresh" content="5">' if auto else ""
+    body = f"""
+<h2>Worker Log <small>worker/logs/agent.log · {size:.0f} KB · salt-okunur{E(note)}</small></h2>
+{bar}
+<div class="cards">
+  <div class="card"><div class="n">{len(rows)}</div><div class="l">gösterilen satır</div></div>
+  <div class="card"><div class="n" style="color:var(--warn)">{warn}</div><div class="l">WARNING (kuyrukta)</div></div>
+  <div class="card"><div class="n" style="color:var(--err)">{err}</div><div class="l">ERROR (kuyrukta)</div></div>
+</div>
+<p class="mut">En yeni üstte. Son {n} satırın kuyruğu okunur (dosya komple belleğe ALINMAZ).</p>
+<div class="wrap"><table class="log"><tbody>{trs}</tbody></table></div>
+"""
+    return page("Worker Log", "/log", body, head=head)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  HTTP
 # ═══════════════════════════════════════════════════════════════════════════
@@ -480,6 +650,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(render_session((q.get("f") or [""])[0]))
             elif u.path == "/memory":
                 self._send(render_memory())
+            elif u.path == "/log":
+                self._send(render_log(q))
             elif u.path == "/favicon.ico":
                 self._send(b"", 404)
             else:
@@ -518,15 +690,19 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> int:
-    host = "127.0.0.1"  # SADECE yerel. Bu pano aile verisi gösterir; ağa açılmaz.
+    # Ev LAN'ına açık, şifresiz — bilinçli (bkz. dosya başı). Kısıtlamak için:
+    #   DASHBOARD_HOST=127.0.0.1 python3 tools/dashboard.py
     try:
-        srv = ThreadingHTTPServer((host, PORT), Handler)
+        srv = ThreadingHTTPServer((HOST, PORT), Handler)
     except OSError as e:
         print(f"Port {PORT} açılamadı ({e}). Başka port: DASHBOARD_PORT=8766 python3 tools/dashboard.py")
         return 1
-    print(f"Candan panosu → http://{host}:{PORT}")
+    print(f"Candan panosu → http://{HOST}:{PORT}")
+    if HOST == "0.0.0.0":  # noqa: S104
+        print("  ⚠ ev LAN'ına AÇIK, kimlik doğrulama YOK — internete yönlendirme YAPMA.")
     print(f"  oturumlar      : {SESSIONS_DIR}")
     print(f"  hafıza         : {MEMORY_DIR} (SALT-OKUNUR)")
+    print(f"  worker log     : {WORKER_LOG} (SALT-OKUNUR)")
     print("Durdur: Ctrl-C")
     try:
         srv.serve_forever()
