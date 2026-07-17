@@ -23,6 +23,7 @@ import logging
 import multiprocessing as mp
 import os
 import time
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
@@ -86,12 +87,28 @@ class DedupeFilter(logging.Filter):
 # sürecin hem TÜM job süreçlerinin loglarını görür → dosyaya tek bir süreç yazar,
 # satırlar birbirine KARIŞMAZ ve dosya kilidi/append yarışı diye bir sorun YOKTUR.
 #
-# TRUNCATE bu yüzden güvenle mode="w": handler yalnız ana süreçte, worker BİR KEZ
-# başlarken kurulur. Job süreçleri bu fonksiyonu HİÇ çağırmaz (agent.py'de
+# DÖNDÜRME (rotate) DE ÇOK-SÜREÇLİ YARIŞ DEĞİL — yukarıdaki tek-yazan mantığı
+# rollover için de geçerli: RotatingFileHandler.emit() (ve içindeki doRollover)
+# yalnız ana süreçte, worker BİR KEZ başlarken kurulan handler üzerinden
+# çağrılır. Job süreçleri bu fonksiyonu HİÇ çağırmaz (agent.py'de
 # `if __name__ == "__main__"` bloğundan çağrılıyor; mp start method darwin'de
 # "spawn", linux'ta "forkserver" → çocuk modülü `__mp_main__` olarak import eder,
 # `__main__` bloğu ÇALIŞMAZ). Alttaki parent_process() kontrolü ikinci emniyet:
-# "fork" bağlamında çocuk handler'ı miras alsa bile dosyayı SIFIRLAMAZ.
+# "fork" bağlamında çocuk handler'ı miras alsa bile ana handler'la ÇAKIŞMAZ —
+# yani dosya adı .1/.2/.3'e kayarken iki sürecin aynı anda yazma/döndürme
+# yarışına girme ihtimali YOK.
+#
+# APPEND (mode="a"), artık TRUNCATE DEĞİL: worker systemd altında
+# Restart=always ile çalışıyor — çökerse 5 sn içinde yeniden başlar. Eski
+# mode="w" her başlangıçta dosyayı SIFIRLIYORDU (kullanıcı isteği: bayat log
+# birikmesin); ama bu artık TEHLİKELİ — tam da çökme sebebini yazan satırlar,
+# systemd'nin otomatik yeniden başlatmasıyla İLK İŞ olarak silinirdi. Şimdi:
+# append + boyuta göre otomatik döndürme (agent.log.1..3) — çökme öncesi kanıt
+# KORUNUR, disk yine de sınırsız BÜYÜMEZ. Başlangıçta ELLE rollover
+# YAPILMIYOR (bkz. aşağıdaki handler kurulumu): bir çökme döngüsüne girilirse
+# (Restart=always) her restart'ta elle rollover tetiklemek 3 yedeği saniyeler
+# içinde tüketip asıl kanıtı (ilk çökme) SİLERDİ — döndürme yalnızca dosya
+# maxBytes'ı DOLUNCA doğal biçimde olur.
 #
 # Kaynak pid'i satırda: forward edilen record'da `record.process` ÇOCUĞUN pid'idir
 # (record çocukta yaratılır, ana süreçte yalnız yeniden emit edilir) → hangi job'ın
@@ -136,7 +153,7 @@ class _PlainFormatter(logging.Formatter):
 
 
 def setup_file_logging() -> Path | None:
-    """Root logger'a dosya handler'ı tak; dosyayı SIFIRDAN başlat (truncate).
+    """Root logger'a dosya handler'ı tak; APPEND + boyuta göre otomatik döndür.
 
     YALNIZ ana süreçten çağrılmalı (bkz. yukarıdaki not). Dönen değer: yazılan yol,
     kapalı/başarısızsa None.
@@ -162,8 +179,19 @@ def setup_file_logging() -> Path | None:
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # mode="w" → her başlatmada baştan yaz (kullanıcı isteği: bayat log birikmesin).
-        handler = logging.FileHandler(path, mode="w", encoding="utf-8")
+        # mode="a" (append) + maxBytes/backupCount: systemd Restart=always altında
+        # çökme sonrası yeniden başlangıç eski (çökme kanıtı taşıyan) satırları
+        # SİLMESİN. maxBytes=10MB: dashboard tail_lines() 200+MB'ı bile anında
+        # okuyor, yani boyut pano için sorun değil — sınır yalnızca disk için;
+        # 10MB, birkaç saatlik akışı taşıyacak kadar cömert ama disksiz LXC'de
+        # rahatsız etmeyecek kadar küçük. backupCount=3 → agent.log + .1/.2/.3,
+        # toplam en fazla ~40MB. Döndürme YALNIZ dosya dolunca kendiliğinden olur
+        # (elle doRollover() ÇAĞRILMIYOR) — aksi halde bir çökme döngüsünde her
+        # restart bir rollover sayılır ve 3 yedek saniyeler içinde tükenip asıl
+        # kanıtı (ilk çökme) silerdi.
+        handler = RotatingFileHandler(
+            path, mode="a", maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        )
     except OSError as e:
         # Dosya açılamazsa (izin/dolu disk) worker AYNEN çalışsın — sadece uyar.
         logging.getLogger("worker.log").warning("log dosyası açılamadı (%s): %r", path, e)
