@@ -1708,6 +1708,13 @@ if _HAS_LIVEKIT:
             # burayı doldurur; onayda tutarlı çekirdek seçilip yalnızca O yazılır.
             self._enroll_embs: list = []
             self._enroll_collector: Optional[asyncio.Task] = None
+            # Toplayıcı kalite-kapısı sayaçları (temiz ölçüm için). NEDEN: log'a
+            # bakınca kaç pencere görüldü / kaçı kapıyı geçti / kaçı yankı-sessizlik
+            # diye elendi görünsün ki campplus'ın TEMİZ aynı-kişi skoru okunabilsin.
+            self._enroll_seen = 0            # tap'ten görülen distinct pencere
+            self._enroll_taken = 0           # kapıyı geçip havuza giren
+            self._enroll_drop_echo = 0       # agent_busy → Candan yankısı, elendi
+            self._enroll_drop_silence = 0    # user_speaking yok → sessizlik, elendi
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
@@ -1978,12 +1985,38 @@ if _HAS_LIVEKIT:
             if self._enroll_collector is not None or self._speaker_state is None:
                 return
             self._enroll_embs = []
+            self._enroll_seen = 0
+            self._enroll_taken = 0
+            self._enroll_drop_echo = 0
+            self._enroll_drop_silence = 0
             self._enroll_collector = asyncio.create_task(self._collect_loop())
 
         def _stop_collect(self) -> None:
             task, self._enroll_collector = self._enroll_collector, None
             if task is not None and not task.done():
                 task.cancel()
+
+        def _collect_gate(self) -> tuple[bool, Optional[str]]:
+            """Bu pencere havuza ALINSIN mı? (alınır mı, elenme sebebi).
+
+            KALİTE KAPISI: yalnız kullanıcı GERÇEKTEN konuşurken (user_speaking) ve
+            Candan meşgul DEĞİLken (agent_busy=False) al. NEDEN iki koşul:
+              - agent_busy=True → Candan düşünüyor/konuşuyor; AEC tam değilse kendi
+                TTS'i mikrofona yankıyla döner → last_embedding Candan'ın sesi olur
+                (kullanıcı DEĞİL). Bu centroid'i zehirler.
+              - user_speaking=False → sessizlik/konuşma-arası; speaker_tap rms<0.01'i
+                zaten atlar ama yankı/gürültü konuşma sanılabilir → VAD kapısı şart.
+            WakeGate yok/None ise GÜVENLİ tarafa düş: mevcut davranış (hepsini al),
+            çökme yok. Bayrakları agent.py besler (wake_user_speaking/wake_agent_busy).
+            """
+            wake = getattr(self, "_wake", None)
+            if wake is None:
+                return True, None
+            if getattr(wake, "agent_busy", False):
+                return False, "echo"        # Candan konuşuyor → yankı riski
+            if not getattr(wake, "user_speaking", True):
+                return False, "silence"     # kullanıcı susuyor → sessizlik
+            return True, None
 
         async def _collect_loop(self) -> None:
             last = None
@@ -1994,8 +2027,19 @@ if _HAS_LIVEKIT:
                     # dizi döndürür (truth value ambiguous). Kimlik değişimi zaten
                     # "tap yeni pencere yazdı" demek.
                     if emb is not None and emb is not last:
+                        # Her distinct pencereyi BİR kez, ilk görüldüğü an değerlendir
+                        # (kimlik = yeni pencere). Kapı O AN kapalıysa pencere kalıcı
+                        # elenir — sonradan aynı emb'i açık kapıda toplamayız.
                         last = emb
-                        self._enroll_embs.append(emb)
+                        self._enroll_seen += 1
+                        take, reason = self._collect_gate()
+                        if take:
+                            self._enroll_taken += 1
+                            self._enroll_embs.append(emb)
+                        elif reason == "echo":
+                            self._enroll_drop_echo += 1
+                        else:
+                            self._enroll_drop_silence += 1
                     await asyncio.sleep(SPEAKER_ENROLL_POLL_S)
             except asyncio.CancelledError:
                 raise
@@ -2023,9 +2067,12 @@ if _HAS_LIVEKIT:
             core, st = select_core_embeddings(pool)
             ic = st.get("ic") or {}
             logger.info(
-                "kayıt ölçümü: toplanan=%d çekirdek=%d atılan=%d%s | "
+                "kayıt ölçümü: gördü=%d aldı=%d ele(yankı)=%d ele(sessizlik)=%d | "
+                "toplanan=%d çekirdek=%d atılan=%d%s | "
                 "çekirdek-içi benzerlik: min=%.3f ort=%.3f medyan=%.3f maks=%.3f "
                 "(seed medyanı=%.3f, çekirdek eşiği=%.2f, tanıma eşiği=%.2f)",
+                self._enroll_seen, self._enroll_taken, self._enroll_drop_echo,
+                self._enroll_drop_silence,
                 st["toplanan"], st["cekirdek"], len(st["atilan"]),
                 (" skorlar=" + ", ".join(f"{s:.3f}" for s in st["atilan"])
                  if st["atilan"] else ""),
