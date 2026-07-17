@@ -1430,12 +1430,24 @@ if _HAS_LIVEKIT:
             # Bilinmeyen ses → kayıt sihirbazı direktifi (konuşmayı MODEL sürer;
             # kaydı enroll_speaker tool'u üzerinden KOD yapar).
             text = self._brain._enroll_hint(text)
+            # Kimlik: model KARŞILAŞTIRMAZ, worker sonucu ENJEKTE eder — her turda,
+            # sadece ilk turda değil (bkz. _identity_note).
+            text = self._brain._identity_note(text)
             # ZAMAN: warm pi süreci GÜNLERCE yaşar → boot'ta enjekte edilen tarih BAYATLAR.
             # Her tura güncel saati (Europe/London) iliştir. Model yine de due_at HESAPLAMAZ
             # (onu reminder_add server-side çözer); bu satır "bugün/yarın/şu an" için.
             text = self._brain._now_note() + "\n\n" + text
 
             q: asyncio.Queue = asyncio.Queue()
+
+            # Kayıt onay turu: model bu turda kendi cümlesiyle "kaydettim" diyebilir
+            # ama gerçek sonuç (başarı/ret/merge) KOD tarafından tur sonunda belirlenir
+            # (_run_pending_enroll). Çelişkili çift mesajı önlemek için bu turda modelin
+            # cevap delta'ları/tam-içeriği CANLI değil BUFFER'a alınır; tur sonunda ya
+            # SADECE worker'ın otoriter satırı söylenir (tool çağrıldıysa, modelin
+            # buffer'ı atılır) ya da tool çağrılmadıysa buffer toplu olarak söylenir.
+            enroll_turn = bool(self._brain._enroll_active)
+            enroll_buf: list = []
 
             async with self._client._turn_lock:
                 self._client._turn_q = q
@@ -1537,7 +1549,10 @@ if _HAS_LIVEKIT:
                                         got_delta = True
                                         notice_at = None
                                         self._client.warmed_up = True
-                                    _emit(delta)
+                                    if enroll_turn:
+                                        enroll_buf.append(delta)
+                                    else:
+                                        _emit(delta)
                         elif etype in ("message_end", "turn_end"):
                             msg = obj.get("message")
                             if isinstance(msg, dict) and msg.get("role") == "assistant":
@@ -1581,7 +1596,10 @@ if _HAS_LIVEKIT:
                     if not got_delta:
                         full = _assistant_msg_text(final_msg)
                         if full:
-                            _emit(full)
+                            if enroll_turn:
+                                enroll_buf.append(full)
+                            else:
+                                _emit(full)
                         elif stalled:
                             # Hiç metin yok + stall/error → kullanıcı sessiz kalmasın.
                             if final_msg is not None and final_msg.get("stopReason") == "error":
@@ -1596,11 +1614,18 @@ if _HAS_LIVEKIT:
                                 final_msg.get("errorMessage") or "(bilinmiyor)",
                             )
                     # Kayıt tool'u çağrıldıysa: kaydı KOD yapar ve sonucu KOD söyler.
-                    # Model'in kendi cümlesinden SONRA konur → model "kaydettim" dese
-                    # bile son sözü gerçek karar söyler; ret de duyulur (sessiz
-                    # başarısızlık yok). Kayıt hiç yapılmadıysa satır YOK.
+                    # Kayıt turunda modelin kendi cümlesi (enroll_buf) hiç canlıya
+                    # çıkmadı; tool çağrıldıysa o buffer ATILIR ve SADECE worker'ın
+                    # otoriter satırı (başarı/ret/merge) söylenir — çelişkili çift
+                    # mesaj/yalan "kaydettim" duyulmaz. Tool çağrılmadıysa (rıza/isim
+                    # sorma gibi ara adım) buffer toplu olarak söylenir.
                     enroll_line = await self._brain._run_pending_enroll()
-                    if enroll_line:
+                    if enroll_turn:
+                        if enroll_line:
+                            _emit(enroll_line)
+                        elif enroll_buf:
+                            _emit("".join(enroll_buf))
+                    elif enroll_line:
                         _emit((" " if got_delta else "") + enroll_line)
                     # Stall'da pi hâlâ arka planda çalışıyor olabilir → abort ile durdur.
                     if stalled:
@@ -1696,6 +1721,11 @@ if _HAS_LIVEKIT:
             self._enroll_core: list = []                  # seçilmiş çekirdek (yazılacak)
             self._pending_enroll: Optional[str] = None    # tool çağrıldı, tur sonunda işlenecek
             self._enroll_hinted = False                   # kayıt direktifi verildi mi
+            # Kayıt bağlamı LATCH'i: bir kez bilinmeyen ses görülünce (current None)
+            # True olur ve _reset_enroll'a kadar sürer. Toplama priming'ini DAR
+            # "current None + emb var" koşulundan ayırır — wizard ortasında current
+            # yanlış eşleşmeyle dolsa da toplama SÜRER (canlı 'gördü=0' hatası).
+            self._enroll_active = False
             self._enroll_name_tries = 0                   # isim onayı kaç kez düzeltildi
             # Emniyet ağı sayaçları. _enroll_wanted/_enroll_net_done BAĞLANTI ömürlü
             # (_reset_enroll onları TEMİZLEMEZ): "istemiyorum" diyene bir daha sorulmaz,
@@ -1969,6 +1999,9 @@ if _HAS_LIVEKIT:
             self._enroll_retried = 0
             self._enroll_name_tries = 0
             self._enroll_match = None
+            # Kayıt bağlamı bitti → LATCH kapanır: bundan sonra tanınan/normal sohbette
+            # (enroll DIŞI) toplama YAPILMAZ; yalnız yeni bir bilinmeyen ses yeniden açar.
+            self._enroll_active = False
             # DİKKAT: _enroll_wanted / _enroll_no_tool_turns / _enroll_net_done BURADA
             # SIFIRLANMAZ — bilerek bağlantı ömürlü. "İstemiyorum" diyene bir daha
             # sorulmamalı; kayıt bitince de ağ tekrar tetiklenmemeli.
@@ -2064,6 +2097,15 @@ if _HAS_LIVEKIT:
             biriktikçe eşik TAHMİNLE değil VERİYLE düzeltilebilecek."""
             self._stop_collect()
             pool = self._enroll_pool()
+            if not pool:
+                # Priming HİÇ olmamış: toplayıcı pencere görmemiş VE seed embed'ler
+                # None → enroll_speaker havuzsuz çağrılmış. Latch fix'i sonrası bu
+                # OLMAMALI; olursa net iz bırak (ret + "biraz daha konuş" zaten döner).
+                logger.warning(
+                    "kayıt havuzu BOŞ (gördü=%d): toplayıcı hiç pencere görmedi ve "
+                    "seed embed'ler None → enroll priming'siz çağrıldı",
+                    self._enroll_seen,
+                )
             core, st = select_core_embeddings(pool)
             ic = st.get("ic") or {}
             logger.info(
@@ -2129,10 +2171,24 @@ if _HAS_LIVEKIT:
                 # çağırmazsa emniyet ağı devreye girer.
                 current = getattr(self._speaker_state, "current", None)
                 emb = getattr(self._speaker_state, "last_embedding", None)
-                if current is None and emb is not None:
-                    if self._enroll_emb is None:
-                        self._enroll_emb = emb
-                    self._enroll_name_emb = emb  # en güncel pencere
+                # Priming'i DAR "current None + emb var" koşulundan AYIR. Bir kez
+                # bilinmeyen ses görülünce kayıt bağlamını LATCH'le ve _reset_enroll'a
+                # kadar sürdür. NEDEN: düşük güvenli yanlış bir eşleşme wizard ortasında
+                # current'i doldurunca (ya da priming turunda emb None olunca) eski dar
+                # koşul toplamayı hiç başlatmıyor/öldürüyordu → enroll_speaker BOŞ havuza
+                # düşüyordu (canlı 'gördü=0 toplanan=0'). Latch ile havuz enroll boyunca
+                # dolar. Tanınan/normal sohbette latch KAPALI → toplama YOK (kalite kapısı
+                # + echo kapısı olduğu gibi kalır).
+                if current is None:
+                    self._enroll_active = True
+                if self._enroll_active:
+                    if emb is not None:
+                        if self._enroll_emb is None:
+                            self._enroll_emb = emb
+                        self._enroll_name_emb = emb  # en güncel pencere
+                    # emb None olsa bile başlat: toplayıcı last_embedding'i zamanla
+                    # yoklar. _start_collect idempotent (zaten çalışıyorsa no-op,
+                    # birikeni SİLMEZ).
                     self._start_collect()
                     net = self._maybe_trip_net(text)
                     if net is not None:
@@ -2520,6 +2576,35 @@ if _HAS_LIVEKIT:
                 f"oturumdaki ilk mesajı. Yanıtlamadan önce ona ismiyle KISA ve doğal bir "
                 f"selam ver, sonra mesajını yanıtla.)"
             )
+            return note + "\n\n" + text
+
+        def _identity_note(self, text: str) -> str:
+            """Modele HER TURDA (selamdan bağımsız) o an kimle konuştuğunu söyleyen
+            pasif bağlam satırı. NEDEN: model 'beni tanıyor musun' derse memory_search
+            (notlar) açıp 'tanımıyorum' diyebiliyor — oysa ses tanıma (speaker-tap) o an
+            kim olduğunu ZATEN biliyor; kimlik yalnız bağlantının ilk turunda (_maybe_greet)
+            enjekte ediliyordu, sonraki turlarda kayboluyordu. İLKE: model KARŞILAŞTIRMAZ;
+            worker sonucu enjekte eder, model OKUR. Kapalı/wizard-ortası → dokunma."""
+            if not self._speaker_state:
+                return text
+            if self._enroll_active:
+                return text
+            name = getattr(self._speaker_state, "current", None)
+            roster = self._speaker_id.names() if self._speaker_id else []
+            if name:
+                note = (
+                    f"(Sistem — ses tanıma: şu an konuşanı SES TANIMAYLA {name} olarak "
+                    f"tanıyorum. 'Beni tanıyor musun / ben kimim / adım ne' sorulursa "
+                    f"notlara değil buna güvenerek yanıt ver."
+                )
+            else:
+                note = (
+                    "(Sistem — ses tanıma: şu an konuşanın sesi tanınmıyor/kayıtlı değil. "
+                    "'Beni tanıyor musun' derse dürüstçe tanımadığını söyle, uydurma."
+                )
+            if roster:
+                note += f" Kayıtlı tanıdığın kişiler: {', '.join(roster)}."
+            note += ")"
             return note + "\n\n" + text
 
         def _target(self) -> tuple[str, str]:
