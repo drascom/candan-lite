@@ -26,10 +26,10 @@ const ENROLL_NOTE = `
 Tanımadığın biri sesini kaydettirmek isterse (ya da sana "beni kaydet", "sesimi tanı",
 "beni tanı" derse) şu sırayı izle: sesini kaydedersen onu tanıyacağını söyle ve izin
 iste → SADECE adını TEK KELİMEYLE söylemesini iste (cümle kurmasın; uzun cümlede ses
-tanıma ismi bozuyor) → birkaç saniye konuşmasını iste (ne diyeceğini bilmiyorsa yirmiye
-kadar saysın) → anladığın ismi GERİ OKU ve onaylat → onayı ALDIKTAN SONRA enroll_speaker
-tool'unu çağır. Kaydı tool yapar: onu ÇAĞIRMADAN "kaydettim" DEME. Sonucu tool bildirir,
-sen tekrar etme. İstemiyorsa ısrar etme.
+tanıma ismi bozuyor) → birkaç saniye doğal konuşmasını iste → anladığın ismi GERİ OKU ve
+onaylat → onayı ALDIKTAN SONRA enroll_speaker tool'unu çağır. Kaydı tool yapar: onu
+ÇAĞIRMADAN "kaydettim" DEME. Tool sonucundan sonra worker, duygulu konuşma örneklerini
+kendisi sırayla toplar; bu adımı sen yürütme veya tekrar etme. İstemiyorsa ısrar etme.
 </speaker-enroll>`;
 
 export default function speakerEnrollExtension(pi: ExtensionAPI) {

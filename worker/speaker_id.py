@@ -376,6 +376,12 @@ CREATE TABLE IF NOT EXISTS speaker_samples (
     created_at  REAL
 );
 CREATE INDEX IF NOT EXISTS idx_samples_speaker ON speaker_samples(speaker_id);
+CREATE TABLE IF NOT EXISTS speaker_expression_samples (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, speaker_id INTEGER NOT NULL, emotion TEXT NOT NULL,
+    prompt TEXT NOT NULL, embedding BLOB NOT NULL, audio_path TEXT NOT NULL,
+    duration_s REAL NOT NULL, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_expression_speaker ON speaker_expression_samples(speaker_id, emotion);
 """
 
 
@@ -530,6 +536,19 @@ class SpeakerStore:
         finally:
             conn.close()
 
+    def _add_expression_sample(self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
+                               audio_path: str, duration_s: float) -> int:
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "INSERT INTO speaker_expression_samples (speaker_id, emotion, prompt, embedding, audio_path, duration_s, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (speaker_id, emotion, prompt, embedding, audio_path, duration_s, time.time()),
+            )
+            conn.commit()
+            return int(cur.lastrowid)
+        finally:
+            conn.close()
+
     def _all_with_embeddings(self) -> list[dict]:
         out = []
         for sp in self._list_speakers():
@@ -581,6 +600,11 @@ class SpeakerStore:
         return await asyncio.to_thread(
             self._add_auto_sample, speaker_id, embedding, dim, model_id, max_total
         )
+
+    async def add_expression_sample(self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
+                                    audio_path: str, duration_s: float) -> int:
+        return await asyncio.to_thread(self._add_expression_sample, speaker_id, emotion, prompt,
+                                       embedding, audio_path, duration_s)
 
     async def list_speakers(self) -> list[dict]:
         return await asyncio.to_thread(self._list_speakers)

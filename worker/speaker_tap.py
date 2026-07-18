@@ -65,6 +65,30 @@ class SpeakerState:
         self.last_embedding = None  # np.ndarray | None
         self.sticky_misses = max(1, int(sticky_misses))
         self._misses = 0  # art arda güvensiz (identify=None) pencere sayacı
+        self._expression_label: str | None = None
+        self._expression_chunks: list[bytes] = []
+        self._expression_embeddings: list = []
+
+    def begin_expression_capture(self, label: str) -> None:
+        self._expression_label = label
+        self._expression_chunks = []
+        self._expression_embeddings = []
+
+    def add_expression_window(self, pcm: bytes, embedding) -> None:
+        if self._expression_label is not None:
+            self._expression_chunks.append(pcm)
+            self._expression_embeddings.append(embedding)
+
+    def finish_expression_capture(self) -> tuple[str | None, list[bytes], list]:
+        label = self._expression_label
+        chunks, embs = self._expression_chunks, self._expression_embeddings
+        self._expression_label = None
+        self._expression_chunks, self._expression_embeddings = [], []
+        return label, chunks, embs
+
+    def discard_expression_capture(self) -> None:
+        self._expression_label = None
+        self._expression_chunks, self._expression_embeddings = [], []
 
     def observe(self, name: str | None, score: float) -> bool:
         """Yapışkan güncelleme. `name` = identify sonucu (None = güvensiz pencere,
@@ -197,6 +221,7 @@ class SpeakerTap:
                     # Enrollment için son ham embedding'i sakla (yalnızca KONUŞMA
                     # penceresi → sessizlik yanlış-pozitif enroll tetiklemez).
                     self._state.last_embedding = emb
+                    self._state.add_expression_window(chunk, emb)
                     name, score = self._sp.identify(emb)
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)

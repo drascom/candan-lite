@@ -23,9 +23,12 @@ import sys
 import time
 import unicodedata
 import uuid
+import wave
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+import numpy as np
 
 from name_parser import (
     parse_spoken_name,
@@ -441,6 +444,10 @@ SPEAKER_ENROLL_MIN_CORE = int(os.environ.get("SPEAKER_ENROLL_MIN_CORE", "3") or 
 SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60") or 0.60)
 # Toplayıcının yoklama aralığı (sn). speaker_tap ~1 sn'de bir pencere üretiyor.
 SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
+SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get("SPEAKER_EXPRESSION_CAPTURE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+SPEAKER_EXPRESSION_DIR = Path(os.environ.get("SPEAKER_EXPRESSION_DIR", str(Path(__file__).resolve().parent / "data" / "expression-samples")))
+SPEAKER_EXPRESSION_PROMPTS = (("neseli", "Bugün güzel bir şey oldu, çok mutluyum."), ("uzgun", "Bugün kendimi biraz üzgün hissediyorum."), ("merakli", "Acaba şimdi ne olacak, gerçekten merak ediyorum."), ("kizgin", "Buna gerçekten kızdım, böyle olmasını istemezdim."), ("aceleci", "Hemen çıkmam gerekiyor, biraz acelem var."), ("serbest", "Şimdi istediğin cümleyi söyleyebilirsin; istersen kendini kısaca anlat."))
+SPEAKER_EXPRESSION_DISPLAY = {"neseli": "neşeli", "uzgun": "üzgün", "merakli": "meraklı", "kizgin": "kızgın", "aceleci": "aceleci"}
 
 # ── EMNİYET AĞI: model tool'u hiç çağırmazsa kod devreye girer ────────────────
 # NEDEN: kayıt sihirbazını MODEL sürüyor (bkz. _enroll_hint) → model işini yapmazsa
@@ -1745,6 +1752,10 @@ if _HAS_LIVEKIT:
             self._enroll_taken = 0           # kapıyı geçip havuza giren
             self._enroll_drop_echo = 0       # agent_busy → Candan yankısı, elendi
             self._enroll_drop_silence = 0    # user_speaking yok → sessizlik, elendi
+            self._expression_active = False
+            self._expression_index = 0
+            self._expression_speaker_id: Optional[int] = None
+            self._expression_name = ""
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
@@ -2006,6 +2017,56 @@ if _HAS_LIVEKIT:
             # SIFIRLANMAZ — bilerek bağlantı ömürlü. "İstemiyorum" diyene bir daha
             # sorulmamalı; kayıt bitince de ağ tekrar tetiklenmemeli.
 
+        def _expression_prompt(self) -> str:
+            emotion, sentence = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
+            return sentence if emotion == "serbest" else f"Şimdi {SPEAKER_EXPRESSION_DISPLAY[emotion]} bir tonda şu cümleyi söyle: {sentence}"
+
+        def _start_expression_capture(self, speaker_id: int, name: str) -> str:
+            if not SPEAKER_EXPRESSION_CAPTURE_ENABLED or self._speaker_state is None:
+                return f"Memnun oldum {name}!"
+            self._expression_active, self._expression_index = True, 0
+            self._expression_speaker_id, self._expression_name = speaker_id, name
+            self._speaker_state.begin_expression_capture(SPEAKER_EXPRESSION_PROMPTS[0][0])
+            return f"Seni kaydettim {name}. Şimdi kısa bir ses profili çıkaracağım. Bu bölümde cevap vermeden sadece sıradaki cümleyi söyleyeceğim. " + self._expression_prompt()
+
+        async def _save_expression_capture(self, emotion: str, prompt: str, chunks: list[bytes], embs: list) -> bool:
+            if not chunks or not embs or self._expression_speaker_id is None:
+                logger.warning("ifade corpus'u atlandı: %s için yeterli ses yok", emotion)
+                return False
+            folder = SPEAKER_EXPRESSION_DIR / (_slug(self._expression_name) or "unknown") / datetime.now().strftime("%Y%m%dT%H%M%S")
+            folder.mkdir(parents=True, exist_ok=True)
+            wav_path = folder / f"{self._expression_index + 1:02d}-{emotion}.wav"
+            raw = b"".join(chunks)
+            with wave.open(str(wav_path), "wb") as out:
+                out.setnchannels(1); out.setsampwidth(2); out.setframerate(16000); out.writeframes(raw)
+            duration_s = len(raw) / 32000.0
+            summary = np.asarray(embs, dtype=np.float32).mean(axis=0)
+            norm = float(np.linalg.norm(summary))
+            if norm > 0: summary /= norm
+            metadata = {"speaker": self._expression_name, "emotion": emotion, "prompt": prompt, "audio": str(wav_path), "sample_rate": 16000, "duration_s": round(duration_s, 3), "embedding_windows": len(embs), "created_at": datetime.now().isoformat(timespec="seconds")}
+            wav_path.with_suffix(".json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            from speaker_id import emb_to_bytes
+            await self._speaker_store.add_expression_sample(self._expression_speaker_id, emotion, prompt, emb_to_bytes(summary), str(wav_path), duration_s)
+            return True
+
+        async def _expression_step(self, text: str) -> Optional[str]:
+            if not self._expression_active or self._speaker_state is None:
+                return None
+            if _is_decline_enroll(text):
+                self._speaker_state.discard_expression_capture()
+                emotion, _ = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
+                self._speaker_state.begin_expression_capture(emotion)
+                return "Bu bölümü atlamayalım. " + self._expression_prompt()
+            label, chunks, embs = self._speaker_state.finish_expression_capture()
+            emotion, prompt = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
+            if label == emotion: await self._save_expression_capture(emotion, prompt, chunks, embs)
+            self._expression_index += 1
+            if self._expression_index >= len(SPEAKER_EXPRESSION_PROMPTS):
+                self._expression_active = False
+                return "Teşekkür ederim. Ses profilini kaydettim."
+            self._speaker_state.begin_expression_capture(SPEAKER_EXPRESSION_PROMPTS[self._expression_index][0])
+            return self._expression_prompt()
+
         # ── Çok-örnekli toplama ──────────────────────────────────────────────
         def _start_collect(self) -> None:
             """Kayıt diyaloğu boyunca ses penceresi biriktirmeye başla.
@@ -2144,6 +2205,9 @@ if _HAS_LIVEKIT:
             if not self._enroll_ok:
                 return None
             async with self._enroll_lock:
+                expression = await self._expression_step(text)
+                if expression is not None:
+                    return expression
                 # KOD'a ait tek deterministik alt-akış: kimlik AYRIMI onayı. Bu bir
                 # sohbet tercihi değil, "iki kimliğe bölünme" koruması → modele
                 # bırakılmaz (bkz. _enroll_tool'daki belirsiz bant).
@@ -2489,11 +2553,7 @@ if _HAS_LIVEKIT:
                 self._reset_enroll()
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
-            if role == "guest":
-                return (f"Memnun oldum {name}! Seni misafir olarak kaydettim; "
-                        f"ailenin hafızasına erişemem. Evin yetişkini istersen "
-                        f"seni aileye ekleyebilir.")
-            return f"Memnun oldum {name}!"
+            return self._start_expression_capture(sid, name)
 
         # ── Rol yükseltme (sözle, SADECE adult) ──────────────────────────────
         def _known_name(self, tok: str) -> Optional[str]:
@@ -2557,7 +2617,7 @@ if _HAS_LIVEKIT:
                 self._reset_enroll()
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
-            return f"Tamam {match}, sesini daha iyi tanıyacağım artık."
+            return self._start_expression_capture(sid, match)
 
         def _maybe_greet(self, text: str) -> str:
             """Tanınan kişinin bu bağlantıdaki İLK turunda pi'ya ismiyle-selam
