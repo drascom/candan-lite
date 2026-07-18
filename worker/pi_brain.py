@@ -446,8 +446,13 @@ SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60"
 SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
 SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get("SPEAKER_EXPRESSION_CAPTURE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
 SPEAKER_EXPRESSION_DIR = Path(os.environ.get("SPEAKER_EXPRESSION_DIR", str(Path(__file__).resolve().parent / "data" / "expression-samples")))
-SPEAKER_EXPRESSION_PROMPTS = (("neseli", "Bugün güzel bir şey oldu, çok mutluyum."), ("uzgun", "Bugün kendimi biraz üzgün hissediyorum."), ("merakli", "Acaba şimdi ne olacak, gerçekten merak ediyorum."), ("kizgin", "Buna gerçekten kızdım, böyle olmasını istemezdim."), ("aceleci", "Hemen çıkmam gerekiyor, biraz acelem var."), ("serbest", "Şimdi istediğin cümleyi söyleyebilirsin; istersen kendini kısaca anlat."))
+SPEAKER_EXPRESSION_PROMPTS = (("neseli", "Bugün güzel bir şey oldu, çok mutluyum."), ("uzgun", "Bugün kendimi biraz üzgün hissediyorum."), ("merakli", "Acaba şimdi ne olacak, gerçekten merak ediyorum."), ("kizgin", "Buna gerçekten kızdım, böyle olmasını istemezdim."), ("aceleci", "Hemen çıkmam gerekiyor, biraz acelem var."), ("serbest", "Şimdi istersen kendini kısaca anlat veya birkaç cümle serbestçe konuş. Bitirdiğinde sadece kaydım tamam de."))
 SPEAKER_EXPRESSION_DISPLAY = {"neseli": "neşeli", "uzgun": "üzgün", "merakli": "meraklı", "kizgin": "kızgın", "aceleci": "aceleci"}
+
+
+def _is_expression_complete(text: str) -> bool:
+    """Serbest ifade kaydını yalnız açık, kısa bitiş sözü kapatır."""
+    return _wake_squash(text) in {"tamam", "bitti", "bitirdim", "kaydımtamam", "kaydimtamam", "konuşmambitti", "konusmambitti"}
 
 # ── EMNİYET AĞI: model tool'u hiç çağırmazsa kod devreye girer ────────────────
 # NEDEN: kayıt sihirbazını MODEL sürüyor (bkz. _enroll_hint) → model işini yapmazsa
@@ -2052,6 +2057,17 @@ if _HAS_LIVEKIT:
         async def _expression_step(self, text: str) -> Optional[str]:
             if not self._expression_active or self._speaker_state is None:
                 return None
+            emotion, prompt = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
+            # STT serbest anlatımın her cümlesini ayrı tur yapabilir. Bitiş sözüne
+            # kadar cümleleri aynı capture'da tut ve pi'a/araçlara hiç verme.
+            if emotion == "serbest":
+                if not _is_expression_complete(text):
+                    return ""
+                label, chunks, embs = self._speaker_state.finish_expression_capture()
+                if label == emotion:
+                    await self._save_expression_capture(emotion, prompt, chunks, embs)
+                self._expression_active = False
+                return "Teşekkür ederim. Ses profilini kaydettim."
             if _is_decline_enroll(text):
                 self._speaker_state.discard_expression_capture()
                 emotion, _ = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
