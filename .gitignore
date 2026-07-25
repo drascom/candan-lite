@@ -35,8 +35,22 @@ worker/data/
 # Kök-çapalı: yalnız üst-düzey memory/ (pi/skills/memory/ gibi kod dizinlerini değil).
 /memory/
 
+# sunucudan çekilen yedekler — speakers.db + aile ses kayıtları, PUBLIC repo'ya ASLA girmez.
+.server-backups/
+
+# testler: kullanıcı kararı — ne git'te ne sunucuda dursun.
+worker/tests/
+
 # os / editor
 .DS_Store
 *.log
 .vscode/
 .idea/
+
+# tts-local-bench (experiments/): üretilen ses, model ağırlıkları ve venv'ler.
+# Bench ARAÇLARI (runners/, sentences.json, compare.html, README) commit edilir;
+# çıktılar ve GB'larca ağırlık EDİLMEZ.
+experiments/tts-local-bench/out/
+experiments/tts-local-bench/venvs/
+experiments/tts-local-bench/vendor/
+experiments/tts-local-bench/refs/*.wav
