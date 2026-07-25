@@ -166,7 +166,14 @@ def _format_name(words: list[str]) -> Optional[str]:
     return name[:40].title() if name else None
 
 
-def parse_spoken_name(text: str) -> Optional[str]:
+def parse_introduced_name(text: str) -> Optional[str]:
+    """Extract a name only when the user explicitly introduces it.
+
+    Unlike :func:`parse_spoken_name`, this deliberately does not accept a bare
+    one- or two-word utterance. Bare-name mode is useful after the wizard has
+    asked "adın ne?", but it is unsafe as a trigger: ordinary short phrases such
+    as "Gidiyor mu?" can otherwise look like a person's name and start enrollment.
+    """
     match_text = _normalize_for_match(text)
     normalized = _normalize(match_text)
     if not normalized:
@@ -181,6 +188,18 @@ def parse_spoken_name(text: str) -> Optional[str]:
         name = _format_name(_clean_candidate(original_candidate))
         if name:
             return name
+
+    return None
+
+
+def parse_spoken_name(text: str) -> Optional[str]:
+    introduced = parse_introduced_name(text)
+    if introduced:
+        return introduced
+
+    normalized = _normalize(_normalize_for_match(text))
+    if not normalized:
+        return None
 
     words = _clean_candidate(normalized)
     # Bare-name modu: dolgu sözcükleri ("ben", "adım", "evet") atıldıktan sonra
@@ -229,8 +248,8 @@ def _is_decline_enroll(text: str) -> bool:
 # Açık enrollment komutları — bunlardan biri geçerse enroll başlatılabilir.
 # Kısa (≤6 kelime) sözde geçmeli; uzun cümle içinde tesadüfi geçiş tetiklemez.
 _ENROLL_PHRASES = (
-    "beni kaydet", "beni tanı", "sesimi kaydet", "sesimi öğren",
-    "beni öğren", "beni hatırla", "sesimi tanı",
+    "beni kaydet", "sesimi kaydet", "sesimi öğren", "beni öğren",
+    "beni hatırla",
     "enroll me", "remember me", "register me", "remember my voice",
 )
 

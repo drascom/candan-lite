@@ -15,6 +15,8 @@ import logging
 import math
 import os
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 
 from livekit import rtc
 
@@ -26,6 +28,17 @@ log.addFilter(DedupeFilter())  # "sessiz pencere atlandı" vb. tekrarları seyre
 
 TAP_RATE = 16000  # sherpa 16k dışını içeride resample eder; 16k besliyoruz
 TAP_CHANNELS = 1
+
+
+@dataclass(frozen=True)
+class TurnSpeakerDecision:
+    """One final, turn-scoped identity decision consumed by transcript and PiBrain."""
+
+    name: str | None
+    score: float
+    reason: str
+    accepted: int
+    total: int
 
 
 def _f(name: str, default: float) -> float:
@@ -50,21 +63,74 @@ def _b(name: str, default: bool) -> bool:
 
 
 class SpeakerState:
-    """Paylaşılan güncel-konuşmacı durumu. `current` = tanınan isim veya None.
+    """Turn-scoped speaker identity state.
 
-    Yapışkan (hysteresis): güvenle tanınan kişi, aradaki güvensiz pencerelerde
-    HEMEN düşmez; ancak art arda `sticky_misses` kadar güvensiz pencere gelince
-    unknown'a iner. Konuşmacı yalnızca güvenli FARKLI bir kişi tanınınca değişir.
+    `current` is cleared at VAD speech start and is set only by `resolve_turn()`.
+    Continuous tap observations outside the active turn can never become evidence
+    for a later transcript. This prevents the previous sticky identity from being
+    injected into a new user's prompt.
     """
 
-    def __init__(self, sticky_misses: int = 5) -> None:
+    def __init__(
+        self,
+        sticky_misses: int = 5,
+        confirm_hits: int = 2,
+        turn_confirm_hits: int | None = None,
+        turn_max_seconds: float = 8.0,
+        continuity_seconds: float | None = None,
+    ) -> None:
         self.current: str | None = None
         self.score: float = 0.0
         # Faz 3.1: son hesaplanan HAM embedding (normalize edilmemiş). Sesli
         # oto-enrollment onaylanınca bu ses örneği kişiye yazılır.
         self.last_embedding = None  # np.ndarray | None
+        # Her embedding'in ÜRETİLDİĞİ andaki enrollment kalite kararı. Toplayıcı
+        # embedding'i birkaç yüz ms sonra yoklar; o arada agent "thinking" durumuna
+        # geçerse canlı bayrağa bakmak, kullanıcının az önceki sesini yanlışlıkla
+        # Candan yankısı sayıp elemek olur. Bu yüzden karar embedding ile birlikte
+        # atomik gibi taşınır (None = gate bağlı değil / varsayılan kabul).
+        self.last_embedding_capture_ok: bool | None = None
+        self.last_embedding_capture_reason: str | None = None
         self.sticky_misses = max(1, int(sticky_misses))
         self._misses = 0  # art arda güvensiz (identify=None) pencere sayacı
+        # KRİTİK: unknown → kayıtlı kişi geçişi tek pencereye güvenmez. Canlıda
+        # yabancı bir sesin tek penceresi AS-norm eşiğini geçip doğrudan Ayhan olması
+        # hem yanlış selama hem de yanlış hafıza/persona bağlamına yol açıyordu.
+        # Aynı isim bu kadar ARDIŞIK güvenli pencerede görülmeden `current` değişmez.
+        self.confirm_hits = max(2, int(confirm_hits))
+        self._candidate: str | None = None
+        self._candidate_hits = 0
+        self.turn_confirm_hits = max(
+            2,
+            int(turn_confirm_hits if turn_confirm_hits is not None else confirm_hits),
+        )
+        self.turn_max_seconds = max(1.0, float(turn_max_seconds))
+        # Önceki dönüşün kimliğini KÖRÜ KÖRÜNE devralmayız. Ancak bu süre içinde
+        # aynı kişi için yeni dönüşte EN AZ BİR güvenli (normal strict identify'dan
+        # geçmiş) pencere varsa, iki pencere aramayız. Kısa doğal devam cümleleri
+        # böylece Bilinmeyen'e düşmez; yabancı/sessiz ses ise ad alamaz.
+        if continuity_seconds is None:
+            continuity_seconds = _f("SPEAKER_CONTINUITY_SECONDS", 12.0)
+        self.continuity_seconds = max(0.0, float(continuity_seconds))
+        self._last_confirmed_name: str | None = None
+        self._last_confirmed_at = 0.0
+        self._turn_active = False
+        self._turn_started_at = 0.0
+        # Her yeni kullanıcı dönüşü bir üretim numarası alır. SpeakerTap bu sayıyı
+        # izleyerek önceki konuşmacı/Candan sesiyle dolu ses tamponunu anında atar.
+        # Böylece kayan pencere hiçbir zaman yeni STT dönüşünden ÖNCEKİ sesin
+        # embedding'ini üretmez.
+        self._turn_generation = 0
+        self._turn_observations: list[tuple[float, str | None, float]] = []
+        self.last_turn_decision = TurnSpeakerDecision(
+            name=None,
+            score=0.0,
+            reason="henüz dönüş yok",
+            accepted=0,
+            total=0,
+        )
+        # İfade corpus'u yalnız açık enrollment akışında etkinleştirilir. Tap zaten
+        # uzak mikrofonu dinlediği için WAV ve embedding aynı temiz pencereden gelir.
         self._expression_label: str | None = None
         self._expression_chunks: list[bytes] = []
         self._expression_embeddings: list = []
@@ -90,34 +156,138 @@ class SpeakerState:
         self._expression_label = None
         self._expression_chunks, self._expression_embeddings = [], []
 
-    def observe(self, name: str | None, score: float) -> bool:
-        """Yapışkan güncelleme. `name` = identify sonucu (None = güvensiz pencere,
-        yalnızca KONUŞMA içeren pencereler için çağrılmalı — sessizlik değil).
-        Döner: `current` değişti mi (bool)."""
-        prev = self.current
+    def begin_turn(self, now: float | None = None) -> None:
+        """Open a new evidence window and invalidate every previous identity."""
+        self._turn_generation += 1
+        self._turn_active = True
+        self._turn_started_at = time.monotonic() if now is None else float(now)
+        self._turn_observations = []
+        self.current = None
+        self.score = 0.0
+        self._candidate = None
+        self._candidate_hits = 0
+        self._misses = 0
+
+    @property
+    def turn_active(self) -> bool:
+        """Whether a user turn is currently collecting speaker evidence."""
+        return self._turn_active
+
+    @property
+    def turn_generation(self) -> int:
+        """Monotonic token used by the audio tap to discard pre-turn audio."""
+        return self._turn_generation
+
+    def resolve_turn(self, now: float | None = None) -> TurnSpeakerDecision:
+        """Resolve only observations collected since the latest `begin_turn()`.
+
+        A name is accepted only when one identity has a consecutive confirmation
+        run and no other accepted identity appeared in the same turn. Ambiguous
+        windows break a run; conflicting names make the whole turn unknown.
+        """
+        if not self._turn_active:
+            return self.last_turn_decision
+
+        finished_at = time.monotonic() if now is None else float(now)
+        observations = [
+            item
+            for item in self._turn_observations
+            if self._turn_started_at <= item[0] <= finished_at
+        ]
+        accepted = [item for item in observations if item[1] is not None]
+        names = {item[1] for item in accepted}
+        decision_name: str | None = None
+        decision_score = 0.0
+        reason = "bu dönüşte güvenli ses penceresi yok"
+
+        if len(names) > 1:
+            reason = "aynı dönüşte çelişen kimlik pencereleri"
+        elif accepted:
+            only_name = accepted[0][1]
+            best_run: list[tuple[float, str | None, float]] = []
+            run: list[tuple[float, str | None, float]] = []
+            for item in observations:
+                if item[1] == only_name:
+                    run.append(item)
+                    if len(run) > len(best_run):
+                        best_run = list(run)
+                else:
+                    run = []
+            if len(best_run) < self.turn_confirm_hits:
+                elapsed = finished_at - self._last_confirmed_at
+                if (
+                    len(best_run) == 1
+                    and only_name == self._last_confirmed_name
+                    and 0.0 <= elapsed <= self.continuity_seconds
+                ):
+                    decision_name = only_name
+                    decision_score = best_run[0][2]
+                    reason = "son doğrulamayla uyumlu tek güncel pencere"
+                else:
+                    reason = f"yetersiz ardışık onay ({len(best_run)}/{self.turn_confirm_hits})"
+            elif best_run[-1][0] - best_run[0][0] > self.turn_max_seconds:
+                reason = "onay pencereleri zaman sınırını aştı"
+            else:
+                decision_name = only_name
+                decision_score = min(item[2] for item in best_run)
+                reason = f"{len(best_run)} ardışık güncel pencere"
+
+        self._turn_active = False
+        self.current = decision_name
+        self.score = decision_score
+        if decision_name is not None:
+            self._last_confirmed_name = decision_name
+            self._last_confirmed_at = finished_at
+        self.last_turn_decision = TurnSpeakerDecision(
+            name=decision_name,
+            score=decision_score,
+            reason=reason,
+            accepted=len(accepted),
+            total=len(observations),
+        )
+        return self.last_turn_decision
+
+    def observe(
+        self,
+        name: str | None,
+        score: float,
+        *,
+        capture_ok: bool = True,
+        now: float | None = None,
+    ) -> bool:
+        """Record one identify result only when it belongs to an active user turn.
+
+        `capture_ok=False` marks agent speech/echo and is excluded. The boolean
+        return is retained for compatibility; identity changes happen only in
+        `resolve_turn()`, therefore this method always returns False.
+        """
         self.score = score
-        if name is not None:
-            # Güvenli tanıma: aynı kişi → koru; None/farklı kişi → o kişiye geç.
-            self._misses = 0
-            if name != self.current:
-                self.current = name
-        else:
-            # Güvensiz pencere: sabra bağla, hemen sıfırlama.
-            self._misses += 1
-            if self.current is not None and self._misses >= self.sticky_misses:
-                self.current = None
-                self._misses = 0
-        return self.current != prev
+        if self._turn_active and capture_ok:
+            observed_at = time.monotonic() if now is None else float(now)
+            if observed_at >= self._turn_started_at:
+                self._turn_observations.append((observed_at, name, score))
+        return False
 
 
 class SpeakerTap:
     """Room'daki her uzak mikrofon track'i için bir embed/identify döngüsü sürer."""
 
     def __init__(self, sp: SpeakerID, state: SpeakerState, min_seconds: float = 1.0,
-                 store=None):
+                 store=None, capture_gate: Callable[[], tuple[bool, str | None]] | None = None):
         self._sp = sp
         self._state = state
+        # PiBrain'in wake bayraklarına bakan isteğe bağlı kalite kapısı. Bu sınıf
+        # LiveKit'ten bağımsız kalır; bağlanmazsa eski güvenli varsayılan (kabul) geçer.
+        self._capture_gate = capture_gate
         self._min_seconds = max(0.5, min_seconds)
+        # Embedding modelleri tek kelimelik 1 sn pencerelerde kararsız kalabiliyor.
+        # Her `min_seconds`'ta bir, güncel dönüşe ait son 1.5 sn'i değerlendiririz.
+        # Böylece yaklaşık 2.5–3 sn'lik doğal bir cümlede iki ayrı kanıt penceresi
+        # oluşur; tek kısa söz hâlâ tek pencereyle kimlik alamaz.
+        self._window_seconds = max(
+            self._min_seconds,
+            _f("SPEAKER_WINDOW_SECONDS", 1.5),
+        )
         self._tasks: dict[str, asyncio.Task] = {}
         # Konuşma-kapısı: normalize [-1,1] RMS eşiği. Bunun altındaki (sessizlik/
         # kelime-arası) pencereler identify EDİLMEZ; current DEĞİŞMEZ.
@@ -179,6 +349,14 @@ class SpeakerTap:
                 if track is not None and pub.kind == rtc.TrackKind.KIND_AUDIO:
                     self._spawn(track, participant)
 
+    def set_capture_gate(self, gate: Callable[[], tuple[bool, str | None]] | None) -> None:
+        """Enrollment kalite kapısını sonradan bağla.
+
+        Agent, SpeakerTap'i PiBrain'den önce kurar; bu küçük setter iki bileşeni
+        döngüsel bağımlılık yaratmadan birleştirir.
+        """
+        self._capture_gate = gate
+
     def _on_track_subscribed(self, track, publication, participant) -> None:
         if track.kind == rtc.TrackKind.KIND_AUDIO:
             self._spawn(track, participant)
@@ -193,19 +371,34 @@ class SpeakerTap:
         stream = rtc.AudioStream.from_track(
             track=track, sample_rate=TAP_RATE, num_channels=TAP_CHANNELS
         )
-        need = int(self._min_seconds * TAP_RATE) * 2  # bayt (s16le mono)
+        hop_bytes = int(self._min_seconds * TAP_RATE) * 2  # bayt (s16le mono)
+        window_bytes = int(self._window_seconds * TAP_RATE) * 2
         buf = bytearray()
+        bytes_since_window = 0
+        seen_turn_generation = self._state.turn_generation
         log.info("speaker-tap: track dinleniyor (%s)", key)
         try:
             async for event in stream:
                 payload = bytes(event.frame.data)
                 if not payload:
                     continue
-                buf.extend(payload)
-                if len(buf) < need:
+                turn_generation = self._state.turn_generation
+                if turn_generation != seen_turn_generation:
+                    # Yeni kullanıcı dönüşü: önceki agent sesi / eski konuşmacı
+                    # pencereye karışmasın.
+                    seen_turn_generation = turn_generation
+                    buf = bytearray()
+                    bytes_since_window = 0
+                if not self._state.turn_active:
                     continue
-                chunk = bytes(buf)
-                buf = bytearray()  # kayan pencere: her ~min_seconds bir örnek
+                buf.extend(payload)
+                if len(buf) > window_bytes:
+                    del buf[:-window_bytes]
+                bytes_since_window += len(payload)
+                if len(buf) < window_bytes or bytes_since_window < hop_bytes:
+                    continue
+                chunk = bytes(buf)  # kayan pencere: her ~min_seconds bir örnek
+                bytes_since_window = 0
                 try:
                     samples = pcm_to_f32(chunk, width=2, channels=TAP_CHANNELS)
                     # Konuşma-kapısı: düşük-enerji (sessizlik) pencerelerini ATLA.
@@ -221,6 +414,17 @@ class SpeakerTap:
                     # Enrollment için son ham embedding'i sakla (yalnızca KONUŞMA
                     # penceresi → sessizlik yanlış-pozitif enroll tetiklemez).
                     self._state.last_embedding = emb
+                    if self._capture_gate is None:
+                        self._state.last_embedding_capture_ok = None
+                        self._state.last_embedding_capture_reason = None
+                    else:
+                        try:
+                            ok, reason = self._capture_gate()
+                        except Exception as e:  # noqa: BLE001 — kalite bilgisi akışı bozmasın
+                            log.debug("speaker-tap capture gate hata: %s", e)
+                            ok, reason = True, None
+                        self._state.last_embedding_capture_ok = bool(ok)
+                        self._state.last_embedding_capture_reason = reason
                     self._state.add_expression_window(chunk, emb)
                     name, score = self._sp.identify(emb)
                 except Exception as e:  # noqa: BLE001
@@ -229,12 +433,13 @@ class SpeakerTap:
                 # Artımlı öğrenme (default kapalı): yüksek güvenli tanımada centroid'i besle.
                 if name is not None and score >= self._learn_min:
                     await self._maybe_learn(name, emb)
-                # Yapışkan güncelleme: anlık unknown current'ı hemen düşürmez.
-                if self._state.observe(name, score):
-                    log.info(
-                        "speaker-tap: konuşmacı → %s (skor=%.3f)",
-                        self._state.current or "unknown", score,
-                    )
+                # Kimlik yalnız aktif VAD dönüşüne yazılır; agent echo penceresi
+                # veya dönüş dışındaki eski gözlem sonraki transkripte taşınamaz.
+                self._state.observe(
+                    name,
+                    score,
+                    capture_ok=self._state.last_embedding_capture_ok is not False,
+                )
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001

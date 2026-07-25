@@ -10,6 +10,8 @@ Dil = MATE_LANGUAGE (WhisperWyomingSTT(language=...)).
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from typing import Optional
 
 from livekit import rtc
@@ -31,6 +33,38 @@ logger = logging.getLogger("whisper_stt")
 logger.addFilter(DedupeFilter())
 
 STT_WIDTH = 2  # bytes/sample: s16le
+
+# Whisper, sessizlik / TV-hoparlörü / zayıf yankı gibi konuşma olmayan kesitlerde
+# videolardan öğrenilmiş kapanış metinleri üretebiliyor. Bunlar gerçek komut değildir;
+# burada boş final transkripte dönüştürülürse StreamAdapter, speaker-ID ve PiBrain'e
+# hiç ulaşmaz. Eşleşmeler TAM cümle bazlıdır: bir kullanıcı bu sözleri daha uzun bir
+# cümlede gerçekten anarsa yanlışlıkla susturulmaz.
+_KNOWN_SILENCE_ARTIFACTS = frozenset(
+    {
+        "altyazi m k",
+        "izlediginiz icin tesekkur ederim",
+        "izlediginiz icin tesekkurler",
+        "tesekkurler izlediginiz icin",
+        "kanalima abone olmayi unutmayin",
+        "abone olmayi unutmayin",
+        "bir sonraki videoda gorusmek uzere",
+    }
+)
+
+
+def _artifact_key(text: str) -> str:
+    """Turkish/punctuation-insensitive key for known Whisper silence artifacts."""
+    normalized = unicodedata.normalize("NFKD", (text or "").casefold()).replace("ı", "i")
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+
+def filter_silence_artifact(text: str) -> str:
+    """Return an empty transcript for an exact known non-speech hallucination."""
+    if _artifact_key(text) in _KNOWN_SILENCE_ARTIFACTS:
+        logger.info("whisper_stt: sessizlik artefaktı atlandı: %r", text)
+        return ""
+    return text
 
 
 class _WhisperSession:
@@ -119,6 +153,7 @@ class WhisperWyomingSTT(stt.STT):
             if payload:
                 await session.feed(payload, rate, STT_WIDTH, channels)
             text = await session.finish()
+            text = filter_silence_artifact(text)
         except (ConnectionError, OSError) as e:
             logger.warning("whisper_stt: STT erişilemiyor (%s:%s): %s",
                            self._host, self._port, e)

@@ -102,6 +102,7 @@ class SpeakerID:
         asnorm_k: int = 40,
         asnorm_threshold: float = -1.0,
         asnorm_margin: float = 1.0,
+        min_profiles_for_auto_match: int = 2,
     ):
         import sherpa_onnx
 
@@ -135,6 +136,11 @@ class SpeakerID:
         self.asnorm_k = int(asnorm_k)
         self.asnorm_threshold = asnorm_threshold
         self.asnorm_margin = asnorm_margin
+        # Tek kayıtlı kişi açık-küme tanıma değildir: her sesin "en yakını" o tek
+        # kişi olur. Canlıda telefon hoparlöründen çalınan yabancı sesler bile Ayhan
+        # diye kabul edildi. İkinci profil kaydolana kadar otomatik persona/kimlik
+        # ataması YOK; kullanıcı unknown kalır ve güvenle kayıt akışına girebilir.
+        self.min_profiles_for_auto_match = max(2, int(min_profiles_for_auto_match))
         self._cohort: np.ndarray | None = None  # (N, dim) L2-normalize yabancı gömme
         # Her enrolled centroid için (μ_e, σ_e) — reload/enroll'de BİR KEZ hesaplanır,
         # her identify()'de yeniden hesaplanmaz (centroid↔cohort skorları sabit).
@@ -220,6 +226,12 @@ class SpeakerID:
         """En iyi eşleşmeyi döndür. Eşik altı VEYA 2.'yi marj kadar geçmiyorsa
         (None, skor) = unknown."""
         if self._centroids.shape[0] == 0:
+            return None, 0.0
+        if self._centroids.shape[0] < self.min_profiles_for_auto_match:
+            log.debug(
+                "speaker-ID otomatik eşleşme kapalı: %d profil < gereken %d",
+                self._centroids.shape[0], self.min_profiles_for_auto_match,
+            )
             return None, 0.0
         q = _l2(np.asarray(emb, dtype=np.float32))
         raw_sims = self._centroids @ q  # ham kosinüs (centroid'ler L2-normalize)
@@ -377,9 +389,14 @@ CREATE TABLE IF NOT EXISTS speaker_samples (
 );
 CREATE INDEX IF NOT EXISTS idx_samples_speaker ON speaker_samples(speaker_id);
 CREATE TABLE IF NOT EXISTS speaker_expression_samples (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, speaker_id INTEGER NOT NULL, emotion TEXT NOT NULL,
-    prompt TEXT NOT NULL, embedding BLOB NOT NULL, audio_path TEXT NOT NULL,
-    duration_s REAL NOT NULL, created_at REAL NOT NULL
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    speaker_id  INTEGER NOT NULL,
+    emotion     TEXT NOT NULL,
+    prompt      TEXT NOT NULL,
+    embedding   BLOB NOT NULL,
+    audio_path  TEXT NOT NULL,
+    duration_s  REAL NOT NULL,
+    created_at  REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_expression_speaker ON speaker_expression_samples(speaker_id, emotion);
 """
@@ -536,12 +553,16 @@ class SpeakerStore:
         finally:
             conn.close()
 
-    def _add_expression_sample(self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
-                               audio_path: str, duration_s: float) -> int:
+    def _add_expression_sample(
+        self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
+        audio_path: str, duration_s: float,
+    ) -> int:
         conn = self._connect()
         try:
             cur = conn.execute(
-                "INSERT INTO speaker_expression_samples (speaker_id, emotion, prompt, embedding, audio_path, duration_s, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO speaker_expression_samples "
+                "(speaker_id, emotion, prompt, embedding, audio_path, duration_s, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (speaker_id, emotion, prompt, embedding, audio_path, duration_s, time.time()),
             )
             conn.commit()
@@ -601,10 +622,14 @@ class SpeakerStore:
             self._add_auto_sample, speaker_id, embedding, dim, model_id, max_total
         )
 
-    async def add_expression_sample(self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
-                                    audio_path: str, duration_s: float) -> int:
-        return await asyncio.to_thread(self._add_expression_sample, speaker_id, emotion, prompt,
-                                       embedding, audio_path, duration_s)
+    async def add_expression_sample(
+        self, speaker_id: int, emotion: str, prompt: str, embedding: bytes,
+        audio_path: str, duration_s: float,
+    ) -> int:
+        return await asyncio.to_thread(
+            self._add_expression_sample, speaker_id, emotion, prompt, embedding,
+            audio_path, duration_s,
+        )
 
     async def list_speakers(self) -> list[dict]:
         return await asyncio.to_thread(self._list_speakers)
@@ -658,12 +683,14 @@ def build_speaker_id() -> "SpeakerID | None":
             asnorm_k=int(_f("SPEAKER_ASNORM_K", 40)),
             asnorm_threshold=_f("SPEAKER_ASNORM_THRESHOLD", -1.0),
             asnorm_margin=_f("SPEAKER_ASNORM_MARGIN", 1.0),
+            min_profiles_for_auto_match=int(_f("SPEAKER_MIN_PROFILES_FOR_AUTO_MATCH", 2)),
         )
         log.info(
             "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f,"
-            " enroll_w=%.2f, drift_warn_frac=%.2f, asnorm=%s)",
+            " enroll_w=%.2f, drift_warn_frac=%.2f, asnorm=%s, auto_min_profiles=%d)",
             model_path, sp.dim, sp.threshold, sp.margin, sp.merge_low,
             sp.enroll_weight, sp.drift_warn_frac, sp._asnorm_active,
+            sp.min_profiles_for_auto_match,
         )
         return sp
     except Exception as e:  # noqa: BLE001

@@ -87,6 +87,9 @@ TRANSCRIPTION_TOPIC = "lk.transcription"
 # Stream header'ındaki "bu segment kesinleşti mi" bayrağı (agents/types.py:9).
 # Kullanıcı satırını AYIKLAMAK için şart — bkz. _on_transcription.
 ATTR_TRANSCRIPTION_FINAL = "lk.transcription_final"
+# Worker'ın aynı final user-transcript stream'ine bağladığı turn-safe kimlik.
+# Yoksa eski/nötr etiket korunur; "Bilinmeyen" bilinçli güvenli karardır.
+ATTR_TRANSCRIPTION_SPEAKER = "candan.speaker"
 # `candan.awake` — worker'ın uyku/uyanıklık yayını (agent.py:382, _apply_wake_state).
 # Değeri sadece "true"/"false"; başka bir şey gelirse yok sayılır.
 WAKE_ATTR = "candan.awake"
@@ -849,18 +852,10 @@ class TerminalClient:
         """Kullanıcı satırı: TEK seferde, tamamlanmış. Artımlı basılmaz — kendi STT'mizin
         ara sonuçları ekranda yazıp-silme gürültüsü yapardı.
 
-        ETİKET NEDEN NÖTR ("Sen"), kişi adı DEĞİL: worker konuşmacıyı ÇÖZÜYOR
-        (speaker_tap.py:184 → SpeakerState.current) ama odaya YAYMIYOR. Worker'ın odaya
-        yazdığı her şey şu ikisi: `mate.tool` (agent.py:304-310; payload'da konuşmacı alanı
-        YOK) ve `candan.awake` katılımcı özniteliği (agent.py:382; değeri sadece
-        true/false). `lk.transcription` üstündeki öznitelikler de livekit-agents'ın kendi
-        alanları (segment_id / transcribed_track_id / transcription_final / expression) —
-        isim taşımıyor. Yani istemci kimin konuştuğunu BİLEMEZ.
-
-        Sabit bir isim yazmak (eski hâli: MATE_CLI_NAME=Ayhan) evdeki HERKESİ "Ayhan"
-        etiketliyordu — anne konuşurken bile. Yanlış isim, isimsizlikten KÖTÜ: transkript
-        okuyan (insan ya da orkestratör) uydurma veriyi gerçek sanır. Worker konuşmacıyı
-        odaya yayarsa (ör. `candan.speaker` özniteliği) burası ona bağlanır.
+        Etiket, worker'ın AYNI final stream'e eklediği `candan.speaker` attribute'undan
+        gelir. Bu karar yalnız o VAD dönüşünün pencereleriyle üretilir. Attribute yoksa
+        eski sürümle uyumluluk için nötr `--me-label` kullanılır; kanıt yetersizse worker
+        açıkça "Bilinmeyen" yollar. Sabit MATE_CLI_NAME hiçbir zaman ses kimliği değildir.
         """
         try:
             text = (await reader.read_all()).strip()
@@ -868,7 +863,9 @@ class TerminalClient:
             log.debug("transkript okunamadı", exc_info=True)
             return
         if text:
-            self.out.line(self.args.me_label, text, "me")
+            attrs = reader.info.attributes or {}
+            label = (attrs.get(ATTR_TRANSCRIPTION_SPEAKER) or self.args.me_label).strip()
+            self.out.line(label, text, "me")
 
     async def _read_agent_stream(self, reader: rtc.TextStreamReader) -> None:
         """Candan'ın satırı: parçalar GELDİKÇE ekrana (ses hızında akar)."""
@@ -943,8 +940,25 @@ class TerminalClient:
                 self._apply_awake(value)
 
     # ── Ses aboneliği ──────────────────────────────────────────────────────────
-    def _on_track_subscribed(self, track: rtc.Track, *_rest) -> None:
+    def _on_track_subscribed(
+        self,
+        track: rtc.Track,
+        _publication: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
         if track.kind != rtc.TrackKind.KIND_AUDIO or self._speaker is None:
+            return
+        # Oda yeniden kurulurken kısa süre aynı kullanıcının eski/yeni CLI
+        # participant'ları birlikte görünebilir. Her uzak audio track'ini çalarsak
+        # diğer CLI'nin mikrofonu hoparlöre gelir ve kullanıcı kendi sesini gecikmeli
+        # olarak duyar. Terminalin çıkışı yalnız gerçek agent sesidir.
+        if participant.kind != rtc.ParticipantKind.PARTICIPANT_KIND_AGENT:
+            log.info(
+                "agent olmayan uzak ses çalınmadı: participant=%s kind=%s track=%s",
+                participant.identity,
+                rtc.ParticipantKind.Name(participant.kind),
+                track.sid,
+            )
             return
         self._spawn(self._play(track))
 
