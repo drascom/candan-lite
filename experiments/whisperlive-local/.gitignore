@@ -1,0 +1,4 @@
+*.srt
+*.wav
+chunks/
+.cache/

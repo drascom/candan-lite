@@ -1,0 +1,14 @@
+[Unit]
+Description=CrispASR isolated A/B server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/candan-lite/experiments/crispasr-ab
+ExecStart=/opt/candan-lite/experiments/crispasr-ab/vendor/CrispASR/build-cuda/bin/crispasr --server --backend whisper -m /opt/candan-lite/experiments/crispasr-ab/.cache/crispasr/ggml-large-v3-turbo.bin -l tr --gpu-backend cuda --punc-model none --vad --diarize --diarize-method pyannote --diarize-embedder auto --diarize-max-speakers 4 --host 192.168.0.25 --port 8090 --ws-port 8091
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

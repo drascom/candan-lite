@@ -1,0 +1,60 @@
+diff --git a/examples/server/ws_stream.h b/examples/server/ws_stream.h
+--- a/examples/server/ws_stream.h
++++ b/examples/server/ws_stream.h
+@@ -26,6 +26,6 @@ void crispasr_stream_close(struct CrispasrStream* s);
+ // Start the WebSocket listener thread on `port`. `model_path` is used
+ // to create per-connection crispasr sessions. Returns 0 on success.
+-int ws_stream_start(const char* model_path, int port, int n_threads);
++int ws_stream_start(const char* model_path, int port, int n_threads, const char* language);
+ 
+ // Stop the listener and join the thread. Safe to call multiple times.
+ void ws_stream_stop(void);
+diff --git a/examples/server/ws_stream.cpp b/examples/server/ws_stream.cpp
+--- a/examples/server/ws_stream.cpp
++++ b/examples/server/ws_stream.cpp
+@@ -210,6 +210,7 @@ static std::atomic<bool> g_ws_running{false};
+ static std::thread g_ws_thread;
+ static socket_t g_ws_listen_fd = INVALID_SOCKET;
+ static std::string g_model_path;
+ static int g_n_threads = 4;
++static std::string g_language = "auto";
+ 
+ // Per-connection handler
+@@ -267,7 +268,7 @@ static void ws_handle_connection(socket_t client_fd) {
+         return;
+     }
+ 
+-    auto* stream = crispasr_session_stream_open(session, g_n_threads, 3000, 10000, 200, "en", 0);
++    auto* stream = crispasr_session_stream_open(session, g_n_threads, 3000, 10000, 200, g_language.c_str(), 0);
+     if (!stream) {
+         ws_send_text(client_fd, "{\"error\":\"failed to open stream (whisper-only today)\"}");
+         ws_send_close(client_fd);
+@@ -355,7 +356,7 @@ static void ws_listener_thread() {
+ // Public API
+ // ---------------------------------------------------------------------------
+ 
+-extern "C" int ws_stream_start(const char* model_path, int port, int n_threads) {
++extern "C" int ws_stream_start(const char* model_path, int port, int n_threads, const char* language) {
+     if (g_ws_running.load()) return 0;
+ 
+ #ifdef _WIN32
+@@ -365,6 +366,7 @@ extern "C" int ws_stream_start(const char* model_path, int port, int n_threads) {
+ 
+     g_model_path = model_path;
+     g_n_threads = n_threads;
++    g_language = language && language[0] ? language : "auto";
+ 
+     g_ws_listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+     if (g_ws_listen_fd == INVALID_SOCKET) {
+diff --git a/examples/cli/crispasr_server.cpp b/examples/cli/crispasr_server.cpp
+--- a/examples/cli/crispasr_server.cpp
++++ b/examples/cli/crispasr_server.cpp
+@@ -3054,7 +3054,7 @@ int main(int argc, char** argv) {
+     }
+     if (params.server_ws_port >= 0) {
+         const int ws_port = params.server_ws_port == 0 ? port + 1 : params.server_ws_port;
+-        if (ws_stream_start(params.model.c_str(), ws_port, params.n_threads) == 0) {
++        if (ws_stream_start(params.model.c_str(), ws_port, params.n_threads, params.language.c_str()) == 0) {
+             ws_started = true;
+             fprintf(stderr, "  WS   ws://%s:%d                 — real-time streaming ASR (binary PCM in, JSON out)\n",
+                     host.c_str(), ws_port);

@@ -1,0 +1,6 @@
+.venv/
+.cache/
+recordings/
+results/
+*.wav
+result.json
