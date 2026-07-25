@@ -32,6 +32,7 @@ import numpy as np
 
 from name_parser import (
     parse_spoken_name,
+    parse_introduced_name,
     is_affirmative_reply,
     _is_decline_enroll,
     _is_enroll_command,
@@ -45,9 +46,27 @@ logger.addFilter(DedupeFilter())  # tekrarlayan warning/info loglarını seyrelt
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 PI_BIN = os.environ.get("PI_BIN", "pi")
+# Pi broker soketi boşsa bugünkü davranış sürer: Pi süreçleri LiveKit job'unun
+# içinde doğar. Üretimde broker etkin olduğunda ise bu soket, job'lardan bağımsız
+# yaşayan `pi_broker.py` servisine gider. Böylece kullanıcı odadan ayrılsa bile
+# Pi süreçleri (ve yüklenmiş extension'lar) yerinde kalır.
+PI_BROKER_SOCKET = os.environ.get("PI_BROKER_SOCKET", "").strip()
 # Global varsayılan model (gpt-5.6-luna) rpc'de bozuk ("Model not found") → pinlemek ZORUNLU.
 PI_MODEL = os.environ.get("PI_MODEL", "openai-codex/gpt-5.6-terra")
 PI_DEFAULT_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
+# Ortak cihazda konuşma geçmişi ODAYA aittir. Kişi tanınınca Ayhan/Havi Pi
+# oturumuna geçmek hem bağlamı bölüyor hem de uzun geçmişi yeniden hazırlatıyor.
+PI_SHARED_ROOM_MODE = os.environ.get("PI_SHARED_ROOM_MODE", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+# Bu kurulumda tek ortak oda var; mevcut sıcak `candan` sohbeti kullanılır. Çok
+# odalı kurulumda her cihaz için farklı bir ortak session-id verilir.
+PI_SHARED_ROOM_SESSION_ID = os.environ.get("PI_SHARED_ROOM_SESSION_ID", "candan").strip() or "candan"
+# Kimlik doğrulanmadan önce son konuşanın kişisel pi oturumunu açmak, yanlış
+# speaker-ID kararını hafıza/persona sızıntısına dönüştürür. Varsayılan KAPALI.
+SPEAKER_PREWARM_ENABLED = os.environ.get(
+    "SPEAKER_PREWARM_ENABLED", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 PI_PERSONA_DIR = os.environ.get("PI_PERSONA_DIR", "pi/personas")
 PI_SKILLS_DIR = os.environ.get("PI_SKILLS_DIR", "pi/skills")
 PI_SESSION_DIR = os.environ.get("PI_SESSION_DIR", "sessions")
@@ -444,15 +463,48 @@ SPEAKER_ENROLL_MIN_CORE = int(os.environ.get("SPEAKER_ENROLL_MIN_CORE", "3") or 
 SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60") or 0.60)
 # Toplayıcının yoklama aralığı (sn). speaker_tap ~1 sn'de bir pencere üretiyor.
 SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
-SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get("SPEAKER_EXPRESSION_CAPTURE_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
-SPEAKER_EXPRESSION_DIR = Path(os.environ.get("SPEAKER_EXPRESSION_DIR", str(Path(__file__).resolve().parent / "data" / "expression-samples")))
-SPEAKER_EXPRESSION_PROMPTS = (("neseli", "Bugün güzel bir şey oldu, çok mutluyum."), ("uzgun", "Bugün kendimi biraz üzgün hissediyorum."), ("merakli", "Acaba şimdi ne olacak, gerçekten merak ediyorum."), ("kizgin", "Buna gerçekten kızdım, böyle olmasını istemezdim."), ("aceleci", "Hemen çıkmam gerekiyor, biraz acelem var."), ("serbest", "Şimdi istersen kendini kısaca anlat veya birkaç cümle serbestçe konuş. Bitirdiğinde sadece kaydım tamam de."))
-SPEAKER_EXPRESSION_DISPLAY = {"neseli": "neşeli", "uzgun": "üzgün", "merakli": "meraklı", "kizgin": "kızgın", "aceleci": "aceleci"}
+
+# Kimlik kaydından sonra alınan kontrollü ifade corpus'u. Kimlik örneklerinden
+# ayrıdır: WAV + metadata + embedding yalnız sonraki analizlerde kullanılır.
+SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get(
+    "SPEAKER_EXPRESSION_CAPTURE_ENABLED", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+SPEAKER_EXPRESSION_DIR = Path(os.environ.get(
+    "SPEAKER_EXPRESSION_DIR", str(Path(__file__).resolve().parent / "data" / "expression-samples")
+))
+SPEAKER_EXPRESSION_PROMPTS = (
+    ("neseli", "Bugün güzel bir şey oldu, çok mutluyum."),
+    ("uzgun", "Bugün kendimi biraz üzgün hissediyorum."),
+    ("merakli", "Acaba şimdi ne olacak, gerçekten merak ediyorum."),
+    ("kizgin", "Buna gerçekten kızdım, böyle olmasını istemezdim."),
+    ("aceleci", "Hemen çıkmam gerekiyor, biraz acelem var."),
+    (
+        "serbest",
+        "Şimdi istersen kendini kısaca anlat veya birkaç cümle serbestçe konuş. "
+        "Bitirdiğinde sadece kaydım tamam de.",
+    ),
+)
+SPEAKER_EXPRESSION_DISPLAY = {
+    "neseli": "neşeli",
+    "uzgun": "üzgün",
+    "merakli": "meraklı",
+    "kizgin": "kızgın",
+    "aceleci": "aceleci",
+}
 
 
 def _is_expression_complete(text: str) -> bool:
-    """Serbest ifade kaydını yalnız açık, kısa bitiş sözü kapatır."""
-    return _wake_squash(text) in {"tamam", "bitti", "bitirdim", "kaydımtamam", "kaydimtamam", "konuşmambitti", "konusmambitti"}
+    """Serbest ifade kaydının açık, kısa bitiş sözünü tanı.
+
+    STT her cümleyi ayrı bir tur yapabildiğinden sessizliğe göre bitirmek güvenli
+    değildir: kullanıcı kısa bir duraksamadan sonra devam edince ikinci cümle
+    normal sohbete düşer. Yalnız bu açık söz serbest kaydı kapatır.
+    """
+    compact = _wake_squash(text)
+    return compact in {
+        "tamam", "bitti", "bitirdim", "kaydımtamam", "kaydimtamam",
+        "konuşmambitti", "konusmambitti",
+    }
 
 # ── EMNİYET AĞI: model tool'u hiç çağırmazsa kod devreye girer ────────────────
 # NEDEN: kayıt sihirbazını MODEL sürüyor (bkz. _enroll_hint) → model işini yapmazsa
@@ -494,14 +546,17 @@ def _wants_enroll(text: str) -> bool:
     sonra kaydolmaya zorlamak rahatsız edici olur. Ağ yalnız isteyene açılır.
 
     İki işaret (ölçüldü, bkz. aşağıdaki gerekçe):
-      1. açık komut: "beni kaydet" / "sesimi tanı" (_is_enroll_command)
-      2. kendini tanıtma: "Benim adım Havi" (parse_spoken_name bir isim çıkarıyor)
+      1. açık komut: "beni kaydet" / "sesimi kaydet" (_is_enroll_command)
+      2. açık kendini tanıtma: "Benim adım Havi" / "Ben Havi"
     (2) şart: canlı arıza cümlesi "Benim adım Havi, beni ses olarak kaydet" 8 kelime
     olduğu için _is_enroll_command'ın 6-kelime kapısından GEÇMİYOR (False döner) —
-    tek başına (1) o vakayı KAÇIRIRDI. parse_spoken_name ise 'Havi' çıkarıyor.
+    tek başına (1) o vakayı KAÇIRIRDI. parse_introduced_name ise 'Havi' çıkarıyor.
+    Bare ad ayrıştırması burada BİLEREK kullanılmaz: wizard'ın "adın ne?"
+    sorusundan sonra "Ayhan" cevabı için faydalıdır ama normal sohbette
+    "Gidiyor mu?" gibi kısa bir sözü kişi adı sanıp kayıt başlatabilir.
     DİKKAT: buradaki isim yalnız İŞARET; kayıt için KULLANILMAZ ("beni ses olarak
     kaydet" → parse_spoken_name 'Ses' döndürüyor!). Ağ ismi kendi, sıfırdan sorar."""
-    return _is_enroll_command(text) or parse_spoken_name(text) is not None
+    return _is_enroll_command(text) or parse_introduced_name(text) is not None
 # Kabul edilen isim biçimi: TEK kelime, yalnız harf (+ kesme/tire). Canlıda Whisper
 # aynı ismi üç türlü yazdı ("Javi" / "Haber" / "Havi" — doğrusu Havi) çünkü isim uzun
 # cümlenin içindeydi. Model'e "tek kelime iste" dedirtiyoruz; BU regex ise dediğini
@@ -913,6 +968,86 @@ def _slug(name: str) -> str:
     return "-".join(p for p in s.split("-") if p) or ""
 
 
+_IDENTITY_NAME_TOKEN = r"[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]{1,31}"
+
+
+def _identity_text(text: str) -> str:
+    normalized = _wake_norm(text)
+    return re.sub(r"[^a-z0-9çğıöşü]+", " ", normalized).strip()
+
+
+def _is_identity_question(text: str) -> bool:
+    """Does this turn explicitly ask what the voice system knows about identity?"""
+    normalized = _identity_text(text)
+    direct = (
+        "ben kimim",
+        "benim kim oldugumu",
+        "benim kim olduğumu",
+        "benim adim ne",
+        "benim adım ne",
+        "beni taniyor musun",
+        "beni tanıyor musun",
+        "sesimden taniyor musun",
+        "sesimden tanıyor musun",
+        "kimligimi biliyor musun",
+        "kimliğimi biliyor musun",
+    )
+    if any(phrase in normalized for phrase in direct):
+        return True
+    if "ses tanima" in normalized and any(word in normalized for word in ("kim", "kimlik", "tani")):
+        return True
+    return "oldugumu nereden biliyor" in normalized
+
+
+def _identity_claim(text: str) -> Optional[str]:
+    """Extract the last clear self-name claim without trusting negated names.
+
+    `parse_spoken_name` is enrollment-oriented and reads the first `ben X` phrase;
+    for "ben Ayhan değilim, ben Mahmut" that would be the negated name. Identity
+    conflict handling needs the last non-negated explicit claim instead.
+    """
+    candidates: list[tuple[int, str]] = []
+    patterns = (
+        rf"\b(?:benim\s+)?(?:adım|adim|ismim|isimim)\s+({_IDENTITY_NAME_TOKEN})",
+        rf"\bben\s+({_IDENTITY_NAME_TOKEN})",
+    )
+    for pattern in patterns:
+        for match in re.finditer(pattern, text or "", flags=re.IGNORECASE):
+            tail = _identity_text((text or "")[match.end():])
+            if tail.startswith(("degilim", "değilim")):
+                continue
+            parsed = parse_spoken_name(f"Ben {match.group(1)}")
+            if parsed:
+                candidates.append((match.start(), parsed))
+    if candidates:
+        return max(candidates, key=lambda item: item[0])[1]
+    return None
+
+
+def _identity_guard_reply(text: str, voice_name: Optional[str]) -> Optional[str]:
+    """Authoritative reply for identity questions/claims; bypasses the LLM."""
+    claim = _identity_claim(text)
+    question = _is_identity_question(text)
+    if not claim and not question:
+        return None
+    if not voice_name:
+        if claim:
+            return (
+                f"{claim} dediğini duydum ama bu konuşmada ses kimliğini güvenle "
+                "doğrulayamadım. Bunu doğrulanmış kimlik olarak kabul etmiyorum."
+            )
+        return (
+            "Bu kısa cümlede sesini yeniden doğrulayacak kadar örnek alamadım. "
+            "Adını tahmin etmeyeceğim; birkaç saniye normal konuşursan tekrar karşılaştırırım."
+        )
+    if claim and _slug(claim) != _slug(voice_name):
+        return (
+            f"Bu konuşmadaki ses kanıtı {voice_name} kimliğiyle eşleşti; "
+            f"söylediğin {claim} adıyla eşleşmiyor."
+        )
+    return f"Bu konuşmadaki ses kimliği {voice_name} olarak doğrulandı."
+
+
 # "Ayhan'ı yetişkin yap" / "Ayhan'ı aileye ekle" → rol yükseltme komutu (SADECE adult).
 _PROMOTE_RE = re.compile(
     r"(?:yeti[şs]kin\s+yap"
@@ -1162,6 +1297,10 @@ class PiRpcClient:
         cwd: Optional[Path] = None,
         dev: bool = False,
     ):
+        self._persona = persona
+        self._session_id = session_id
+        self._model = model
+        self._thinking = thinking
         self._args = _build_pi_args(persona, session_id, model, thinking, dev=dev)
         # cwd: normal → REPO_ROOT (bugünkü); dev → izole worktree (kod EDIT'leri orada kalır).
         self._cwd = Path(cwd) if cwd is not None else REPO_ROOT
@@ -1169,6 +1308,8 @@ class PiRpcClient:
         # Alt-sürece geçecek hafıza kimliği. Dev'de family-memory yüklenmez → boş (hafıza yok).
         self._mem_user = "" if dev else _mem_user(session_id)
         self._proc: Optional[asyncio.subprocess.Process] = None
+        self._broker_reader: Optional[asyncio.StreamReader] = None
+        self._broker_writer: Optional[asyncio.StreamWriter] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._pending: dict[str, asyncio.Future] = {}
         self._turn_q: Optional[asyncio.Queue] = None
@@ -1182,11 +1323,16 @@ class PiRpcClient:
 
     @property
     def started(self) -> bool:
+        if self._broker_writer is not None:
+            return not self._broker_writer.is_closing()
         return self._proc is not None and self._proc.returncode is None
 
     async def start(self) -> None:
         async with self._start_lock:
             if self.started:
+                return
+            if PI_BROKER_SOCKET:
+                await self._start_broker_client()
                 return
             self._proc = await asyncio.create_subprocess_exec(
                 *self._args,
@@ -1197,6 +1343,59 @@ class PiRpcClient:
                 stderr=asyncio.subprocess.PIPE,
             )
             self._reader_task = asyncio.create_task(self._read_stdout())
+
+    async def _start_broker_client(self) -> None:
+        """Sürekli Pi broker'ına bağlan ve bu client'ı belirli bir Pi oturumuna kirala.
+
+        Broker, ham Pi RPC satırlarını aynen iletir. Bu nedenle aşağıdaki LLM
+        adaptörü yerel subprocess ile broker arasında davranış farkı görmez.
+        Socket ayarlıysa sessiz yerel fallback YOKTUR: yanlış yapılandırma yeniden
+        job-başına Pi doğmasına ve görünmez performans gerilemesine yol açardı.
+        """
+        try:
+            reader, writer = await asyncio.open_unix_connection(PI_BROKER_SOCKET)
+        except OSError as exc:
+            raise RuntimeError(f"pi broker'a bağlanılamadı: {PI_BROKER_SOCKET}: {exc}") from exc
+        hello = {
+            "type": "broker_connect",
+            "persona": self._persona_for_broker(),
+            "session_id": self._session_for_broker(),
+            "model": self._model_for_broker(),
+            "thinking": self._thinking_for_broker(),
+            "dev": self._dev,
+        }
+        try:
+            writer.write((json.dumps(hello) + "\n").encode())
+            await writer.drain()
+            raw = await asyncio.wait_for(reader.readline(), timeout=15.0)
+            reply = json.loads(raw.decode()) if raw else {}
+            if reply.get("type") != "broker_ready":
+                raise RuntimeError(reply.get("error") or "pi broker hazır değil")
+        except Exception:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            raise
+        self._broker_reader = reader
+        self._broker_writer = writer
+        self._reader_task = asyncio.create_task(self._read_broker_stdout())
+
+    # PiRpcClient zamanla persona/session değiştirebiliyor. Broker'a gönderilen
+    # yapılandırma ise her client nesnesinde sabit olduğundan bu küçük erişimciler
+    # test doubles'ını da sade tutar.
+    def _persona_for_broker(self) -> str:
+        return self._persona
+
+    def _session_for_broker(self) -> str:
+        return self._session_id
+
+    def _model_for_broker(self) -> Optional[str]:
+        return self._model
+
+    def _thinking_for_broker(self) -> Optional[str]:
+        return self._thinking
 
     async def _read_stdout(self) -> None:
         assert self._proc is not None and self._proc.stdout is not None
@@ -1212,26 +1411,61 @@ class PiRpcClient:
                     obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if obj.get("type") == "response":
-                    fut = self._pending.pop(obj.get("id"), None)
-                    if fut is not None and not fut.done():
-                        fut.set_result(obj)
-                    continue
-                # AgentSessionEvent → aktif tura ilet.
-                q = self._turn_q
-                if q is not None:
-                    q.put_nowait(obj)
+                self._route_output(obj)
         finally:
-            # Süreç öldü: bekleyen istekleri ve aktif turu serbest bırak.
-            for fut in self._pending.values():
-                if not fut.done():
-                    fut.set_exception(RuntimeError("pi rpc process exited"))
-            self._pending.clear()
-            if self._turn_q is not None:
-                self._turn_q.put_nowait(None)  # sentinel → tur bitir
+            self._mark_transport_closed("pi rpc process exited")
+
+    async def _read_broker_stdout(self) -> None:
+        assert self._broker_reader is not None
+        try:
+            while True:
+                line = await self._broker_reader.readline()
+                if not line:
+                    break
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                self._route_output(obj)
+        finally:
+            self._mark_transport_closed("pi broker bağlantısı kapandı")
+
+    def _route_output(self, obj: dict) -> None:
+        """Yerel subprocess veya broker'dan gelen tek bir RPC olayını yönlendir."""
+        if obj.get("type") in {"broker_error", "broker_reloaded"}:
+            self._mark_transport_closed(obj.get("error") or "pi broker süreci yenilendi")
+            return
+        if obj.get("type") == "response":
+            fut = self._pending.pop(obj.get("id"), None)
+            if fut is not None and not fut.done():
+                fut.set_result(obj)
+            return
+        # AgentSessionEvent → aktif tura ilet.
+        q = self._turn_q
+        if q is not None:
+            q.put_nowait(obj)
+
+    def _mark_transport_closed(self, reason: str) -> None:
+        # Süreç/soket öldü: bekleyen istekleri ve aktif turu serbest bırak.
+        if self._broker_writer is not None:
+            self._broker_writer.close()
+            self._broker_writer = None
+            self._broker_reader = None
+        for fut in self._pending.values():
+            if not fut.done():
+                fut.set_exception(RuntimeError(reason))
+        self._pending.clear()
+        if self._turn_q is not None:
+            self._turn_q.put_nowait(None)  # sentinel → tur bitir
 
     def _write(self, obj: dict) -> None:
         """Drain beklemeden yaz (abort/cancel yolları için best-effort)."""
+        if self._broker_writer is not None:
+            try:
+                self._broker_writer.write((json.dumps(obj) + "\n").encode())
+            except Exception:
+                pass
+            return
         if self._proc is None or self._proc.stdin is None:
             return
         try:
@@ -1241,6 +1475,12 @@ class PiRpcClient:
 
     async def send(self, obj: dict) -> None:
         self._write(obj)
+        if self._broker_writer is not None:
+            try:
+                await self._broker_writer.drain()
+            except Exception:
+                pass
+            return
         if self._proc is not None and self._proc.stdin is not None:
             try:
                 await self._proc.stdin.drain()
@@ -1262,7 +1502,31 @@ class PiRpcClient:
         finally:
             self._pending.pop(req_id, None)
 
-    async def stop(self) -> None:
+    async def stop(self, *, persist: bool = True) -> None:
+        """Taşımayı kapat.
+
+        Broker'da normal kapanış yalnız kirayı bırakır; Pi sıcak kalır. `persist=False`
+        ise bilinçli sohbet sıfırlaması için broker'daki tam bu Pi oturumunu da öldürür.
+        """
+        if self._broker_writer is not None:
+            writer = self._broker_writer
+            self._broker_writer = None
+            self._broker_reader = None
+            try:
+                command = "broker_release" if persist else "broker_discard"
+                writer.write((json.dumps({"type": command}) + "\n").encode())
+                await writer.drain()
+            except Exception:
+                pass
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+            if self._reader_task is not None:
+                self._reader_task.cancel()
+                self._reader_task = None
+            return
         if self._proc is None:
             return
         proc = self._proc
@@ -1411,6 +1675,14 @@ if _HAS_LIVEKIT:
                 return
             text = payload  # 'process' → wake ayıklanmış / uyanık metin
 
+            # Kimlik sorusu veya "Ben X'im" iddiası güvenlik kararıdır; modelin
+            # hafızadan isim uydurmasına ya da kullanıcının sözlü iddiasına teslim
+            # edilmez. Turn-safe worker kararı scripted cevap verir, pi atlanır.
+            scripted = self._brain._identity_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+
             # Faz 3.1: sesli oto-enrollment. Bilinmeyen ses / akış ortası →
             # scripted TR satır döndür ve pi'ya GİTME (token harcanmaz). Kapalı /
             # tanınan / akışa girmeyen → None döner, normal pi akışı sürer.
@@ -1445,6 +1717,9 @@ if _HAS_LIVEKIT:
             # Kimlik: model KARŞILAŞTIRMAZ, worker sonucu ENJEKTE eder — her turda,
             # sadece ilk turda değil (bkz. _identity_note).
             text = self._brain._identity_note(text)
+            personal_memory = self._brain._personal_memory_note()
+            if personal_memory:
+                text = personal_memory + "\n\n" + text
             # ZAMAN: warm pi süreci GÜNLERCE yaşar → boot'ta enjekte edilen tarih BAYATLAR.
             # Her tura güncel saati (Europe/London) iliştir. Model yine de due_at HESAPLAMAZ
             # (onu reminder_add server-side çözer); bu satır "bugün/yarın/şu an" için.
@@ -1671,7 +1946,9 @@ if _HAS_LIVEKIT:
             # ISITTIĞIMIZI değiştirir, kimin kim olduğunu DEĞİL.
             self._default_persona = persona
             self._persona = persona
-            self._session_id = session_id or persona
+            self._session_id = session_id or (
+                PI_SHARED_ROOM_SESSION_ID if PI_SHARED_ROOM_MODE else persona
+            )
             # PREWARM TAHMİNİ: son bilinen konuşmacıyı ısıt (bkz. read_last_speaker).
             # SADECE speaker-ID açıkken (speaker_state) ve çağıran açıkça bir session_id
             # dayatmadıysa. speaker_state None iken _current_client swap YAPMAZ → yanlış
@@ -1679,7 +1956,12 @@ if _HAS_LIVEKIT:
             # _last_noted: işaret dosyasına EN SON yazılan slug (tekrar yazımı eler).
             # Tahmin tuttuysa dosya zaten o değerde → gereksiz yazım hiç olmaz.
             self._last_noted = ""
-            if speaker_state is not None and session_id is None:
+            if (
+                SPEAKER_PREWARM_ENABLED
+                and not PI_SHARED_ROOM_MODE
+                and speaker_state is not None
+                and session_id is None
+            ):
                 # speaker_id PARAMETREDEN geçer: self._speaker_id bu noktada henüz
                 # atanmadı (aşağıda) — self'ten okumak sessizce None tahmin üretirdi.
                 guess = self._prewarm_guess(speaker_id)
@@ -1761,6 +2043,9 @@ if _HAS_LIVEKIT:
             self._expression_index = 0
             self._expression_speaker_id: Optional[int] = None
             self._expression_name = ""
+            # Serbest anlatım tek bir STT turuyla sınırlı değildir. Kullanıcı açık
+            # bitiş sözünü verene kadar tüm sonraki cümleler aynı WAV'e eklenir.
+            self._expression_free_started = False
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
@@ -1894,6 +2179,8 @@ if _HAS_LIVEKIT:
 
         def current_user(self) -> str:
             """Hafıza kimliği (guest/unknown → ''). Olaylar bu kullanıcıya ait."""
+            if PI_SHARED_ROOM_MODE and self._speaker_state is not None:
+                return _mem_user(_slug(getattr(self._speaker_state, "current", None) or ""))
             return _mem_user(self._session_id)
 
         def display_name(self, user: str = "") -> str:
@@ -2024,63 +2311,107 @@ if _HAS_LIVEKIT:
 
         def _expression_prompt(self) -> str:
             emotion, sentence = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
-            return sentence if emotion == "serbest" else f"Şimdi {SPEAKER_EXPRESSION_DISPLAY[emotion]} bir tonda şu cümleyi söyle: {sentence}"
+            if emotion == "serbest":
+                return sentence
+            return f"Şimdi {SPEAKER_EXPRESSION_DISPLAY[emotion]} bir tonda şu cümleyi söyle: {sentence}"
 
         def _start_expression_capture(self, speaker_id: int, name: str) -> str:
             if not SPEAKER_EXPRESSION_CAPTURE_ENABLED or self._speaker_state is None:
                 return f"Memnun oldum {name}!"
-            self._expression_active, self._expression_index = True, 0
-            self._expression_speaker_id, self._expression_name = speaker_id, name
+            self._expression_active = True
+            self._expression_index = 0
+            self._expression_speaker_id = speaker_id
+            self._expression_name = name
+            self._expression_free_started = False
             self._speaker_state.begin_expression_capture(SPEAKER_EXPRESSION_PROMPTS[0][0])
-            return f"Seni kaydettim {name}. Şimdi kısa bir ses profili çıkaracağım. Bu bölümde cevap vermeden sadece sıradaki cümleyi söyleyeceğim. " + self._expression_prompt()
+            return (
+                f"Seni kaydettim {name}. Şimdi kısa bir ses profili çıkaracağım. "
+                "Bu bölümde cevap vermeden sadece sıradaki cümleyi söyleyeceğim. "
+                + self._expression_prompt()
+            )
 
-        async def _save_expression_capture(self, emotion: str, prompt: str, chunks: list[bytes], embs: list) -> bool:
+        async def _save_expression_capture(
+            self, emotion: str, prompt: str, chunks: list[bytes], embs: list
+        ) -> bool:
+            """Tek duygu turunu ayrı WAV, JSON ve embedding özeti olarak sakla."""
             if not chunks or not embs or self._expression_speaker_id is None:
                 logger.warning("ifade corpus'u atlandı: %s için yeterli ses yok", emotion)
                 return False
-            folder = SPEAKER_EXPRESSION_DIR / (_slug(self._expression_name) or "unknown") / datetime.now().strftime("%Y%m%dT%H%M%S")
+            safe_name = _slug(self._expression_name) or "unknown"
+            stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+            folder = SPEAKER_EXPRESSION_DIR / safe_name / stamp
             folder.mkdir(parents=True, exist_ok=True)
             wav_path = folder / f"{self._expression_index + 1:02d}-{emotion}.wav"
             raw = b"".join(chunks)
             with wave.open(str(wav_path), "wb") as out:
-                out.setnchannels(1); out.setsampwidth(2); out.setframerate(16000); out.writeframes(raw)
+                out.setnchannels(1)
+                out.setsampwidth(2)
+                out.setframerate(16000)
+                out.writeframes(raw)
             duration_s = len(raw) / 32000.0
             summary = np.asarray(embs, dtype=np.float32).mean(axis=0)
             norm = float(np.linalg.norm(summary))
-            if norm > 0: summary /= norm
-            metadata = {"speaker": self._expression_name, "emotion": emotion, "prompt": prompt, "audio": str(wav_path), "sample_rate": 16000, "duration_s": round(duration_s, 3), "embedding_windows": len(embs), "created_at": datetime.now().isoformat(timespec="seconds")}
-            wav_path.with_suffix(".json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            if norm > 0:
+                summary /= norm
+            metadata = {
+                "speaker": self._expression_name,
+                "emotion": emotion,
+                "prompt": prompt,
+                "audio": str(wav_path),
+                "sample_rate": 16000,
+                "duration_s": round(duration_s, 3),
+                "embedding_windows": len(embs),
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            wav_path.with_suffix(".json").write_text(
+                json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
             from speaker_id import emb_to_bytes
-            await self._speaker_store.add_expression_sample(self._expression_speaker_id, emotion, prompt, emb_to_bytes(summary), str(wav_path), duration_s)
+
+            await self._speaker_store.add_expression_sample(
+                self._expression_speaker_id, emotion, prompt, emb_to_bytes(summary),
+                str(wav_path), duration_s,
+            )
+            logger.info("ifade corpus'u kaydedildi: %s (%s, %.1fs, %d pencere)",
+                        self._expression_name, emotion, duration_s, len(embs))
             return True
 
         async def _expression_step(self, text: str) -> Optional[str]:
+            """İfade testi sürerken pi'ı kapalı tutup yalnız sıradaki prompt'u ver."""
             if not self._expression_active or self._speaker_state is None:
                 return None
             emotion, prompt = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
-            # STT serbest anlatımın her cümlesini ayrı tur yapabilir. Bitiş sözüne
-            # kadar cümleleri aynı capture'da tut ve pi'a/araçlara hiç verme.
+            # Serbest anlatımda STT her cümleyi ayrı tur olarak teslim edebilir.
+            # İlk ve sonraki cümleleri sessizce aynı capture'da tut; yalnız açık
+            # bitiş sözü kaydı kapatır. Böylece aradaki metin asla pi/tool'a gitmez.
             if emotion == "serbest":
+                self._expression_free_started = True
                 if not _is_expression_complete(text):
                     return ""
                 label, chunks, embs = self._speaker_state.finish_expression_capture()
                 if label == emotion:
                     await self._save_expression_capture(emotion, prompt, chunks, embs)
                 self._expression_active = False
+                self._expression_free_started = False
                 return "Teşekkür ederim. Ses profilini kaydettim."
             if _is_decline_enroll(text):
                 self._speaker_state.discard_expression_capture()
-                emotion, _ = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
+                # Bu corpus isteğe bağlı bir sohbet adımı değil: tüm duygular için
+                # karşılaştırılabilir örnek gerektiğinden atlama yok. "Geç" sesi de
+                # yanlışlıkla o duygu örneği olarak yazılmasın diye pencereyi silip
+                # aynı etikette temiz bir capture başlatıyoruz.
                 self._speaker_state.begin_expression_capture(emotion)
                 return "Bu bölümü atlamayalım. " + self._expression_prompt()
             label, chunks, embs = self._speaker_state.finish_expression_capture()
-            emotion, prompt = SPEAKER_EXPRESSION_PROMPTS[self._expression_index]
-            if label == emotion: await self._save_expression_capture(emotion, prompt, chunks, embs)
+            if label == emotion:
+                await self._save_expression_capture(emotion, prompt, chunks, embs)
             self._expression_index += 1
             if self._expression_index >= len(SPEAKER_EXPRESSION_PROMPTS):
                 self._expression_active = False
                 return "Teşekkür ederim. Ses profilini kaydettim."
-            self._speaker_state.begin_expression_capture(SPEAKER_EXPRESSION_PROMPTS[self._expression_index][0])
+            self._speaker_state.begin_expression_capture(
+                SPEAKER_EXPRESSION_PROMPTS[self._expression_index][0]
+            )
             return self._expression_prompt()
 
         # ── Çok-örnekli toplama ──────────────────────────────────────────────
@@ -2109,13 +2440,17 @@ if _HAS_LIVEKIT:
         def _collect_gate(self) -> tuple[bool, Optional[str]]:
             """Bu pencere havuza ALINSIN mı? (alınır mı, elenme sebebi).
 
-            KALİTE KAPISI: yalnız kullanıcı GERÇEKTEN konuşurken (user_speaking) ve
-            Candan meşgul DEĞİLken (agent_busy=False) al. NEDEN iki koşul:
+            KALİTE KAPISI: Candan meşgul DEĞİLken (agent_busy=False) al.
+            SpeakerTap zaten RMS altındaki pencereleri hiç embedding'e çevirmiyor;
+            bu yüzden burada ``user_speaking`` kontrolü yapmak hem gereksiz hem de
+            zararlıydı. Tap bir konuşma penceresini ürettikten sonra VAD çoğu kez
+            "listening"e döner; polling anında bu geçerli kullanıcı sesi sessizlik
+            diye eleniyordu.
+
+            NEDEN agent_busy tek başına yeterli:
               - agent_busy=True → Candan düşünüyor/konuşuyor; AEC tam değilse kendi
                 TTS'i mikrofona yankıyla döner → last_embedding Candan'ın sesi olur
                 (kullanıcı DEĞİL). Bu centroid'i zehirler.
-              - user_speaking=False → sessizlik/konuşma-arası; speaker_tap rms<0.01'i
-                zaten atlar ama yankı/gürültü konuşma sanılabilir → VAD kapısı şart.
             WakeGate yok/None ise GÜVENLİ tarafa düş: mevcut davranış (hepsini al),
             çökme yok. Bayrakları agent.py besler (wake_user_speaking/wake_agent_busy).
             """
@@ -2124,9 +2459,18 @@ if _HAS_LIVEKIT:
                 return True, None
             if getattr(wake, "agent_busy", False):
                 return False, "echo"        # Candan konuşuyor → yankı riski
-            if not getattr(wake, "user_speaking", True):
-                return False, "silence"     # kullanıcı susuyor → sessizlik
             return True, None
+
+        def enrollment_capture_gate(self) -> tuple[bool, Optional[str]]:
+            """Tap'in bir embedding'i ürettiği ANDAKİ enrollment kalite kararı.
+
+            Toplayıcı polling ile çalışır. Canlı bayraklara orada tekrar bakmak
+            yarış üretir: kullanıcı konuşmasını bitirir, agent thinking'e geçer,
+            sonra aynı kullanıcı embedding'i "echo" diye elenir. SpeakerTap bu
+            metodu embedding ile aynı anda çağırıp sonucu SpeakerState'e yazar;
+            _collect_loop o dondurulmuş sonucu kullanır.
+            """
+            return self._collect_gate()
 
         async def _collect_loop(self) -> None:
             last = None
@@ -2142,7 +2486,15 @@ if _HAS_LIVEKIT:
                         # elenir — sonradan aynı emb'i açık kapıda toplamayız.
                         last = emb
                         self._enroll_seen += 1
-                        take, reason = self._collect_gate()
+                        # Kalite kararını tap embedding'i üretirken dondurur. Eski
+                        # SpeakerState / gate bağlanmamış testlerde None gelir →
+                        # mevcut davranışı korumak için canlı kapıya düş.
+                        frozen = getattr(self._speaker_state, "last_embedding_capture_ok", None)
+                        reason = getattr(self._speaker_state, "last_embedding_capture_reason", None)
+                        if frozen is None:
+                            take, reason = self._collect_gate()
+                        else:
+                            take = bool(frozen)
                         if take:
                             self._enroll_taken += 1
                             self._enroll_embs.append(emb)
@@ -2259,7 +2611,7 @@ if _HAS_LIVEKIT:
                 # düşüyordu (canlı 'gördü=0 toplanan=0'). Latch ile havuz enroll boyunca
                 # dolar. Tanınan/normal sohbette latch KAPALI → toplama YOK (kalite kapısı
                 # + echo kapısı olduğu gibi kalır).
-                if current is None:
+                if current is None and (self._enroll_active or _wants_enroll(text)):
                     self._enroll_active = True
                 if self._enroll_active:
                     if emb is not None:
@@ -2305,7 +2657,7 @@ if _HAS_LIVEKIT:
                 "EMNİYET AĞI devrede: %d tur tool çağrılmadı → isim deterministik soruluyor",
                 self._enroll_no_tool_turns,
             )
-            return "Seni kaydedeyim istersen. Adını söyler misin? Sadece adını, tek kelimeyle."
+            return "Seni kaydedebilmem için adını tek kelime olarak söyler misin?"
 
         async def _enroll_net_step(self, text: str) -> str:
             """Emniyet ağının kod-güdümlü adımları: net_name → net_confirm → yazma.
@@ -2328,7 +2680,7 @@ if _HAS_LIVEKIT:
                         return "Adını anlayamadım, seni kaydedemedim. İstersen sonra 'beni kaydet' de."
                     logger.info("EMNİYET AĞI: isim anlaşılmadı (%d. kez): %r",
                                 self._enroll_name_tries, text[:60])
-                    return "Adını anlayamadım. Sadece adını, tek kelimeyle söyler misin?"
+                    return "Adını anlayamadım. Adını tek kelime olarak söyler misin?"
                 self._enroll_name = name
                 self._enroll_name_tries = 0
                 self._enroll_stage = "net_confirm"
@@ -2361,7 +2713,7 @@ if _HAS_LIVEKIT:
             sohbet etti, hiçbir şey kaydedilmedi). AGENTS.md'ye konan açık kuralın
             aynı sınıf hatayı 0/12 → 12/12'ye çıkardığı ölçülmüş → aynı ilaç.
             Direktif her turda DEĞİL, yalnız bilinmeyen sesin ilk turunda eklenir."""
-            if not self._enroll_ok or self._enroll_hinted:
+            if not self._enroll_ok or not self._enroll_active or self._enroll_hinted:
                 return text
             if getattr(self._speaker_state, "current", None) is not None:
                 return text
@@ -2371,7 +2723,7 @@ if _HAS_LIVEKIT:
                 "<enrollment>\n"
                 "Bu sesi TANIMIYORSUN — kayıtlı kimse değil. Kısa bir kayıt sihirbazı yürüt:\n"
                 "1) İlk sözün AYNEN şu olsun: 'Pardon, sesinizi henüz tanıyamadım. "
-                "Adınızı öğrenebilir miyim? Sadece adınızı söylemeniz yeterli.'\n"
+                "Sizi kaydedebilmem için adınızı tek kelime olarak söyler misiniz?'\n"
                 "2) İsim: SADECE adını, TEK KELİMEYLE söylemesini iste — cümle kurmasın, "
                 "soyad eklemesin. (Uzun cümlede ses tanıma ismi bozuyor.)\n"
                 "3) İsim onayı: anladığın ismi GERİ OKU ('Adınızı Ayhan olarak anladım, doğru mu?') "
@@ -2431,7 +2783,7 @@ if _HAS_LIVEKIT:
             why = self._valid_enroll_name(name)
             if why:
                 logger.info("enroll REDDEDİLDİ: %s", why)
-                return "Adını tam anlayamadım. Sadece adını, tek kelimeyle söyler misin?"
+                return "Adını tam anlayamadım. Adını tek kelime olarak söyler misin?"
             name = " ".join(name.split())
             # Kalite kapısı: çekirdek seçimi + ölçüm log'u. Kötü kayıt yapmaktansa
             # kayıt yapmamak yeğdir — kirli centroid yabancıyı ev halkı sanıyor.
@@ -2448,18 +2800,11 @@ if _HAS_LIVEKIT:
             from speaker_id import name_key
 
             if match and name_key(match) != name_key(name):
-                thr = float(getattr(self._speaker_id, "threshold", 0.45))
                 low = float(getattr(self._speaker_id, "merge_low", 0.35))
-                if score >= thr:
-                    logger.info(
-                        "enroll: ses zaten %r'a ait gibi (skor=%.3f >= %.2f)"
-                        " → yeni kişi AÇILMIYOR", match, score, thr,
-                    )
-                    return await self._merge_into(match)
                 if score >= low:
                     logger.info(
-                        "enroll: belirsiz bant (%r skor=%.3f, %.2f-%.2f)"
-                        " → onay soruluyor", match, score, low, thr,
+                        "enroll: farklı isim için %r benzerlik sinyali (skor=%.3f >= %.2f)"
+                        " → OTOMATİK birleştirme YOK, açık onay soruluyor", match, score, low,
                     )
                     self._enroll_match = match
                     self._enroll_stage = "verify_existing"
@@ -2474,19 +2819,23 @@ if _HAS_LIVEKIT:
             Best-effort; ayrıştırma hatası turu BOZMAZ."""
             if not self._enroll_ok or not isinstance(message, dict):
                 return
-            if message.get("role") != "assistant":
-                return
-            for c in message.get("content", []) or []:
-                if isinstance(c, dict) and c.get("type") == "toolCall" \
-                        and (c.get("name") or "") == "enroll_speaker":
-                    args = c.get("arguments")
-                    if isinstance(args, str):
-                        try:
-                            args = json.loads(args)
-                        except ValueError:
-                            args = {}
-                    if isinstance(args, dict):
-                        self._pending_enroll = str(args.get("name") or "")
+            # Web'e yayımlanan tool olayını üreten ayrıştırıcıyla AYNI yolu kullan.
+            # Böylece pi mesaj biçimi değişirse web "TOOL_CALL"ı görüp worker'ın
+            # sinyali kaçırması (ve modelin yalan başarı cümlesinin duyulması) mümkün
+            # olmaz; iki tüketici aynı sözleşmeye bağlı kalır.
+            for event in _tool_events(message):
+                if event["type"] != "tool_call" or event["name"] != "enroll_speaker":
+                    continue
+                args = event.get("args")
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except ValueError:
+                        args = {}
+                if isinstance(args, dict):
+                    self._pending_enroll = str(args.get("name") or "")
+                    logger.info("enrollment: enroll_speaker sinyali yakalandı (isim=%r)",
+                                self._pending_enroll)
 
         async def _run_pending_enroll(self) -> Optional[str]:
             """Tur sonunda: enroll_speaker çağrıldıysa kaydı YAP ve sonucu döndür.
@@ -2670,8 +3019,8 @@ if _HAS_LIVEKIT:
             roster = self._speaker_id.names() if self._speaker_id else []
             if name:
                 note = (
-                    f"(Sistem — ses tanıma: şu an SENİNLE KONUŞAN kişinin kimliği KESİN "
-                    f"= {name} (ses tanımayla doğrulandı). Ona YALNIZCA {name} diye hitap "
+                    f"(Sistem — ses tanıma: YALNIZCA bu konuşma dönüşünün güncel ses "
+                    f"pencereleri {name} kimliğiyle eşleşti. Ona {name} diye hitap "
                     f"et. Hafızanda/aile notlarında (family.md) geçen BAŞKA isimler (ör. "
                     f"diğer aile üyeleri, 'annenin adı ...' gibi satırlar) bu kişi DEĞİLDİR "
                     f"— konuşmacıyı onlarla KARIŞTIRMA. 'Beni tanıyor musun / ben kimim / "
@@ -2686,6 +3035,42 @@ if _HAS_LIVEKIT:
                 note += f" Kayıtlı tanıdığın kişiler: {', '.join(roster)}."
             note += ")"
             return note + "\n\n" + text
+
+        def _personal_memory_note(self) -> str:
+            """Ortak Pi sohbetinde yalnız konuşan kişiye ait dar, salt-okunur bağlam."""
+            if not PI_SHARED_ROOM_MODE or self._speaker_state is None:
+                return ""
+            name = getattr(self._speaker_state, "current", None)
+            user = _mem_user(_slug(name or ""))
+            if not user:
+                return ""
+            mem = REPO_ROOT / MEMORY_DIR
+            parts: list[str] = []
+            # Kişiselleştirme gecikme yaratmamalı: her dosya sert sınırla eklenir.
+            for title, path in (
+                ("Kişisel profil", mem / "users" / user / "profile.md"),
+                ("Kişisel tercih/üslup", mem / "users" / user / "soul.md"),
+                ("Ortak aile bilgisi", mem / "family.md"),
+            ):
+                try:
+                    raw = path.read_text(encoding="utf-8").strip()
+                except OSError:
+                    continue
+                if raw:
+                    parts.append(f"{title}:\n{raw[:MEM_CONTEXT_LIMIT]}")
+            if not parts:
+                return ""
+            return (
+                f"(Sistem — {name} için yalnız bu turda kullanılacak hafıza bağlamı. "
+                "Bu bilgileri başka konuşmacılara ifşa etme; belirsiz bilgiyi kesinmiş gibi sunma.\n"
+                + "\n\n".join(parts)
+                + ")"
+            )
+
+        def _identity_line(self, text: str) -> Optional[str]:
+            """Deterministic identity truth; model never adjudicates voice identity."""
+            name = getattr(self._speaker_state, "current", None) if self._speaker_state else None
+            return _identity_guard_reply(text, name)
 
         def _target(self) -> tuple[str, str]:
             """Güncel konuşmacıya göre (persona, session_id). Tanınan isim →
@@ -2802,6 +3187,10 @@ if _HAS_LIVEKIT:
             # (2) Dev modunda konuşmacıya göre swap ETME → dev oturumu tek ve izole.
             if self._mode == "dev":
                 return self._client
+            # Ortak cihazda oda sohbeti TEK kalır. Konuşmacı kimliği ve kişisel
+            # hafıza bu turdaki prompt'a eklenir; Pi süreç/persona swap'ı YOKTUR.
+            if PI_SHARED_ROOM_MODE:
+                return self._client
             if self._speaker_state is None:
                 return self._client
             # Kim konuşuyorsa bir sonraki oturumun prewarm'ı için işaretle (sadece
@@ -2856,7 +3245,7 @@ if _HAS_LIVEKIT:
                 )
                 # Sıra önemli: ÖNCE süreci durdur (dosyayı bırakmalı), SONRA döndür,
                 # en son taze süreci doğur.
-                await old.stop()
+                await old.stop(persist=False)
                 try:
                     archived = await asyncio.to_thread(_rotate_session_id, session_id, session_dir)
                 except Exception:  # noqa: BLE001 — döndürme patlarsa oturumu YARIDA bırakma

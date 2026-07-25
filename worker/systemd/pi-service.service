@@ -1,0 +1,20 @@
+[Unit]
+Description=candan-lite persistent Pi Service
+After=network-online.target candan-brain.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/candan-lite/worker
+# agent.py ve pi_broker.py worker/.env'i kendileri yükler; EnvironmentFile burada
+# kullanılmaz çünkü PI_COLD_NOTICE_TEXT gibi boşluklu Türkçe değerler systemd ayrıştırmasını bozar.
+RuntimeDirectory=candan
+RuntimeDirectoryMode=0750
+ExecStart=/opt/candan-lite/worker/.venv/bin/python pi_broker.py --socket /run/candan/pi-broker.sock
+ExecReload=/opt/candan-lite/worker/.venv/bin/python pi_broker.py --socket /run/candan/pi-broker.sock --reload
+Restart=always
+RestartSec=3
+StartLimitBurst=10
+
+[Install]
+WantedBy=multi-user.target
