@@ -1,0 +1,57 @@
+{
+  "model": "mlx-community/whisper-large-v3-turbo",
+  "language": "tr",
+  "text": "Merhaba, ben evin babasıyım. Bugün güzel bir şey oldu. Çok mutluyum. Bugün kendimi biraz üzgün hissediyorum. Acaba şimdi ne olacak? Gerçekten merak ediyorum. Buna gerçekten kızdım. Böyle olmasını istemezdim. Hemen çıkmam gerekiyor. Biraz acelem var.",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 1.66,
+      "text": "Merhaba, ben evin babasıyım."
+    },
+    {
+      "start": 2.78,
+      "end": 3.86,
+      "text": "Bugün güzel bir şey oldu."
+    },
+    {
+      "start": 4.16,
+      "end": 4.78,
+      "text": "Çok mutluyum."
+    },
+    {
+      "start": 5.3,
+      "end": 7.02,
+      "text": "Bugün kendimi biraz üzgün hissediyorum."
+    },
+    {
+      "start": 7.22,
+      "end": 8.24,
+      "text": "Acaba şimdi ne olacak?"
+    },
+    {
+      "start": 8.46,
+      "end": 9.5,
+      "text": "Gerçekten merak ediyorum."
+    },
+    {
+      "start": 10.38,
+      "end": 11.4,
+      "text": "Buna gerçekten kızdım."
+    },
+    {
+      "start": 11.7,
+      "end": 12.72,
+      "text": "Böyle olmasını istemezdim."
+    },
+    {
+      "start": 13.26,
+      "end": 14.06,
+      "text": "Hemen çıkmam gerekiyor."
+    },
+    {
+      "start": 14.24,
+      "end": 14.92,
+      "text": "Biraz acelem var."
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "Duygu/expressivity ekseni — AYRI test seti. Orpheus'un desteklediği etiketler metne gömülü. Etiketi desteklemeyen modeller bu seti üretmez (README'deki destek tablosuna bak).",
+  "sentences": [
+    {
+      "id": "e1-laugh",
+      "kategori": "duygu",
+      "hedef": "<laugh> — gülme etiketi cümle ortasında",
+      "text": "Dün olanları anlatınca herkes kahkahayı bastı <laugh> gerçekten çok komikti."
+    },
+    {
+      "id": "e2-sigh",
+      "kategori": "duygu",
+      "hedef": "<sigh> — iç çekme, cümle başında",
+      "text": "<sigh> Bu iş hiç düşündüğüm gibi gitmedi, baştan başlamak zorundayım."
+    },
+    {
+      "id": "e3-karisik",
+      "kategori": "duygu",
+      "hedef": "<sigh> + <laugh> aynı cümlede",
+      "text": "<sigh> Bütün gece uğraştım ama sonunda çalıştı <laugh> buna sevinmeli miyim bilmiyorum."
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TTS Karşılaştırma — Türkçe (lokal bench)</title>
+<style>
+  :root {
+    --bg: #12131a; --panel: #1b1d27; --line: #2c2f3d; --fg: #e8e9f0;
+    --dim: #9a9db0; --accent: #6ea8fe; --clone: #e0a33e; --emo: #c07ee0; --pick: #5ec98a; --norm: #e07a9a; --seed: #7ec9c9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 20px; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 16px; max-width: 900px; }
+  .bar {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 16px; position: sticky; top: 0; z-index: 10;
+  }
+  button {
+    background: #262a38; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 12px; cursor: pointer; font-size: 13px;
+    font-family: inherit;
+  }
+  button:hover { border-color: var(--accent); }
+  button.play { min-width: 62px; }
+  button.playing { background: var(--accent); color: #0d1017; border-color: var(--accent); }
+  button.missing { opacity: .3; cursor: not-allowed; }
+  button.on { background: var(--accent); color: #0d1017; border-color: var(--accent); }
+  label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .spacer { flex: 1; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 700px; background: var(--panel); }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #21242f; font-size: 12px; }
+  th.grp { text-align: center; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; }
+  th.grp.g-default { color: var(--accent); }
+  th.grp.g-klon { color: var(--clone); }
+  th.grp.g-duygu { color: var(--emo); }
+  th.grp.g-omnipick { color: var(--pick); }
+  th.grp.g-norm { color: var(--norm); }
+  th.grp.g-autoseed { color: var(--seed); }
+  th.sep, td.sep { border-left: 2px solid var(--line); }
+  th.sent, td.sent { min-width: 290px; max-width: 440px; border-right: 1px solid var(--line); }
+  .txt { font-size: 13.5px; }
+  .meta { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
+  .tag {
+    display: inline-block; background: #2a2e3d; color: var(--dim); border-radius: 4px;
+    padding: 1px 6px; font-size: 10.5px; margin-right: 5px;
+  }
+  .dur { color: var(--dim); font-size: 11px; margin-top: 3px; }
+  .cell { text-align: center; }
+  .note { color: var(--dim); font-size: 12.5px; margin-top: 14px; line-height: 1.7; max-width: 900px; }
+  .err { color: var(--clone); }
+  code { background: #262a38; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  tr.emo td.sent { border-left: 3px solid var(--emo); }
+</style>
+</head>
+<body>
+
+<h1>Türkçe TTS karşılaştırma</h1>
+<div class="sub">
+  Satır = cümle, sütun = model. Sütunlar iki gruba ayrık: <b style="color:var(--accent)">DEFAULT</b>
+  = modelin kendi doğal sesi, <b style="color:var(--clone)">KLON</b> = ayhan referansıyla klonlanmış,
+  <b style="color:var(--pick)">OMNIPICK</b> = beğenilen sesten çıkarılan yeni referans,
+  <b style="color:var(--norm)">NORM</b> = metin normalizasyonu karşılaştırması (trnorm vs OmniVoice dahili).
+  Ana karşılaştırma ekseni default seslerdir; klonlama bonus.
+  Alttaki <b style="color:var(--emo)">duygu</b> satırları ayrı test seti (etiketli cümleler).
+</div>
+
+<div class="bar">
+  <button id="refBtn">▶ Referans: ayhan (klon setleri)</button>
+  <button id="pickBtn">▶ Kaynak ses: omnipick (beğenilen)</button>
+  <div class="spacer"></div>
+  <button class="on" data-g="default">Default sesler</button>
+  <button class="on" data-g="klon">Klon sesler</button>
+  <button class="on" data-g="omnipick">omnipick</button>
+  <button class="on" data-g="autoseed">autoseed</button>
+  <button class="on" data-g="norm">Normalizasyon</button>
+  <button class="on" data-g="duygu">Duygu seti</button>
+  <label><input type="checkbox" id="blind"> İsimleri gizle</label>
+  <button id="shuffle">Karıştır</button>
+  <button id="stop">■ Durdur</button>
+</div>
+
+<div class="scroll"><table id="tbl"></table></div>
+
+<div class="note" id="note"></div>
+
+<script>
+// Bağımlılık yok, CDN yok. Veri: out/manifest.json (runners/merge_timings.py üretir).
+const $ = (s) => document.querySelector(s);
+let audio = new Audio(), current = null, cols = [], data = null;
+const shown = { default: true, klon: true, omnipick: true, autoseed: true, norm: true, duygu: true };
+
+function stop() {
+  audio.pause(); audio.currentTime = 0;
+  if (current) current.classList.remove('playing');
+  current = null;
+}
+
+function play(src, btn) {
+  if (current === btn) { stop(); return; }
+  stop();
+  audio = new Audio(src);
+  audio.play().catch((e) => { btn.textContent = 'hata'; console.error(e); });
+  btn.classList.add('playing');
+  current = btn;
+  audio.onended = () => { btn.classList.remove('playing'); current = null; };
+}
+
+// Duygu seti yalnız kendi sütunlarında anlamlı; normal cümleler duygu sütununda yok.
+const isEmotionRow = (s) => s.kategori === 'duygu';
+
+function visibleCols() {
+  return cols.filter((m) => shown[data.groups[m]]);
+}
+
+function render() {
+  const blind = $('#blind').checked;
+  const vis = visibleCols();
+
+  // Grup başlığı satırı (kaç sütun hangi gruba ait)
+  let grpRow = '<tr><th class="sent" rowspan="2">Cümle</th>';
+  let i = 0;
+  while (i < vis.length) {
+    const g = data.groups[vis[i]];
+    let n = 0;
+    while (i + n < vis.length && data.groups[vis[i + n]] === g) n++;
+    grpRow += `<th class="grp g-${g}${i ? ' sep' : ''}" colspan="${n}">${g}</th>`;
+    i += n;
+  }
+  grpRow += '</tr>';
+
+  let hdr = '<tr>';
+  vis.forEach((m, k) => {
+    const first = k === 0 || data.groups[m] !== data.groups[vis[k - 1]];
+    const label = blind ? 'Model ' + String.fromCharCode(65 + k) : m;
+    hdr += `<th class="${first && k ? 'sep' : ''}">${label}</th>`;
+  });
+  hdr += '</tr>';
+
+  let body = '';
+  for (const s of data.sentences) {
+    const emo = isEmotionRow(s);
+    const cells = vis.map((m, k) => {
+      const first = k === 0 || data.groups[m] !== data.groups[vis[k - 1]];
+      const cls = `cell${first && k ? ' sep' : ''}`;
+      const w = s.wavs[m];
+      if (!w) return `<td class="${cls}"><button class="play missing" disabled>—</button></td>`;
+      return `<td class="${cls}">
+        <button class="play" data-src="out/${encodeURIComponent(m)}/${s.id}.wav">▶</button>
+        <div class="dur">${w.duration_s.toFixed(1)}s · ${(w.sample_rate / 1000).toFixed(0)}k</div>
+      </td>`;
+    }).join('');
+    body += `<tr class="${emo ? 'emo' : ''}">
+      <td class="sent">
+        <div class="txt">${s.text.replace(/</g, '&lt;')}</div>
+        <div class="meta"><span class="tag">${s.kategori}</span>${s.hedef}</div>
+      </td>${cells}</tr>`;
+  }
+
+  $('#tbl').innerHTML = `<thead>${grpRow}${hdr}</thead><tbody>${body}</tbody>`;
+  $('#tbl').querySelectorAll('button.play:not(.missing)').forEach((b) => {
+    b.onclick = () => play(b.dataset.src, b);
+  });
+}
+
+fetch('out/manifest.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((d) => {
+    data = d;
+    // Grup sırası sabit: önce default, sonra klon, sonra duygu.
+    const order = { default: 0, klon: 1, omnipick: 2, autoseed: 3, norm: 4, duygu: 5 };
+    cols = d.models.slice().sort((a, b) =>
+      (order[d.groups[a]] - order[d.groups[b]]) || a.localeCompare(b));
+    render();
+    const n = d.sentences.reduce((a, s) => a + Object.keys(s.wavs).length, 0);
+    $('#note').innerHTML =
+      `${d.models.length} set · ${d.sentences.length} cümle · ${n} wav. ` +
+      `Süre/RTF: <code>out/timings.json</code> — MPS (Apple M4 Pro) ölçümleri, server GPU'su DEĞİL.`;
+  })
+  .catch((e) => {
+    $('#note').innerHTML =
+      `<span class="err">out/manifest.json okunamadı (${e.message}).</span> ` +
+      `Önce <code>python3 runners/merge_timings.py</code> çalıştır, sonra bu sayfayı ` +
+      `<code>python3 -m http.server</code> üzerinden aç (file:// ile fetch engellenir).`;
+  });
+
+$('#blind').onchange = render;
+$('#stop').onclick = stop;
+document.querySelectorAll('button[data-g]').forEach((b) => {
+  b.onclick = () => { shown[b.dataset.g] = !shown[b.dataset.g]; b.classList.toggle('on'); render(); };
+});
+$('#shuffle').onclick = () => {
+  for (let i = cols.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+  }
+  // Karıştırdıktan sonra da gruplar bir arada kalsın (kör dinleme grup içinde anlamlı).
+  const order = { default: 0, klon: 1, omnipick: 2, autoseed: 3, norm: 4, duygu: 5 };
+  cols.sort((a, b) => order[data.groups[a]] - order[data.groups[b]]);
+  render();
+};
+$('#refBtn').onclick = (e) => play('refs/ayhan_ref.wav', e.target);
+$('#pickBtn').onclick = (e) => play('refs/omnipick.wav', e.target);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,103 @@
+{
+  "_comment": "Normalizasyon test seti. `text` = modele giden ham cümle. `expected_spoken` = DOĞRU sözlü form (ASR geri-dönüş testinde referans). Her iki set (trnorm / OmniVoice dahili norm) AYNI expected_spoken'a karşı ölçülür → adil karşılaştırma. n01-n03 kullanıcının bozuk bulduğu cümlelerin BİREBİR kendisi (sentences.json 06/04/05).",
+  "sentences": [
+    {
+      "id": "n01-yuzde-para",
+      "kategori": "yuzde+binlik",
+      "hedef": "%25 yüzde okunmalı, 3.500 / 2.625 binlik ayıraçlı",
+      "text": "Bugün %25 indirim var, yani 3.500 TL yerine sadece 2.625 TL ödeyeceksin.",
+      "expected_spoken": "Bugün yüzde yirmi beş indirim var, yani üç bin beş yüz lira yerine sadece iki bin altı yüz yirmi beş lira ödeyeceksin."
+    },
+    {
+      "id": "n02-saat-ek",
+      "kategori": "saat+kesme-ek",
+      "hedef": "14:30'da → on dört otuzda; 'başlıyor' DÜŞMEMELİ",
+      "text": "Toplantı saat 14:30'da başlıyor, lütfen geç kalma.",
+      "expected_spoken": "Toplantı saat on dört otuzda başlıyor, lütfen geç kalma."
+    },
+    {
+      "id": "n03-yil",
+      "kategori": "yil",
+      "hedef": "1994 → bin dokuz yüz doksan dört",
+      "text": "Bu bina 1994 yılında, tam otuz iki yıl önce yapılmış.",
+      "expected_spoken": "Bu bina bin dokuz yüz doksan dört yılında, tam otuz iki yıl önce yapılmış."
+    },
+    {
+      "id": "n04-binlik-buyuk",
+      "kategori": "binlik",
+      "hedef": "1.250.000 → bir milyon iki yüz elli bin",
+      "text": "Şirket geçen yıl 1.250.000 TL kâr açıkladı.",
+      "expected_spoken": "Şirket geçen yıl bir milyon iki yüz elli bin lira kâr açıkladı."
+    },
+    {
+      "id": "n05-ondalik",
+      "kategori": "ondalik",
+      "hedef": "2,5 → iki virgül beş",
+      "text": "Şişede 2,5 litre su kaldı, 750 gr da un var.",
+      "expected_spoken": "Şişede iki virgül beş litre su kaldı, yedi yüz elli gram da un var."
+    },
+    {
+      "id": "n06-tarih",
+      "kategori": "tarih",
+      "hedef": "12.03.2026 → on iki Mart iki bin yirmi altı",
+      "text": "Sözleşme 12.03.2026 tarihinde sona eriyor.",
+      "expected_spoken": "Sözleşme on iki Mart iki bin yirmi altı tarihinde sona eriyor."
+    },
+    {
+      "id": "n07-saat-sifir",
+      "kategori": "saat",
+      "hedef": "09:05 → dokuz sıfır beş",
+      "text": "Tren sabah 09:05 trenidir, kaçırma.",
+      "expected_spoken": "Tren sabah dokuz sıfır beş trenidir, kaçırma."
+    },
+    {
+      "id": "n08-ek-yigin",
+      "kategori": "kesme-ek",
+      "hedef": "1994'te, 2026'ya, 5'ten — ünlü uyumu + sert ünsüz",
+      "text": "1994'te başladı, 2026'ya kadar sürecek, 5'ten fazla aşama var.",
+      "expected_spoken": "bin dokuz yüz doksan dörtte başladı, iki bin yirmi altıya kadar sürecek, beşten fazla aşama var."
+    },
+    {
+      "id": "n09-yuzde-ek",
+      "kategori": "yuzde+ek",
+      "hedef": "%25'lik → yüzde yirmi beşlik",
+      "text": "%25'lik bir artış oldu, %8'den yükseldi.",
+      "expected_spoken": "yüzde yirmi beşlik bir artış oldu, yüzde sekizden yükseldi."
+    },
+    {
+      "id": "n10-para-simge",
+      "kategori": "para",
+      "hedef": "$ → dolar, € → euro",
+      "text": "Bilet 250 $ tuttu, otel ise 180 € idi.",
+      "expected_spoken": "Bilet iki yüz elli dolar tuttu, otel ise yüz seksen euro idi."
+    },
+    {
+      "id": "n11-birim",
+      "kategori": "birim",
+      "hedef": "kg, cm, km",
+      "text": "Valiz 23 kg geldi, boyu 70 cm, yol 450 km sürdü.",
+      "expected_spoken": "Valiz yirmi üç kilogram geldi, boyu yetmiş santimetre, yol dört yüz elli kilometre sürdü."
+    },
+    {
+      "id": "n12-kisaltma",
+      "kategori": "kisaltma",
+      "hedef": "Dr., No., vs.",
+      "text": "Dr. Ayşe'yi No. 12 odada bul, dosya kalem vs. getir.",
+      "expected_spoken": "Doktor Ayşe'yi numara on iki odada bul, dosya kalem vesaire getir."
+    },
+    {
+      "id": "n13-ingilizce",
+      "kategori": "dokunma",
+      "hedef": "İngilizce ödünç kelimeler AYNEN kalmalı",
+      "text": "Wi-Fi router'ı restart ettim, link'ten 2 dosya download ettim.",
+      "expected_spoken": "Wi-Fi router'ı restart ettim, link'ten iki dosya download ettim."
+    },
+    {
+      "id": "n14-karisik-uzun",
+      "kategori": "karisik",
+      "hedef": "uzun cümlede saat+yüzde+para birlikte, kelime düşmesi testi",
+      "text": "Saat 17:45'te gelen rapora göre satışlar %12 arttı ve ciro 4.750 TL'den 6.300 TL'ye çıktı.",
+      "expected_spoken": "Saat on yedi kırk beşte gelen rapora göre satışlar yüzde on iki arttı ve ciro dört bin yedi yüz elli liradan altı bin üç yüz liraya çıktı."
+    }
+  ]
+}
