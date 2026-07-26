@@ -128,6 +128,12 @@ PI_COLD_NOTICE_TEXT = (
 # compaction çalışır → kullanıcı cevabını beklerken uzun süre SESSİZLİK duyar.
 # Ayrım için reason'a değil, kullanıcının o turda BİR ŞEY DUYUP DUYMADIĞINA
 # (got_delta) bakıyoruz: duyduysa sus, duymadıysa tek kısa cümle söyle.
+# SUSMAK yetmiyordu: tur döngüsü `agent_settled`ı beklerken `_turn_lock`u tutuyor,
+# tur sonu sıkıştırma boyunca (canlıda 21 sn) gelen kullanıcı turları kilitte sıraya
+# giriyordu — üstelik devredilen koşunun BAYAT `agent_settled`i sıradaki turun
+# kuyruğuna düşüp onu anında ve SESSİZCE kapatıyordu (2026-07-26: üç soru cevapsız).
+# Artık koşunun söyleyeceği bittiyse (bkz. _run_answer_done) tur BURADA kapanır,
+# sıkıştırma arka planda sürer; kalan olayları reader yutar (bkz. defer_settle).
 PI_COMPACTION_NOTICE_TEXT = (
     os.environ.get("PI_COMPACTION_NOTICE_TEXT") or "Bir saniye, aklımı toparlıyorum."
 )
@@ -137,6 +143,13 @@ PI_COMPACTION_NOTICE_TEXT = (
 # abort ederdi. Sıkıştırma tüm bağlamı özetler → dakikayı bulabilir.
 PI_COMPACTION_STALL_TIMEOUT = float(
     os.environ.get("PI_COMPACTION_STALL_TIMEOUT", "120") or 120
+)
+# TUR SONU compaction ARKA PLANA alınır (bkz. PiStream: "tur sonu compaction devri").
+# Yeni tur, devredilen sıkıştırma bitene kadar pi'ya prompt GÖNDEREMEZ (tek agent
+# oturumu, tek sıra). Bu kadar saniye içinde bitmezse kullanıcıyı sessiz bırakmamak
+# için TEK kısa ara söz söylenir, bekleme sürer.
+PI_COMPACTION_NOTICE_DELAY = float(
+    os.environ.get("PI_COMPACTION_NOTICE_DELAY", "1.5") or 1.5
 )
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
@@ -1315,6 +1328,15 @@ class PiRpcClient:
         self._turn_q: Optional[asyncio.Queue] = None
         self._turn_lock = asyncio.Lock()
         self._start_lock = asyncio.Lock()
+        # ── Devredilen (arka plana alınmış) pi koşusu ────────────────────────
+        # Tur döngüsünden `agent_settled` GÖRMEDEN çıktığımızda (tur sonu compaction
+        # devri) pi hâlâ o koşunun olaylarını yayar. Bunlar YENİ turun kuyruğuna
+        # DÜŞMEMELİ: yeni tur bayat `agent_settled`i kendi turu sanıp anında kapanır
+        # ve kullanıcıya HİÇBİR ŞEY söylemez (turun "yutulması"). _deferred>0 iken
+        # reader olayları YUTAR; agent_settled gelince koşu kapanır.
+        self._deferred = 0
+        self._settled_ev = asyncio.Event()
+        self._settled_ev.set()
         # Bu SÜREÇ hiç text_delta üretti mi? False iken ilk tur "soğuk" sayılır
         # (oturum geçmişi baştan yüklenir, KV cache soğuk) → uzun stall toleransı.
         # İlk delta ile True olur ve süreç ölene kadar öyle kalır (yeni PiRpcClient =
@@ -1440,13 +1462,46 @@ class PiRpcClient:
             if fut is not None and not fut.done():
                 fut.set_result(obj)
             return
+        # Devredilmiş koşu (arka planda süren tur sonu compaction) → olayları YUT.
+        # `agent_settled` o koşuyu kapatır; sıradaki tur bunu bekliyor.
+        if self._deferred > 0:
+            if obj.get("type") == "agent_settled":
+                self.force_settled()
+            return
         # AgentSessionEvent → aktif tura ilet.
         q = self._turn_q
         if q is not None:
             q.put_nowait(obj)
 
+    def defer_settle(self) -> None:
+        """Aktif turu kapat ama pi koşusunun KUYRUĞUNU arka plana devret.
+
+        Tur sonu compaction'da çağrılır: kullanıcıya söylenecek metin bitti, sıkıştırma
+        pi'nın kendi işi. Tur döngüsü burada biter → `_turn_lock` SERBEST kalır →
+        kullanıcının sonraki turu 20+ sn kilitte beklemez. Kalan olaylar (compaction_end,
+        agent_settled) `_route_output` tarafından yutulur."""
+        self._deferred += 1
+        self._settled_ev.clear()
+
+    def force_settled(self) -> None:
+        """Devredilen koşuyu kapat (agent_settled geldi / süreç öldü / zaman aşımı)."""
+        self._deferred = 0
+        self._settled_ev.set()
+
+    async def wait_settled(self, timeout: float) -> bool:
+        """Devredilen koşu bitene kadar bekle. True = bitti, False = zaman aşımı."""
+        if self._settled_ev.is_set():
+            return True
+        try:
+            await asyncio.wait_for(self._settled_ev.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
     def _mark_transport_closed(self, reason: str) -> None:
         # Süreç/soket öldü: bekleyen istekleri ve aktif turu serbest bırak.
+        # Devredilen koşu da ölmüştür → bekleyen tur sonsuza kadar beklemesin.
+        self.force_settled()
         if self._broker_writer is not None:
             self._broker_writer.close()
             self._broker_writer = None
@@ -1508,6 +1563,9 @@ class PiRpcClient:
         Broker'da normal kapanış yalnız kirayı bırakır; Pi sıcak kalır. `persist=False`
         ise bilinçli sohbet sıfırlaması için broker'daki tam bu Pi oturumunu da öldürür.
         """
+        # Taşıma kapanıyor → devredilen compaction'ın agent_settled'ı ARTIK GELMEZ;
+        # bekleyen tur boşuna beklemesin (swap/yeni sohbet yolları buradan geçer).
+        self.force_settled()
         if self._broker_writer is not None:
             writer = self._broker_writer
             self._broker_writer = None
@@ -1635,6 +1693,33 @@ def _tool_events(message: Any) -> list[dict]:
     return [e for e in out if e["id"] and e["name"]]
 
 
+def _msg_has_tool_call(message: Any) -> bool:
+    """Assistant mesajı bekleyen bir tool çağrısı içeriyor mu? (koşu DEVAM edecek)"""
+    if not isinstance(message, dict):
+        return False
+    return any(
+        isinstance(c, dict) and c.get("type") == "toolCall"
+        for c in (message.get("content") or [])
+    )
+
+
+def _run_answer_done(turn_ended: bool, final_msg: Any) -> bool:
+    """pi koşusunun KULLANICIYA söyleyeceği bitti mi?
+
+    TAHMİN DEĞİL, olaya dayanır: ya `turn_end` yayıldı (koşu bitti), ya da son
+    assistant mesajı hatasız KAPANDI ve içinde bekleyen tool çağrısı YOK — ikisinde
+    de bu turda başka metin gelmez. Tool çağrısı varsa koşu sürer (tool sonucu →
+    ikinci assistant mesajı), mesaj hiç kapanmadıysa (final_msg None) cevap hâlâ
+    üretiliyordur: bu iki halde tur KAPATILMAZ."""
+    if turn_ended:
+        return True
+    if not isinstance(final_msg, dict):
+        return False
+    if final_msg.get("stopReason") == "error":
+        return False
+    return not _msg_has_tool_call(final_msg)
+
+
 if _HAS_LIVEKIT:
 
     class PiStream(llm.LLMStream):
@@ -1647,6 +1732,30 @@ if _HAS_LIVEKIT:
             self._brain = pi_llm
             self._client = pi_llm._client  # _run başında güncel speaker'a göre çözülür
 
+        async def _wait_deferred(self, emit) -> None:
+            """Arka plana devredilmiş tur sonu compaction bitene kadar bekle.
+
+            pi TEK agent oturumudur: sıkıştırma sürerken gönderilen prompt'un olayları
+            eski koşununkilerle karışır. O yüzden bekleriz — ama bekleme SESSİZ olmaz:
+            PI_COMPACTION_NOTICE_DELAY'i aşarsa tek kısa ara söz söylenir. Sıkıştırma
+            best-effort'tur: tolerans aşılırsa devredilen koşu zorla kapatılır ve tur
+            YİNE gönderilir (compaction başarısızlığı turu ASLA yutmaz)."""
+            client = self._client
+            if getattr(client, "_settled_ev", None) is None:
+                return                                  # eski/test client'ı → gate yok
+            if await client.wait_settled(PI_COMPACTION_NOTICE_DELAY):
+                return
+            logger.info(
+                "pi arka plan compaction sürüyor → ara söz, tur sırada bekliyor"
+            )
+            emit(PI_COMPACTION_NOTICE_TEXT)
+            if not await client.wait_settled(PI_COMPACTION_STALL_TIMEOUT):
+                logger.warning(
+                    "pi compaction %.0fs'de bitmedi → tur yine de gönderiliyor",
+                    PI_COMPACTION_STALL_TIMEOUT,
+                )
+                client.force_settled()
+
         async def _run(self) -> None:
             # Tur başında güncel konuşmacıyı çöz; kişi değiştiyse warm süreci swap et.
             self._client = await self._brain._current_client()
@@ -1655,8 +1764,10 @@ if _HAS_LIVEKIT:
             if not text:
                 return
             turn_id = uuid.uuid4().hex
+            spoke = [False]   # bu tur kullanıcıya TEK bir şey söyledi mi?
 
             def _emit(content: str) -> None:
+                spoke[0] = True
                 self._event_ch.send_nowait(
                     llm.ChatChunk(
                         id=turn_id,
@@ -1737,10 +1848,15 @@ if _HAS_LIVEKIT:
             enroll_buf: list = []
 
             async with self._client._turn_lock:
+                # Önceki turdan ARKA PLANA devredilmiş sıkıştırma sürüyor olabilir.
+                # pi tek agent oturumudur: prompt'u sıkıştırma biterken göndermek
+                # olayları karıştırır. Bekle — ama kullanıcıyı SESSİZ bırakma.
+                await self._wait_deferred(_emit)
                 self._client._turn_q = q
                 aborted = False
                 got_delta = False
                 stalled = False       # watchdog / pi error → turu erken kapat
+                turn_ended = False    # pi `turn_end` yaydı → koşunun söyleyeceği bitti
                 final_msg: Any = None  # son assistant mesajı (fallback/hata için)
                 try:
                     await self._client.send({"type": "prompt", "message": text})
@@ -1841,6 +1957,8 @@ if _HAS_LIVEKIT:
                                     else:
                                         _emit(delta)
                         elif etype in ("message_end", "turn_end"):
+                            if etype == "turn_end":
+                                turn_ended = True
                             msg = obj.get("message")
                             if isinstance(msg, dict) and msg.get("role") == "assistant":
                                 final_msg = msg
@@ -1858,6 +1976,22 @@ if _HAS_LIVEKIT:
                             # HİÇ olay gelmez → watchdog'u uzun toleransa al.
                             compacting = True
                             reason = obj.get("reason") or "?"
+                            # TUR SONU compaction → ARKA PLANA AL. Koşunun söyleyeceği
+                            # bitmişse (turn_end geldi, ya da son assistant mesajı
+                            # hatasız KAPANDI ve içinde bekleyen tool çağrısı YOK) bu
+                            # turda söylenecek başka metin YOKTUR. Eskiden burada
+                            # `agent_settled` beklenirdi: tur döngüsü `_turn_lock`u
+                            # 20+ sn tutar, bu sürede gelen kullanıcı turları kilitte
+                            # sıraya girer ve BAYAT `agent_settled` ile sessizce ölürdü
+                            # (canlı 2026-07-26: üç soru üst üste cevapsız). Artık tur
+                            # BURADA biter, sıkıştırma arka planda sürer.
+                            if _run_answer_done(turn_ended, final_msg):
+                                logger.info(
+                                    "pi tur sonu compaction (reason=%s) → tur kapatıldı, "
+                                    "sıkıştırma ARKA PLANDA", reason,
+                                )
+                                self._client.defer_settle()
+                                break
                             # Kullanıcı bu turda cevabın bir kısmını DUYDUYSA (got_delta)
                             # sıkıştırma onun için görünmez (cevap bitti, tur sonu işi) →
                             # SUSMAK doğru. Hiç duymadıysa cevabını bekliyor demektir →
@@ -1914,6 +2048,17 @@ if _HAS_LIVEKIT:
                             _emit("".join(enroll_buf))
                     elif enroll_line:
                         _emit((" " if got_delta else "") + enroll_line)
+                    # SON EMNİYET — turun YUTULMASINA karşı. Buraya kadar geldiysek
+                    # kullanıcı gerçekten bir şey sordu (sessiz/scripted yollar çoktan
+                    # return etti). Tek kelime bile söylemeden bitmek = kullanıcı için
+                    # "cevapsız kaldım" demektir; canlıda tam bunu yaşadık (bayat
+                    # `agent_settled` turu anında kapatıyordu).
+                    if not spoke[0] and not enroll_turn:
+                        logger.warning(
+                            "pi turu METİNSİZ bitti → yedek cümle "
+                            "(got_delta=%s stalled=%s)", got_delta, stalled,
+                        )
+                        _emit("Bir saniye, tekrar dener misin?")
                     # Stall'da pi hâlâ arka planda çalışıyor olabilir → abort ile durdur.
                     if stalled:
                         self._client._write({"type": "abort"})
