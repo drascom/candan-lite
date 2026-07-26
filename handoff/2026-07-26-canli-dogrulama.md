@@ -95,6 +95,60 @@ uptime 395 sn → büyüme 654.7 MB      (120 sn'de +1.4 MB)
 ```
 Tek seferlik model yüklemesi, sonrası düz. Yapılacak bir şey yok.
 
+## 26 TEMMUZ AKŞAMI — YAPILANLAR (kullanıcı yokken, onayıyla)
+
+Üçü de canlıda, servis `active`, açılıştan beri hata YOK. Yedeklerin tamamı duruyor.
+
+| İş | Durum | Kanıt |
+|---|---|---|
+| **Referans 7.20 → 3.50 sn** | canlıda | `GET /api/default` → `"Merhaba, bu bir Türkçe seslendirme testidir."` |
+| **Compaction arka plana alındı** | deploy edildi (`f75406b`) | `pi_brain.py` +145 satır, restart temiz |
+| **Turn-detector (yerel EOU)** | deploy edildi (`6c0269d`) | plugin registered, inference executor başladı, 401 satırı YOK |
+
+**Ölçülen TTS hızı** (RTX 3090, 3.5 sn referans, boş GPU):
+
+| metin | üretim | ses | RTF |
+|---|---|---|---|
+| kısa | 0.66 sn | 1.23 sn | **0.54** |
+| orta | 0.93 sn | 4.48 sn | **0.21** |
+| uzun | 1.29 sn | 8.12 sn | **0.16** |
+
+RTF 1.0'ın altı = gerçek zamandan hızlı. Bench'te Mac'te 3.9 sn ref ile 1.66 ölçülmüştü,
+"sunucuda 3-5'e bölünür" tahmini tutuyor. **Uyarı:** ölçüm boş GPU'da; canlı konuşmada
+beyin + STT aynı kartta olduğu için gerçek gecikme daha yüksek olacak.
+
+**Düzeltme — `endpointing_delay` sabit değil, ADAPTİF:**
+```
+eot=0.2532 < eşik 0.255  →  endpointing_delay 2.5   (model "bitmedi" diyor, bekliyor)
+eot=0.433  > eşik 0.255  →  endpointing_delay 0.3
+```
+Yani mekanizma doğru tasarlanmış; sorun bekleme süresi DEĞİL, o olasılığı üreten modelin
+kalitesiydi. Turn-detector düzeltmesinin gerekçesi bu yüzden daha da güçlü.
+Yan etki (bilerek dokunulmadı): yeni detektör tipiyle framework varsayılanı
+min 0.5 / max 3.0'a geçiyor (`voice/turn.py:298`).
+
+### Sunucudaki yedekler (rollback için)
+```
+/opt/candan-lite/worker/pi_brain.py.bak-20260726
+/opt/candan-lite/worker/agent.py.bak-20260726
+/opt/candan-lite/worker/requirements.txt.bak-20260726
+/opt/omnivoice/default-ref.wav.bak-20260726        (eski 7.20 sn referans)
+```
+Referans rollback komutu: `handoff/2026-07-26-deploy-turn-detector.md` ve oturum notları.
+
+### Bakım notu
+`livekit.plugins.turn_detector` **deprecated**; framework `livekit.agents.inference.TurnDetector`
+öneriyor — ama önerilen sınıf tam da 401 veren CLOUD detektörü, self-hosted'da kullanılamaz.
+Sürüm yükseltirken bu tuzağa dikkat.
+
+## KULLANICININ KULAKLA TEYİT ETMESİ GEREKENLER (ajan yapamaz)
+1. **Ses karakteri** — 3.5 sn'lik referans Candan'ın kimliğini taşıyor mu?
+2. **Compaction** — sıkıştırma sırasında artık cevap geliyor mu? Logda aranacak satır:
+   `pi tur sonu compaction (reason=...) → tur kapatıldı, sıkıştırma ARKA PLANDA`
+3. **Tur bölünmesi** — cümle ortasında duraklayınca hâlâ bölüyor mu?
+4. **Wake-gate notu** — `(Candan kelimesi geçmediği için yanıt vermiyor.)` sesli okunması
+   ne kadar rahatsız edici? Düzeltme önceliği buna göre.
+
 ## Hâlâ onay bekleyen
 
 **Referansı ~4 sn'ye kısaltma** (`handoff/2026-07-25-tts-arastirma-ve-server-adimlari.md` §1.B)
