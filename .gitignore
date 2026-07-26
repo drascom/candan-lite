@@ -38,6 +38,9 @@ worker/data/
 # sunucudan çekilen yedekler — speakers.db + aile ses kayıtları, PUBLIC repo'ya ASLA girmez.
 .server-backups/
 
+# ham ses varlıkları — aile ses kayıtları (*.opus), PUBLIC repo'ya ASLA girmez.
+/asset/
+
 # testler: kullanıcı kararı — ne git'te ne sunucuda dursun.
 worker/tests/
 
@@ -54,3 +57,5 @@ experiments/tts-local-bench/out/
 experiments/tts-local-bench/venvs/
 experiments/tts-local-bench/vendor/
 experiments/tts-local-bench/refs/*.wav
+# referans sesten türetilen ses-klon prompt tensörleri — *.wav gibi biyometrik veri, girmez.
+experiments/tts-local-bench/refs/*.pt
