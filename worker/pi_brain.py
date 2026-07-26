@@ -38,6 +38,7 @@ from name_parser import (
     _is_enroll_command,
 )
 from log_utils import DedupeFilter
+import truth_check
 
 logger = logging.getLogger("pi_brain")
 logger.addFilter(DedupeFilter())  # tekrarlayan warning/info loglarını seyreltir
@@ -1944,6 +1945,53 @@ if _HAS_LIVEKIT:
                 )
                 client.force_settled()
 
+        async def _truth_check(
+            self,
+            ledger: "truth_check.TurnLedger",
+            model_said: list,
+            guard_buf: list,
+            emit: Callable[[str], None],
+            spoke: list,
+        ) -> None:
+            """Modelin ANLATTIĞI ile araçların YAPTIĞI çelişiyor mu — üç katman.
+
+            Katman 1-2 tamamen deterministik (LLM YOK). Katman 3 (küçük yargıç)
+            YALNIZ turda hata dönen bir araç varken ve deterministik katmanlar
+            devreye girmediyse çağrılır (bkz. truth_check.decide → MALİYET KAPISI);
+            hatasız tipik turda çağrı SIFIRDIR. Yargıç erişilemez/yavaşsa tur
+            BLOKLANMAZ: None döner, deterministik katmanlar zaten devrededir.
+
+            Tasarım notu: aynı turda hem model hem harness aynı şeyi söylemez.
+            Katman 2'de modelin anlatısı zaten bastırılmıştır (guard_buf → atılır);
+            Katman 2b/3'te model yanlış bir iddiada bulunmuştur ve TEK kısa düzeltme
+            cümlesi eklenir."""
+            said = "".join(model_said)
+            # Mod GERÇEĞİ: bu turda dev tool'u çağrıldıysa swap sıradadır
+            # (_pending_mode) — "geçtim" demesi doğrudur. Çağrılmadıysa aktif mod
+            # (_mode) geçerlidir. İkisi de worker'ın bildiği deterministik durum.
+            mode = self._brain._pending_mode or self._brain._mode
+            try:
+                line, ask_llm = truth_check.decide(ledger, said, mode=mode)
+                # Kısa devre KAPININ kendisidir: ask_llm False iken yargıç ÇAĞRILMAZ.
+                if line is None and ask_llm and await truth_check.claims_success(said):
+                    line = truth_check.UNVERIFIED_LINE
+            except Exception:  # noqa: BLE001 — denetim ASLA turu düşürmez
+                logger.warning("doğruluk denetimi başarısız", exc_info=True)
+                line = None
+            if line:
+                if guard_buf:
+                    logger.warning(
+                        "truth: model anlatısı BASTIRILDI (%s) → %r",
+                        ledger.summary(), "".join(guard_buf)[:200],
+                    )
+                logger.info("truth: harness düzeltmesi (%s) → %s", ledger.summary(), line)
+                emit((" " if spoke[0] else "") + line)
+                return
+            if guard_buf:
+                # Buraya normalde düşülmez (guard_on ⇒ write_failure_line dolu).
+                # Yine de modelin metnini YUTMA: emniyet olarak söyle.
+                emit("".join(guard_buf))
+
         async def _run(self) -> None:
             # Tur başında güncel konuşmacıyı çöz; kişi değiştiyse warm süreci swap et.
             self._client = await self._brain._current_client()
@@ -2039,6 +2087,16 @@ if _HAS_LIVEKIT:
             enroll_turn = bool(self._brain._enroll_active)
             enroll_buf: list = []
 
+            # DOĞRULUK DENETİMİ (bkz. truth_check.py). Katman 1: bu turun tool
+            # sonuçları defteri — deterministik, LLM yok, maliyet yok. Katman 2:
+            # kritik bir YAZMA hata dönerse (`ledger.guard_on`) modelin o andan
+            # sonraki anlatısı canlıya ÇIKMAZ, `guard_buf`a alınır ve tur sonunda
+            # ATILIR; kullanıcı harness'ın deterministik cümlesini duyar. Ölçüldü:
+            # tool hata dönerken model 10/10 uyduruyordu.
+            ledger = truth_check.TurnLedger()
+            guard_buf: list = []      # guard açıkken bastırılan model metni (atılır)
+            model_said: list = []     # kullanıcıya GERÇEKTEN giden model metni
+
             async with self._client._turn_lock:
                 # Önceki turdan ARKA PLANA devredilmiş sıkıştırma sürüyor olabilir.
                 # pi tek agent oturumudur: prompt'u sıkıştırma biterken göndermek
@@ -2125,6 +2183,10 @@ if _HAS_LIVEKIT:
                         # yayın hatası turu BOZMAZ (best-effort).
                         if etype in ("message_end", "turn_end"):
                             self._brain._publish_tool_msg(obj.get("message"))
+                            # Katman 1 — tur defteri. Yayınla AYNI kapıdan geçer
+                            # (mesaj KESİNLEŞMİŞ olmalı); tekrar gelen olay
+                            # toolCallId ile elenir.
+                            ledger.record_message(obj.get("message"))
                         # Dev tool sinyali (enter_dev_mode/exit_dev_mode) → mod isteği.
                         # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
                         # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
@@ -2146,7 +2208,12 @@ if _HAS_LIVEKIT:
                                         self._client.warmed_up = True
                                     if enroll_turn:
                                         enroll_buf.append(delta)
+                                    elif ledger.guard_on:
+                                        # Kritik yazma HATA döndü → anlatıyı harness
+                                        # devraldı; modelin cümlesi canlıya çıkmaz.
+                                        guard_buf.append(delta)
                                     else:
+                                        model_said.append(delta)
                                         _emit(delta)
                         elif etype in ("message_end", "turn_end"):
                             if etype == "turn_end":
@@ -2211,7 +2278,10 @@ if _HAS_LIVEKIT:
                         if full:
                             if enroll_turn:
                                 enroll_buf.append(full)
+                            elif ledger.guard_on:
+                                guard_buf.append(full)
                             else:
+                                model_said.append(full)
                                 _emit(full)
                         elif stalled:
                             # Hiç metin yok + stall/error → kullanıcı sessiz kalmasın.
@@ -2226,6 +2296,11 @@ if _HAS_LIVEKIT:
                                 "pi boş yanıt (error): %s",
                                 final_msg.get("errorMessage") or "(bilinmiyor)",
                             )
+                    # ── DOĞRULUK DENETİMİ (model NE YAPILACAĞINA karar verir,
+                    # harness NE OLDUĞUNU söyler). Kayıt turu bu denetimin DIŞINDA:
+                    # orada zaten _run_pending_enroll otoriter cümleyi söylüyor.
+                    if not enroll_turn:
+                        await self._truth_check(ledger, model_said, guard_buf, _emit, spoke)
                     # Kayıt tool'u çağrıldıysa: kaydı KOD yapar ve sonucu KOD söyler.
                     # Kayıt turunda modelin kendi cümlesi (enroll_buf) hiç canlıya
                     # çıkmadı; tool çağrıldıysa o buffer ATILIR ve SADECE worker'ın
