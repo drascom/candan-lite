@@ -13,7 +13,8 @@
  * bağımlılık yok.
  *
  * Yükleme: worker pi sürecine `-e pi/extensions/mode-switch/index.ts` ile (normal + dev
- * modunda). Normal modda enter_dev_mode, dev modunda exit_dev_mode allowlist'e girer.
+ * modunda). İKİ tool da her modda allowlist'e girer; yönü model seçer, worker mevcut
+ * modla aynı yöne giden çağrıyı no-op yapar (bkz. PiBrain.request_mode).
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -25,6 +26,11 @@ Kullanıcı SENDEN geliştirme/kodlama moduna geçmeni isterse ("geliştirme mod
 sonra tek kısa cümleyle geçtiğini söyle. "Normal moda dön" / "geliştirme modundan çık"
 derse exit_dev_mode'u çağır ve kısaca onayla. Bu tool'lar arka planda beyni değiştirir;
 başka açıklama yapma, teklif sıralama.
+
+YÖN ÖNEMLİ: kullanıcının İSTEDİĞİ yönü çağır. "Çık / normale dön" → exit_dev_mode,
+"gir / geç" → enter_dev_mode. ZATEN bulunduğun moda giren aracı ÇAĞIRMA (worker'da
+no-op'tur); o durumda sadece zaten o modda olduğunu söyle. Hangi moddaysan sistem
+prompt'unda yazar — tahmin etme.
 </mode-switch>`;
 
 export default function modeSwitchExtension(pi: ExtensionAPI) {

@@ -152,6 +152,15 @@ PI_COMPACTION_STALL_TIMEOUT = float(
 PI_COMPACTION_NOTICE_DELAY = float(
     os.environ.get("PI_COMPACTION_NOTICE_DELAY", "1.5") or 1.5
 )
+# SON EMNİYET cümlesi: tur gerçekten metinsiz bittiğinde (stall/error, ya da yeniden
+# gönderim de tutmadıysa) kullanıcı sessiz kalmasın diye söylenir. ESKİ metin
+# "Bir saniye, tekrar dener misin?" idi; canlıda (2026-07-26 22:23) kullanıcı bunu
+# kendisine yönelmiş bir suçlama gibi duydu ("Neyi tekrar döner miyim?"). Hata BİZDE
+# olduğu için cümle de sorumluluğu ÜSTLENİR.
+PI_EMPTY_TURN_TEXT = (
+    os.environ.get("PI_EMPTY_TURN_TEXT")
+    or "Kusura bakma, bir an aklım dağıldı — tekrar sorar mısın?"
+)
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
 # Ortak oda modunda hafıza kimliği TUR BAŞINA çözülür (bkz. write_turn_user). Süreç
@@ -278,9 +287,23 @@ DEV_WORKTREE = Path(
 )
 DEV_BRANCH = os.environ.get("DEV_BRANCH", "self-dev")
 # Dev tool allowlist. BOŞ (default) → allowlist YOK + --no-builtin-tools YOK → tüm
-# native kod tool'ları (read/bash/edit/write/grep/find/ls) + mode-switch (exit_dev_mode)
-# açık. Kısıtlamak istersen virgüllü liste ver (o zaman exit_dev_mode'u da EKLE).
+# native kod tool'ları (read/bash/edit/write/grep/find/ls) + mode-switch (enter/exit)
+# açık. Kısıtlamak istersen virgüllü liste ver (mod tool'ları OTOMATİK eklenir).
 DEV_TOOLS_ALLOWLIST = os.environ.get("DEV_TOOLS_ALLOWLIST", "")
+# Aktif modu modele SÖYLEYEN satır (bkz. _build_pi_args). Süreç modu sabittir: mod
+# değişimi yeni PiRpcClient = yeni süreç demektir, dolayısıyla bu satır BAYATLAMAZ.
+# 2026-07-26 canlı hata: model normal moddayken "hâlâ geliştirme modundayım" dedi ve
+# "çık" isteğini enter_dev_mode ile karşıladı. Yön artık tahmine bırakılmıyor.
+MODE_STATE_LINE_NORMAL = (
+    "Şu an NORMAL moddasın (geliştirme/kod modunda DEĞİLSİN). Kullanıcı geliştirme "
+    "modundan ÇIKMAK isterse zaten çıkmışsındır: mod değiştirme, kısaca normal modda "
+    "olduğunu söyle. Yalnızca GİRMEK isterse enter_dev_mode çağır."
+)
+MODE_STATE_LINE_DEV = (
+    "Şu an GELİŞTİRME (kod) modundasın. Kullanıcı geliştirme moduna GİRMEK isterse "
+    "zaten girmişsindir: mod değiştirme, kısaca zaten bu modda olduğunu söyle. "
+    "Yalnızca ÇIKMAK/normale dönmek isterse exit_dev_mode çağır."
+)
 # ── Dev personasının KENDİ hafızası ───────────────────────────────────────────
 # Dev, Candan'ın bir "modu" değil AYRI BİR ASİSTAN KİŞİLİĞİ: kendi notları, kendi
 # ruh dosyası. Bu yüzden AYRI BİR HAFIZA KÖKÜ alır (memory/personas/dev/) — içi
@@ -1342,13 +1365,18 @@ def _build_pi_args(
         args += ["--no-builtin-tools"]
     raw_allow = DEV_TOOLS_ALLOWLIST if dev else PI_TOOLS_ALLOWLIST
     allow_items = [t.strip() for t in raw_allow.split(",") if t.strip()]
-    # Mod-değişim tetikleyici tool'u ilgili modun allowlist'ine gir: normal → enter,
-    # dev → exit. Allowlist boşsa (dev default) HİÇ eklenmez → kısıtlama yok, tool zaten
-    # yüklü extension'dan çağrılabilir. Böylece boş-allowlist = "tümü açık" korunur.
+    # Mod-değişim tool'larının İKİSİ de allowlist'e girer (yön modele bırakılır).
+    # 2026-07-26 canlı hata: yalnız "karşı yön" sunuluyordu (normal → sadece
+    # enter_dev_mode). Kullanıcı "bu moddan çık" dediğinde modelin elinde TEK araç
+    # vardı ve isteği onunla "yerine getirdi" → sistem normal moddayken DEV moduna
+    # girdi (tam tersi). Artık iki araç da her modda sunulur; yanlış yöne giden çağrı
+    # zaten mevcut moda eşittir → `request_mode` onu NO-OP yapar (çift emniyet).
+    # Allowlist boşsa (dev default) HİÇ eklenmez → kısıtlama yok, tool zaten yüklü
+    # extension'dan çağrılabilir. Böylece boş-allowlist = "tümü açık" korunur.
     if DEV_MODE_ENABLED and allow_items:
-        mode_tool = "exit_dev_mode" if dev else "enter_dev_mode"
-        if mode_tool not in allow_items:
-            allow_items.append(mode_tool)
+        for mode_tool in ("enter_dev_mode", "exit_dev_mode"):
+            if mode_tool not in allow_items:
+                allow_items.append(mode_tool)
     allowlist = ",".join(allow_items)
     if allowlist:
         args += ["--tools", allowlist]
@@ -1427,12 +1455,17 @@ def _build_pi_args(
         se_ext = REPO_ROOT / "pi" / "extensions" / "speaker-enroll" / "index.ts"
         if se_ext.is_file():
             args += ["-e", str(se_ext)]
-    # mode-switch: enter_dev_mode/exit_dev_mode tool'ları. İKİ modda da yüklenir (normal →
-    # enter'ı, dev → exit'i sunar). DEV_MODE_ENABLED=false → hiç yüklenmez (mekanizma kapalı).
+    # mode-switch: enter_dev_mode/exit_dev_mode tool'ları. İKİ modda da yüklenir ve
+    # İKİ tool'u da sunar (yön modele bırakılır; bkz. allowlist yukarıda).
+    # DEV_MODE_ENABLED=false → hiç yüklenmez (mekanizma kapalı).
+    # Süreç modu SABİTTİR (mod değişimi = YENİ süreç) → aktif modu sistem prompt'una
+    # tek satırla yaz. Model "hangi moddayım" diye tahmin etmesin ve YÖNÜ doğru seçsin.
     if DEV_MODE_ENABLED:
         ms_ext = REPO_ROOT / "pi" / "extensions" / "mode-switch" / "index.ts"
         if ms_ext.is_file():
             args += ["-e", str(ms_ext)]
+            args += ["--append-system-prompt", MODE_STATE_LINE_DEV if dev
+                     else MODE_STATE_LINE_NORMAL]
     # ---- WEB ERİŞİMİ (2026-07-14: Qwant → SearXNG) ---------------------------
     # ESKİ YOL (DEVRE DIŞI, dosya duruyor): pi/extensions/websearch/index.ts = anahtarsız
     # Qwant kazıması. Qwant CAPTCHA döndürmeye başladı → `web_search` canlıda ÖLÜYDÜ.
@@ -2005,9 +2038,12 @@ if _HAS_LIVEKIT:
                 return
             turn_id = uuid.uuid4().hex
             spoke = [False]   # bu tur kullanıcıya TEK bir şey söyledi mi?
+            said_count = [0]  # kaç PARÇA söylendi (ara sözler dahil) — emniyet ağı bunu
+                              # yeniden gönderimden ÖNCE/SONRA karşılaştırır.
 
             def _emit(content: str) -> None:
                 spoke[0] = True
+                said_count[0] += 1
                 self._event_ch.send_nowait(
                     llm.ChatChunk(
                         id=turn_id,
@@ -2109,7 +2145,16 @@ if _HAS_LIVEKIT:
                 turn_ended = False    # pi `turn_end` yaydı → koşunun söyleyeceği bitti
                 final_msg: Any = None  # son assistant mesajı (fallback/hata için)
                 try:
-                    await self._client.send({"type": "prompt", "message": text})
+                    # ── DENEME DÖNGÜSÜ (en fazla İKİ tur: asıl + BİR yeniden gönderim) ──
+                    # Tur sonu compaction turu arka plana devrederken kullanıcının
+                    # sorusu HİÇ cevaplanmamış olabilir (canlı 2026-07-26 22:23: hava
+                    # durumu sorusu compaction'a denk geldi, tur metinsiz kapandı,
+                    # kullanıcı yalnız özür cümlesi duydu). Böyle bir durumda sıkıştırma
+                    # bitince prompt'u BİR KEZ yeniden göndeririz. `resent` bayrağı
+                    # sonsuz döngüyü imkânsız kılar: ikinci deneme başarısız olsa bile
+                    # üçüncü YOKTUR, aşağıdaki emniyet ağı devreye girer.
+                    resent = False
+                    resend_mark = -1   # yeniden gönderim anındaki `said_count`
                     # Watchdog: her ilerlemede (text_delta / herhangi olay) sıfırlanan
                     # inaktivite sayacı. Tolerans boyunca HİÇ olay gelmezse (WebSocket
                     # 1000 gibi ~33-40s takılma) turu temiz kapat.
@@ -2118,8 +2163,11 @@ if _HAS_LIVEKIT:
                     # PI_FIRST_TURN_STALL_TIMEOUT (uzun) — prefill 9-17s sürebilir ve bu
                     # SAĞLIKLIDIR. İlk delta gelir gelmez PI_TURN_STALL_TIMEOUT'a (kısa)
                     # düşeriz: akış başladıysa duraklama artık gerçek takılmadır.
+                    # (Değerler her denemenin BAŞINDA tazelenir; `_budget` onları
+                    # çağrıldığı anda okur.)
                     cold = not self._client.warmed_up
                     compacting = False   # compaction_start..end penceresi
+
                     def _budget() -> float:
                         # Compaction penceresi HER ŞEYİ ezer: bu sessizlik sağlıklı,
                         # takılma değil (bkz. PI_COMPACTION_STALL_TIMEOUT).
@@ -2131,147 +2179,182 @@ if _HAS_LIVEKIT:
                             else PI_TURN_STALL_TIMEOUT
                         )
 
-                    # Soğuk beklemede kullanıcıyı sessiz bırakma: tek kısa cümle söyle.
-                    # notice_at None → ya kapalı ya da zaten söylendi/gerek kalmadı.
-                    notice_at: Optional[float] = (
-                        time.monotonic() + PI_COLD_NOTICE_DELAY
-                        if (cold and PI_COLD_NOTICE_DELAY > 0)
-                        else None
-                    )
-                    last_progress = time.monotonic()
                     while True:
-                        now = time.monotonic()
-                        # Tolerans her turda YENİDEN hesaplanır: ilk delta geldiği anda
-                        # uzun → kısa geçiş burada yürürlüğe girer.
-                        stall_at = last_progress + _budget()
-                        # En yakın uyanma anına kadar bekle (stall ya da bildirim).
-                        wake_at = stall_at if notice_at is None else min(stall_at, notice_at)
-                        try:
-                            obj = await asyncio.wait_for(
-                                q.get(), timeout=max(0.05, wake_at - now)
-                            )
-                        except asyncio.TimeoutError:
-                            if notice_at is not None and time.monotonic() >= notice_at:
-                                # Soğuk yükleme uzuyor → TEK cümle, sonra beklemeye devam.
-                                # got_delta'yı DEĞİŞTİRMEZ: bu pi'nın cevabı değil, bizim
-                                # ara sözümüz; watchdog hâlâ uzun toleransta kalmalı.
-                                notice_at = None
-                                logger.info(
-                                    "pi soğuk yükleme %.0fs+ → kullanıcıya ara söz",
-                                    PI_COLD_NOTICE_DELAY,
-                                )
-                                _emit(PI_COLD_NOTICE_TEXT)
-                                continue
-                            logger.warning(
-                                "pi tur stall: %.0fs ilerleme yok → tur kapatılıyor "
-                                "(got_delta=%s cold=%s)", _budget(), got_delta, cold,
-                            )
-                            stalled = True
-                            break
-                        # İlerleme var → inaktivite sayacını sıfırla.
+                        # Bu deneme tur sonu compaction devriyle mi kapandı?
+                        deferred_here = False
+                        await self._client.send({"type": "prompt", "message": text})
+                        cold = not self._client.warmed_up
+                        compacting = False
+                        # Soğuk beklemede kullanıcıyı sessiz bırakma: tek kısa cümle söyle.
+                        # notice_at None → ya kapalı ya da zaten söylendi/gerek kalmadı.
+                        notice_at: Optional[float] = (
+                            time.monotonic() + PI_COLD_NOTICE_DELAY
+                            if (cold and PI_COLD_NOTICE_DELAY > 0)
+                            else None
+                        )
                         last_progress = time.monotonic()
-                        if obj is None:  # süreç öldü
-                            break
-                        etype = obj.get("type")
-                        # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). SADECE mesaj
-                        # KESİNLEŞİNCE (message_end/turn_end): message_update akışında
-                        # toolCall.arguments PARÇA PARÇA dolar (önce {}, sonra {"text":"Ç"}…).
-                        # Erken yayınlarsak dedupe "ilk gelen kazanır" mantığıyla dolu hâli
-                        # eler → kartta argümanlar boş görünürdü. Hem assistant (toolCall) hem
-                        # toolResult mesajları message_end ile TAM gelir. Aynı olay
-                        # message_end + turn_end ile iki kez gelebilir → id ile elenir;
-                        # yayın hatası turu BOZMAZ (best-effort).
-                        if etype in ("message_end", "turn_end"):
-                            self._brain._publish_tool_msg(obj.get("message"))
-                            # Katman 1 — tur defteri. Yayınla AYNI kapıdan geçer
-                            # (mesaj KESİNLEŞMİŞ olmalı); tekrar gelen olay
-                            # toolCallId ile elenir.
-                            ledger.record_message(obj.get("message"))
-                        # Dev tool sinyali (enter_dev_mode/exit_dev_mode) → mod isteği.
-                        # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
-                        # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
-                        self._brain._detect_mode_signal(obj.get("message"))
-                        # Kayıt tool'u sinyali → tur SONUNDA kod kaydı yapar/reddeder.
-                        if etype in ("message_end", "turn_end"):
-                            self._brain._detect_enroll_signal(obj.get("message"))
-                        if etype == "message_update":
-                            ame = obj.get("assistantMessageEvent") or {}
-                            if ame.get("type") == "text_delta":
-                                delta = ame.get("delta") or ""
-                                if delta:
-                                    if not got_delta:
-                                        # İlk delta: süreç ısındı (KV cache dolu) →
-                                        # sonraki turlar kısa toleransla başlar. Bekleyen
-                                        # ara söz varsa iptal (cevap zaten akmaya başladı).
-                                        got_delta = True
-                                        notice_at = None
-                                        self._client.warmed_up = True
-                                    if enroll_turn:
-                                        enroll_buf.append(delta)
-                                    elif ledger.guard_on:
-                                        # Kritik yazma HATA döndü → anlatıyı harness
-                                        # devraldı; modelin cümlesi canlıya çıkmaz.
-                                        guard_buf.append(delta)
-                                    else:
-                                        model_said.append(delta)
-                                        _emit(delta)
-                        elif etype in ("message_end", "turn_end"):
-                            if etype == "turn_end":
-                                turn_ended = True
-                            msg = obj.get("message")
-                            if isinstance(msg, dict) and msg.get("role") == "assistant":
-                                final_msg = msg
-                                if msg.get("stopReason") == "error":
-                                    logger.warning(
-                                        "pi assistant error: %s",
-                                        msg.get("errorMessage") or "(bilinmiyor)",
-                                    )
-                                    # WebSocket 1000 vb. → agent_settled'ı bekleme
-                                    # (33s takılabilir); turu hemen kapat/fallback ver.
-                                    stalled = True
-                                    break
-                        elif etype == "compaction_start":
-                            # Bağlam doldu → pi geçmişi özetliyor. Pencere boyunca
-                            # HİÇ olay gelmez → watchdog'u uzun toleransa al.
-                            compacting = True
-                            reason = obj.get("reason") or "?"
-                            # TUR SONU compaction → ARKA PLANA AL. Koşunun söyleyeceği
-                            # bitmişse (turn_end geldi, ya da son assistant mesajı
-                            # hatasız KAPANDI ve içinde bekleyen tool çağrısı YOK) bu
-                            # turda söylenecek başka metin YOKTUR. Eskiden burada
-                            # `agent_settled` beklenirdi: tur döngüsü `_turn_lock`u
-                            # 20+ sn tutar, bu sürede gelen kullanıcı turları kilitte
-                            # sıraya girer ve BAYAT `agent_settled` ile sessizce ölürdü
-                            # (canlı 2026-07-26: üç soru üst üste cevapsız). Artık tur
-                            # BURADA biter, sıkıştırma arka planda sürer.
-                            if _run_answer_done(turn_ended, final_msg):
-                                logger.info(
-                                    "pi tur sonu compaction (reason=%s) → tur kapatıldı, "
-                                    "sıkıştırma ARKA PLANDA", reason,
+                        while True:
+                            now = time.monotonic()
+                            # Tolerans her turda YENİDEN hesaplanır: ilk delta geldiği anda
+                            # uzun → kısa geçiş burada yürürlüğe girer.
+                            stall_at = last_progress + _budget()
+                            # En yakın uyanma anına kadar bekle (stall ya da bildirim).
+                            wake_at = stall_at if notice_at is None else min(stall_at, notice_at)
+                            try:
+                                obj = await asyncio.wait_for(
+                                    q.get(), timeout=max(0.05, wake_at - now)
                                 )
-                                self._client.defer_settle()
+                            except asyncio.TimeoutError:
+                                if notice_at is not None and time.monotonic() >= notice_at:
+                                    # Soğuk yükleme uzuyor → TEK cümle, sonra beklemeye devam.
+                                    # got_delta'yı DEĞİŞTİRMEZ: bu pi'nın cevabı değil, bizim
+                                    # ara sözümüz; watchdog hâlâ uzun toleransta kalmalı.
+                                    notice_at = None
+                                    logger.info(
+                                        "pi soğuk yükleme %.0fs+ → kullanıcıya ara söz",
+                                        PI_COLD_NOTICE_DELAY,
+                                    )
+                                    _emit(PI_COLD_NOTICE_TEXT)
+                                    continue
+                                logger.warning(
+                                    "pi tur stall: %.0fs ilerleme yok → tur kapatılıyor "
+                                    "(got_delta=%s cold=%s)", _budget(), got_delta, cold,
+                                )
+                                stalled = True
                                 break
-                            # Kullanıcı bu turda cevabın bir kısmını DUYDUYSA (got_delta)
-                            # sıkıştırma onun için görünmez (cevap bitti, tur sonu işi) →
-                            # SUSMAK doğru. Hiç duymadıysa cevabını bekliyor demektir →
-                            # sessiz bırakma. Bekleyen soğuk-yükleme ara sözünü de iptal
-                            # et: iki ara söz üst üste söylenmesin.
-                            logger.info(
-                                "pi compaction başladı (reason=%s got_delta=%s) → %s",
-                                reason, got_delta,
-                                "sessiz (cevap zaten akmıştı)" if got_delta else "ara söz",
-                            )
-                            if not got_delta:
-                                notice_at = None
-                                _emit(PI_COMPACTION_NOTICE_TEXT)
-                        elif etype == "compaction_end":
-                            compacting = False
-                            logger.info(
-                                "pi compaction bitti (aborted=%s willRetry=%s)",
-                                obj.get("aborted"), obj.get("willRetry"),
-                            )
-                        elif etype == "agent_settled":
+                            # İlerleme var → inaktivite sayacını sıfırla.
+                            last_progress = time.monotonic()
+                            if obj is None:  # süreç öldü
+                                break
+                            etype = obj.get("type")
+                            # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). SADECE mesaj
+                            # KESİNLEŞİNCE (message_end/turn_end): message_update akışında
+                            # toolCall.arguments PARÇA PARÇA dolar (önce {}, sonra {"text":"Ç"}…).
+                            # Erken yayınlarsak dedupe "ilk gelen kazanır" mantığıyla dolu hâli
+                            # eler → kartta argümanlar boş görünürdü. Hem assistant (toolCall) hem
+                            # toolResult mesajları message_end ile TAM gelir. Aynı olay
+                            # message_end + turn_end ile iki kez gelebilir → id ile elenir;
+                            # yayın hatası turu BOZMAZ (best-effort).
+                            if etype in ("message_end", "turn_end"):
+                                self._brain._publish_tool_msg(obj.get("message"))
+                                # Katman 1 — tur defteri. Yayınla AYNI kapıdan geçer
+                                # (mesaj KESİNLEŞMİŞ olmalı); tekrar gelen olay
+                                # toolCallId ile elenir.
+                                ledger.record_message(obj.get("message"))
+                            # Dev tool sinyali (enter_dev_mode/exit_dev_mode) → mod isteği.
+                            # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
+                            # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
+                            self._brain._detect_mode_signal(obj.get("message"))
+                            # Kayıt tool'u sinyali → tur SONUNDA kod kaydı yapar/reddeder.
+                            if etype in ("message_end", "turn_end"):
+                                self._brain._detect_enroll_signal(obj.get("message"))
+                            if etype == "message_update":
+                                ame = obj.get("assistantMessageEvent") or {}
+                                if ame.get("type") == "text_delta":
+                                    delta = ame.get("delta") or ""
+                                    if delta:
+                                        if not got_delta:
+                                            # İlk delta: süreç ısındı (KV cache dolu) →
+                                            # sonraki turlar kısa toleransla başlar. Bekleyen
+                                            # ara söz varsa iptal (cevap zaten akmaya başladı).
+                                            got_delta = True
+                                            notice_at = None
+                                            self._client.warmed_up = True
+                                        if enroll_turn:
+                                            enroll_buf.append(delta)
+                                        elif ledger.guard_on:
+                                            # Kritik yazma HATA döndü → anlatıyı harness
+                                            # devraldı; modelin cümlesi canlıya çıkmaz.
+                                            guard_buf.append(delta)
+                                        else:
+                                            model_said.append(delta)
+                                            _emit(delta)
+                            elif etype in ("message_end", "turn_end"):
+                                if etype == "turn_end":
+                                    turn_ended = True
+                                msg = obj.get("message")
+                                if isinstance(msg, dict) and msg.get("role") == "assistant":
+                                    final_msg = msg
+                                    if msg.get("stopReason") == "error":
+                                        logger.warning(
+                                            "pi assistant error: %s",
+                                            msg.get("errorMessage") or "(bilinmiyor)",
+                                        )
+                                        # WebSocket 1000 vb. → agent_settled'ı bekleme
+                                        # (33s takılabilir); turu hemen kapat/fallback ver.
+                                        stalled = True
+                                        break
+                            elif etype == "compaction_start":
+                                # Bağlam doldu → pi geçmişi özetliyor. Pencere boyunca
+                                # HİÇ olay gelmez → watchdog'u uzun toleransa al.
+                                compacting = True
+                                reason = obj.get("reason") or "?"
+                                # TUR SONU compaction → ARKA PLANA AL. Koşunun söyleyeceği
+                                # bitmişse (turn_end geldi, ya da son assistant mesajı
+                                # hatasız KAPANDI ve içinde bekleyen tool çağrısı YOK) bu
+                                # turda söylenecek başka metin YOKTUR. Eskiden burada
+                                # `agent_settled` beklenirdi: tur döngüsü `_turn_lock`u
+                                # 20+ sn tutar, bu sürede gelen kullanıcı turları kilitte
+                                # sıraya girer ve BAYAT `agent_settled` ile sessizce ölürdü
+                                # (canlı 2026-07-26: üç soru üst üste cevapsız). Artık tur
+                                # BURADA biter, sıkıştırma arka planda sürer.
+                                if _run_answer_done(turn_ended, final_msg):
+                                    logger.info(
+                                        "pi tur sonu compaction (reason=%s) → tur kapatıldı, "
+                                        "sıkıştırma ARKA PLANDA", reason,
+                                    )
+                                    self._client.defer_settle()
+                                    deferred_here = True
+                                    break
+                                # Kullanıcı bu turda cevabın bir kısmını DUYDUYSA (got_delta)
+                                # sıkıştırma onun için görünmez (cevap bitti, tur sonu işi) →
+                                # SUSMAK doğru. Hiç duymadıysa cevabını bekliyor demektir →
+                                # sessiz bırakma. Bekleyen soğuk-yükleme ara sözünü de iptal
+                                # et: iki ara söz üst üste söylenmesin.
+                                logger.info(
+                                    "pi compaction başladı (reason=%s got_delta=%s) → %s",
+                                    reason, got_delta,
+                                    "sessiz (cevap zaten akmıştı)" if got_delta else "ara söz",
+                                )
+                                if not got_delta:
+                                    notice_at = None
+                                    _emit(PI_COMPACTION_NOTICE_TEXT)
+                            elif etype == "compaction_end":
+                                compacting = False
+                                logger.info(
+                                    "pi compaction bitti (aborted=%s willRetry=%s)",
+                                    obj.get("aborted"), obj.get("willRetry"),
+                                )
+                            elif etype == "agent_settled":
+                                break
+                        # ── Bu deneme bitti: yeniden gönderim gerekli mi? ──────────
+                        # ŞARTLAR (hepsi): (1) tur arka plan compaction'ına devredildi,
+                        # (2) daha önce yeniden göndermedik, (3) kullanıcı bu turda
+                        # MODELDEN tek kelime duymadı (ne delta ne tam-content).
+                        # Üçü birden değilse döngü BURADA biter — yani başarılı turlar,
+                        # stall/error turları ve cevabın aktığı compaction turları
+                        # bugünkü yolun BİRE BİR aynısını izler.
+                        if not (deferred_here and not resent and not got_delta
+                                and not _assistant_msg_text(final_msg)):
                             break
+                        resent = True
+                        logger.warning(
+                            "pi turu compaction devriyle METİNSİZ kapandı → sıkıştırma "
+                            "bitince kullanıcının sorusu YENİDEN gönderiliyor (tek sefer)"
+                        )
+                        # Sıkıştırma bitene kadar bekle (uzarsa tek kısa ara söz).
+                        # Bekleme best-effort: tolerans aşılırsa koşu zorla kapatılır
+                        # ve prompt yine gönderilir (bkz. _wait_deferred).
+                        await self._wait_deferred(_emit)
+                        # Bekleme ara sözü ("aklımı toparlıyorum") CEVAP DEĞİLDİR:
+                        # işareti buradan alırız ki ikinci deneme de sessiz kalırsa
+                        # emniyet ağı yine devreye girsin.
+                        resend_mark = said_count[0]
+                        # Deneme-başı durumu sıfırla; `got_delta` zaten False, `aborted`
+                        # ve `ledger`/`model_said` TUR geneli olduğu için korunur.
+                        final_msg = None
+                        turn_ended = False
+                        stalled = False
                     # Fallback: hiç delta gelmediyse ama tam-content varsa onu stream et.
                     if not got_delta:
                         full = _assistant_msg_text(final_msg)
@@ -2290,7 +2373,7 @@ if _HAS_LIVEKIT:
                                     "pi boş yanıt (error): %s",
                                     final_msg.get("errorMessage") or "(bilinmiyor)",
                                 )
-                            _emit("Bir saniye, tekrar dener misin?")
+                            _emit(PI_EMPTY_TURN_TEXT)
                         elif final_msg is not None and final_msg.get("stopReason") == "error":
                             logger.warning(
                                 "pi boş yanıt (error): %s",
@@ -2320,12 +2403,17 @@ if _HAS_LIVEKIT:
                     # return etti). Tek kelime bile söylemeden bitmek = kullanıcı için
                     # "cevapsız kaldım" demektir; canlıda tam bunu yaşadık (bayat
                     # `agent_settled` turu anında kapatıyordu).
-                    if not spoke[0] and not enroll_turn:
+                    # Yeniden gönderim yapıldıysa ek koşul: o andan SONRA hiçbir şey
+                    # söylenmediyse ağ YİNE devreye girer. Bekleme ara sözü tek başına
+                    # "konuştuk" saymaz — kullanıcının sorusu hâlâ cevapsızdır.
+                    silent_after_resend = resent and said_count[0] == resend_mark
+                    if (not spoke[0] or silent_after_resend) and not enroll_turn:
                         logger.warning(
                             "pi turu METİNSİZ bitti → yedek cümle "
-                            "(got_delta=%s stalled=%s)", got_delta, stalled,
+                            "(got_delta=%s stalled=%s resent=%s)",
+                            got_delta, stalled, resent,
                         )
-                        _emit("Bir saniye, tekrar dener misin?")
+                        _emit(PI_EMPTY_TURN_TEXT)
                     # Stall'da pi hâlâ arka planda çalışıyor olabilir → abort ile durdur.
                     if stalled:
                         self._client._write({"type": "abort"})
@@ -3576,12 +3664,28 @@ if _HAS_LIVEKIT:
 
         def request_mode(self, mode: str) -> None:
             """Dev tool sinyalini kaydet ("dev" | "normal"). Event akışından (PiStream)
-            çağrılır; swap BİR SONRAKİ tur başında _current_client'ta uygulanır. Idempotent."""
+            çağrılır; swap BİR SONRAKİ tur başında _current_client'ta uygulanır. Idempotent.
+
+            YÖN DENETİMİ: mevcut modun KENDİ yönüne giden çağrı (dev'deyken
+            enter_dev_mode, normal'dayken exit_dev_mode) mod DEĞİŞTİRMEZ — no-op'tur.
+            Aynı turda önce yanlış yön istenip sonra doğrusu gelirse bekleyen istek de
+            İPTAL edilir; yoksa "zaten bu moddayım" cevabının ardından sessizce mod
+            değişirdi."""
             if not DEV_MODE_ENABLED:
                 return
             if mode not in ("dev", "normal"):
                 return
-            if mode != self._mode:
+            if mode == self._mode:
+                if self._pending_mode is not None:
+                    logger.info(
+                        "mod isteği İPTAL: zaten %s modundayız (bekleyen=%s)",
+                        mode, self._pending_mode,
+                    )
+                    self._pending_mode = None
+                else:
+                    logger.info("mod isteği yok sayıldı: zaten %s modundayız", mode)
+                return
+            if mode != self._pending_mode:
                 self._pending_mode = mode
                 logger.info("mod isteği alındı: %s (aktif=%s)", mode, self._mode)
 
