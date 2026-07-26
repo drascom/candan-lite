@@ -65,9 +65,10 @@ def _b(name: str, default: bool) -> bool:
 class SpeakerState:
     """Turn-scoped speaker identity state.
 
-    `current` is cleared at VAD speech start and is set only by `resolve_turn()`.
-    Continuous tap observations outside the active turn can never become evidence
-    for a later transcript. This prevents the previous sticky identity from being
+    `current` is cleared when a turn opens (first VAD speech start after the
+    previous turn was resolved) and is set only by `resolve_turn()`. Continuous
+    tap observations outside the active turn can never become evidence for a
+    later transcript. This prevents the previous sticky identity from being
     injected into a new user's prompt.
     """
 
@@ -157,7 +158,29 @@ class SpeakerState:
         self._expression_chunks, self._expression_embeddings = [], []
 
     def begin_turn(self, now: float | None = None) -> None:
-        """Open a new evidence window and invalidate every previous identity."""
+        """Open a new evidence window and invalidate every previous identity.
+
+        KRİTİK (canlı ölçüm 26 Tem): bu metod LiveKit `user_state_changed ->
+        speaking` olayına bağlı, yani VAD'in KONUŞMA BAŞLANGICI'na. Tek bir
+        kullanıcı dönüşü (tek final transkript) içinde VAD birden çok kez
+        speaking↔listening yapar — Türkçe'de cümle içi doğal duraklar 0.55 sn'lik
+        VAD sessizlik eşiğini kolayca aşıyor. Eskiden her yeni `speaking`
+        tamponu SIFIRLIYORDU: dönüşün ilk 4-6 iyi penceresi çöpe gidiyor, karar
+        yalnız SON konuşma parçasından veriliyordu. Son parça çoğu kez ilk
+        pencerenin oluşması için gereken süreden kısa → `kabul=0/0`.
+        (Canlı kanıt: 20:57:11-14 arası 4 pencerede Ayhan tanındı, 20:57:14'teki
+        karar yine de `kabul=0/0` çıktı.)
+
+        Bu yüzden dönüş sınırı artık VAD parçası DEĞİL, dönüşün kendisi:
+        yeni dönüş yalnız `resolve_turn()` sonrası ilk `speaking` ile açılır.
+        Aktif dönüş içindeki tekrar tetiklemeler NO-OP'tur — kanıt birikmeye
+        devam eder. Güvenlik kuralı bozulmaz: önceki dönüşün kimliği hâlâ
+        taşınmaz (`resolve_turn` dönüşü kapatır) ve aynı dönüşte iki farklı
+        kişi görünürse karar yine `Bilinmeyen` olur — hatta artık dönüşün
+        TAMAMI görüldüğü için çelişki DAHA iyi yakalanır.
+        """
+        if self._turn_active:
+            return
         self._turn_generation += 1
         self._turn_active = True
         self._turn_started_at = time.monotonic() if now is None else float(now)
@@ -219,6 +242,7 @@ class SpeakerState:
                     len(best_run) == 1
                     and only_name == self._last_confirmed_name
                     and 0.0 <= elapsed <= self.continuity_seconds
+                    and finished_at - best_run[0][0] <= self.turn_max_seconds
                 ):
                     decision_name = only_name
                     decision_score = best_run[0][2]
@@ -227,6 +251,12 @@ class SpeakerState:
                     reason = f"yetersiz ardışık onay ({len(best_run)}/{self.turn_confirm_hits})"
             elif best_run[-1][0] - best_run[0][0] > self.turn_max_seconds:
                 reason = "onay pencereleri zaman sınırını aştı"
+            elif finished_at - best_run[-1][0] > self.turn_max_seconds:
+                # Dönüş artık VAD parçasına göre değil final transkripte göre
+                # kapanıyor; teorik olarak açık kalmış çok uzun bir dönüşte kanıt
+                # bayatlayabilir. Onay grubunun SON penceresi transkript anına bu
+                # kadar yakın olmalı — "güncel pencere" sözü ölçülebilir kalsın.
+                reason = "onay penceresi transkript anına göre bayat"
             else:
                 decision_name = only_name
                 decision_score = min(item[2] for item in best_run)
@@ -282,8 +312,9 @@ class SpeakerTap:
         self._min_seconds = max(0.5, min_seconds)
         # Embedding modelleri tek kelimelik 1 sn pencerelerde kararsız kalabiliyor.
         # Her `min_seconds`'ta bir, güncel dönüşe ait son 1.5 sn'i değerlendiririz.
-        # Böylece yaklaşık 2.5–3 sn'lik doğal bir cümlede iki ayrı kanıt penceresi
-        # oluşur; tek kısa söz hâlâ tek pencereyle kimlik alamaz.
+        # İlk pencere `min_seconds`'ta çıkar (bkz. `_consume`), sonrakiler kayan
+        # 1.5 sn'dir → ~2 sn'lik doğal bir cümlede iki ayrı kanıt penceresi oluşur;
+        # tek kısa söz hâlâ tek pencereyle kimlik alamaz.
         self._window_seconds = max(
             self._min_seconds,
             _f("SPEAKER_WINDOW_SECONDS", 1.5),
@@ -373,6 +404,14 @@ class SpeakerTap:
         )
         hop_bytes = int(self._min_seconds * TAP_RATE) * 2  # bayt (s16le mono)
         window_bytes = int(self._window_seconds * TAP_RATE) * 2
+        # İLK pencere `min_seconds` dolar dolmaz üretilir; `window_seconds` (1.5 sn)
+        # dolmasını beklemek dönüş başına GECİKME demekti: ilk kanıt 1.5 sn'de,
+        # ikincisi 2.5 sn'de çıkıyordu → 2 onay için 2.5 sn konuşma gerekiyordu.
+        # Artık kanıtlar 1.0 / 2.0 / 3.0 sn'de çıkar (2 onay = 2.0 sn). Pencere
+        # İÇERİĞİ yine kayan 1.5 sn'ye kadar büyür; yalnız ilk pencere
+        # `min_seconds` uzunluğundadır — bu zaten yapılandırmadaki "en kısa kabul
+        # edilebilir gömme süresi". Eşik/marj ve iki-onay kuralı aynen geçerli.
+        first_bytes = min(window_bytes, hop_bytes)
         buf = bytearray()
         bytes_since_window = 0
         seen_turn_generation = self._state.turn_generation
@@ -395,7 +434,7 @@ class SpeakerTap:
                 if len(buf) > window_bytes:
                     del buf[:-window_bytes]
                 bytes_since_window += len(payload)
-                if len(buf) < window_bytes or bytes_since_window < hop_bytes:
+                if len(buf) < first_bytes or bytes_since_window < hop_bytes:
                     continue
                 chunk = bytes(buf)  # kayan pencere: her ~min_seconds bir örnek
                 bytes_since_window = 0
