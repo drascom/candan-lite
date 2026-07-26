@@ -1,4 +1,8 @@
 livekit-agents[silero]~=1.0   # LLM = pi CLI (worker/pi_brain.py); openai plugin gerekmez
+# Semantik tur-sonu (EOU). SABİT sürüm BİLEREK: her 1.6.x plugin'i `livekit-agents>=aynı
+# sürüm` ister → `~=1.6` deseydik pip sunucudaki livekit-agents'ı da yükseltirdi.
+# Ağırlıklar pip'le GELMEZ: `python -m livekit.agents download-files` (~460 MB, HF cache).
+livekit-plugins-turn-detector==1.6.5
 livekit~=1.0       # rtc SDK — cli_client.py odaya KATILIR (agents değil, ham istemci)
 livekit-api~=1.0   # cli_client.py: token üretimi + agent dispatch (web/api/token yerine)
 python-dotenv

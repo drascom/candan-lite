@@ -15,6 +15,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
 from livekit.plugins import silero
+# Semantik tur-sonu (EOU) modeli. NOT: bu paketi import etmek `livekit.plugins.
+# turn_detector.__init__`'i çalıştırır → hem `en` hem `multilingual` runner'ı
+# inference sürecine KAYDEDER. Yani sunucuda İKİ revizyonun da indirilmiş olması
+# gerekir (`python -m livekit.agents download-files` ikisini de çeker).
+from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
@@ -245,6 +250,37 @@ async def entrypoint(ctx: JobContext):
     ctx.add_shutdown_callback(_finalize_memory)
 
     tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
+
+    # ── SEMANTİK TUR-SONU (EOU) — cümle ortasındaki nefes turu BÖLMESİN ──────────
+    # `turn_detection` verilmezse framework VARSAYILANI `inference.TurnDetector()`
+    # yani LiveKit CLOUD audio-EOT'sidir (agent_session.py:415). Bizim self-hosted
+    # kurulumumuzda o uca yetki yok → her turda `401 Unauthorized` → framework zayıf
+    # yerel "mini" modele düşüyordu. Canlı sonuç (26 Tem): "...heceleri birleştire-
+    # ceksin ra on" turu kapandı, kalan "Speech Chat 9B" 4 sn sonra AYRI tur oldu.
+    # Artık YEREL çok dilli EOU modelini AÇIKÇA bağlıyoruz; cloud'a hiç gidilmez.
+    #
+    # GPU'YA YÜK BİNMEZ (kart 22/24 GB dolu): model ayrı inference sürecinde,
+    # onnxruntime `providers=["CPUExecutionProvider"]` ile SABİT CPU'da koşar
+    # (livekit/plugins/turn_detector/base.py). <500 MB RAM, tur başına ~10-20 ms.
+    #
+    # Ağırlıklar HF cache'inden YEREL okunur (`local_files_only=True`); indirilmemişse
+    # ctor RuntimeError atar. O durumda oturumu ÖLDÜRMEK yerine eski (VAD tabanlı)
+    # davranışa düşüyoruz — worker ayakta kalsın, log uyarsın.
+    # İndirme: `python -m livekit.agents download-files`
+    #
+    # YAN ETKİ (bilerek, elle DOKUNULMADI): endpointing varsayılanları
+    # `_STREAMING_ENDPOINTING_DEFAULTS` (min 0.3 / max 2.5) yerine
+    # `_ENDPOINTING_DEFAULTS` (min 0.5 / max 3.0) olur — bu detektör tipi için
+    # framework'ün kendi tuned değeri (voice/turn.py:298 `_resolve_endpointing`).
+    try:
+        turn_detection = MultilingualModel()
+    except Exception:  # noqa: BLE001 — model yoksa oturum yine de AÇILSIN
+        logging.getLogger("worker.agent").warning(
+            "EOU turn-detector yüklenemedi → VAD tabanlı tur tespitine düşülüyor. "
+            "Model indir: python -m livekit.agents download-files", exc_info=True
+        )
+        turn_detection = None
+
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
@@ -252,7 +288,9 @@ async def entrypoint(ctx: JobContext):
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
         llm=brain,
         tts=tts_plugin,
-        # turn_detection: framework multilingual model (Faz 3) — şimdilik VAD tabanlı
+        # `turn_detection=` 1.6.6'da deprecated (yerine turn_handling=...) AMA sunucudaki
+        # 1.6.5 ile de çalışan TEK ortak imza bu — sürümler eşitlenene kadar burada kalsın.
+        turn_detection=turn_detection,
     )
 
     # NOT: close_on_disconnect DEFAULT (True) bırakıldı — bilerek. False denendi ve GERİ ALINDI:
