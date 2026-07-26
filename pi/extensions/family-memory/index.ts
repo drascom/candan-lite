@@ -7,7 +7,9 @@
  *  - reminder_add/list/cancel      : TIMED events (NOT markdown → memory/events.db)
  *  - memory_consolidate            : shrink injected context files (profile/family) ≤ 2KB
  *
- * Identity: process.env.MEM_USER (the worker passes it on every spawn). Empty → guest → no memory.
+ * Identity: see identity.ts. Classic mode → process.env.MEM_USER (one pi process per person).
+ * Shared-room mode → MEM_TURN_FILE, rewritten by the worker on EVERY turn (one warm process,
+ * many speakers). Empty → guest → no memory. The model can never influence either source.
  * Role: memory/policy.json  { "<user>": "adult" | "child" }. Missing/unreadable → guest.
  * Scopes: adult → own private + family + projects
  *         child → own private + family
@@ -39,6 +41,7 @@ import {
 	openEvents,
 	resolveDue,
 } from "./events.ts";
+import { memUser, perTurnIdentity } from "./identity.ts";
 
 type Role = "adult" | "child" | "guest";
 
@@ -58,9 +61,9 @@ function today(): string {
 
 // memDir (MEM_DIR override) comes from events.ts — single source, no copy.
 
-function memUser(): string {
-	return (process.env.MEM_USER || "").trim();
-}
+// memUser() comes from identity.ts — single source for BOTH modes (env / per-turn file).
+// The role gate below is unchanged and still applies on top of it: an identity that is
+// missing from policy.json (or marked "guest") gets nothing, whichever mode we are in.
 
 function role(cwd: string, user: string): Role {
 	if (!user) return "guest";
@@ -752,7 +755,11 @@ export default function memExtension(pi: ExtensionAPI) {
 
 	// ── System note (kept SHORT; does not clash with the worker's boot injection) ──
 	pi.on("before_agent_start", async (event) => {
-		if (!memUser()) return undefined; // guest → no note
+		// Shared room: identity is resolved PER TURN, so at boot it is legitimately empty.
+		// Skipping the note there left the model with no memory instruction at all — it
+		// then never called memory_add. The note is generic text (no personal data), so
+		// adding it is not a leak; the tools still enforce the identity/role gate.
+		if (!memUser() && !perTurnIdentity()) return undefined; // guest → no note
 		return { systemPrompt: event.systemPrompt + MEMORY_NOTE };
 	});
 }

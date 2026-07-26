@@ -153,6 +153,15 @@ PI_COMPACTION_NOTICE_DELAY = float(
 )
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
+# Ortak oda modunda hafıza kimliği TUR BAŞINA çözülür (bkz. write_turn_user). Süreç
+# env'indeki MEM_USER tek kişiye sabitlenemez: tek sıcak pi süreci var ve session_id
+# "candan" (policy'de yok) → kimlik env'den okunursa herkes guest olur. Worker her tur
+# doğrulanmış kimliği bu dosyaya ATOMİK yazar; extension tool çağrısında oradan okur.
+# TTL: worker ölüp dosya geride kalırsa bayat kimlik kanıt SAYILMAZ (fail-closed).
+MEM_TURN_TTL = float(os.environ.get("MEM_TURN_TTL", "300") or 300)
+# Dosyanın dizini (varsayılan: hafıza kökü — last_speaker.json ile aynı yer). Broker ve
+# worker AYNI değeri görmeli; ikisi de worker/.env yükler.
+MEM_TURN_DIR = os.environ.get("MEM_TURN_DIR", "").strip()
 
 
 def _envflag(name: str, default: bool) -> bool:
@@ -1053,13 +1062,24 @@ def pi_mem_env(session_id: str, dev: bool = False, mem_user: Optional[str] = Non
     ve broker (pi_broker.PiProcess) aynı sözleşmeyi kullanır.
 
     Normal: {"MEM_USER": <tanınan kullanıcı|''>} — bugünkü davranış birebir.
+    Ortak oda (PI_SHARED_ROOM_MODE): ayrıca MEM_TURN_FILE — kimlik SÜREÇ değil TUR
+    ömürlüdür (bkz. write_turn_user). MEM_USER yine gönderilir ama ortak odada zaten
+    '' olur; extension dosya varken env'e BAKMAZ.
     Dev: ayrıca MEM_DIR = dev kökü (extension'ın TÜM dünyası) + EVENTS_DB. Olay
     kuyruğu bilinçli olarak PAYLAŞILIR: hatırlatmaları worker normal events.db'den
     okuyup seslendiriyor; dev kökündeki ayrı bir db'ye yazsaydık dev'de kurulan
-    hatırlatma hiç ÇALMAZDI (sessiz hata). events.db aranabilir hafıza DEĞİLDİR."""
+    hatırlatma hiç ÇALMAZDI (sessiz hata). events.db aranabilir hafıza DEĞİLDİR.
+    Dev'e MEM_TURN_FILE VERİLMEZ: dev kimliği süreç ömürlüdür (_dev_mem_user kapısı),
+    dünkü dev izolasyonu birebir korunur."""
     user = _mem_user(session_id) if mem_user is None else (mem_user or "")
     if not dev:
-        return {"MEM_USER": user}
+        if not PI_SHARED_ROOM_MODE:
+            return {"MEM_USER": user}
+        return {
+            "MEM_USER": user,
+            "MEM_TURN_FILE": str(_turn_user_path(session_id)),
+            "MEM_TURN_TTL": str(MEM_TURN_TTL),
+        }
     return {
         "MEM_USER": user,
         "MEM_DIR": str(_mem_root(dev=True)),
@@ -1228,6 +1248,58 @@ def write_last_speaker(slug: str) -> None:
             raise
     except Exception:  # noqa: BLE001 — ipucu yazılamazsa davranış bugünküyle AYNI
         logger.debug("last_speaker yazılamadı", exc_info=True)
+
+
+# ── Tur başına hafıza kimliği (ortak oda) ────────────────────────────────────
+# SORUN: ortak oda modunda tek pi süreci var ve onun session_id'si "candan"
+# (policy.json'da YOK). Extension kimliği süreç env'inden (MEM_USER) okuduğu için
+# TANINAN Ayhan bile guest sayılıyordu → "şunu not et" sessizce düşüyordu.
+# ÇÖZÜM: kimlik süreç ömürlü değil TUR ömürlü. Worker her turda konuşmacı kararını
+# (speaker_tap.resolve_turn → SpeakerState.current → _mem_user rol kapısı) bu küçük
+# dosyaya yazar; extension tool çağrısında oradan okur.
+# NEDEN dosya: worker (Python) ile pi (Node) AYRI süreçler; aralarındaki tek sözleşme
+# zaten paylaşılan dosyalardır (bkz. events.db). Prompt'a yazmak GÜVENSİZ olurdu —
+# metni model görür ve "ben Ayhan'ım" diyen biri kimlik uydurabilirdi.
+def _turn_user_path(session_id: str) -> Path:
+    """Bu pi oturumunun tur-kimliği dosyası. Session başına AYRI dosya: iki oturum
+    (ör. dev + normal, ya da iki oda) birbirinin kimliğini asla görmez."""
+    slug = _slug(session_id) or "default"
+    base = Path(MEM_TURN_DIR) if MEM_TURN_DIR else (REPO_ROOT / MEMORY_DIR)
+    return base / f".turn-user-{slug}.json"
+
+
+def write_turn_user(session_id: str, user: str) -> None:
+    """Turun DOĞRULANMIŞ hafıza kimliğini ATOMİK yaz ('' = kimlik yok = guest).
+
+    FAIL-CLOSED: yazım başarısızsa dosya SİLİNİR — bayat bir kimlik yeni turda
+    kanıt sayılmasın (docs/TURN-SAFE-SPEAKER-IDENTITY.md). Dosya yoksa extension
+    da guest'e düşer, yani en kötü durum "hafıza yok", "yanlış kişi" DEĞİL."""
+    import tempfile
+
+    path = _turn_user_path(session_id)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".turn-user-", suffix=".json")
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump({"user": user or "", "at": time.time()}, f, ensure_ascii=False)
+                f.write("\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+    except Exception:  # noqa: BLE001 — konuşmayı BOZMAZ; kimlik düşer, hafıza kapanır
+        logger.warning("tur kimliği yazılamadı (%s) → guest'e düşülüyor", path, exc_info=True)
+        try:
+            path.unlink()
+        except OSError:
+            pass
 
 
 def _build_pi_args(
@@ -1876,6 +1948,10 @@ if _HAS_LIVEKIT:
             # Tur başında güncel konuşmacıyı çöz; kişi değiştiyse warm süreci swap et.
             self._client = await self._brain._current_client()
             await self._client.start()
+            # Ortak oda: bu turun hafıza kimliğini pi'ya duyur (tool'lar bunu okur).
+            # Mod geçişinden SONRA, prompt'tan ÖNCE — ve turun geri kalanı scripted
+            # yolla erken dönse bile kimlik yine tazelenmiş olur (bayat kimlik yok).
+            self._brain._publish_turn_user()
             text = _last_user_text(self._chat_ctx)
             if not text:
                 return
@@ -2443,6 +2519,25 @@ if _HAS_LIVEKIT:
             if PI_SHARED_ROOM_MODE and self._speaker_state is not None:
                 return _mem_user(_slug(getattr(self._speaker_state, "current", None) or ""))
             return _mem_user(self._session_id)
+
+        def _publish_turn_user(self) -> str:
+            """Ortak oda: bu turun hafıza kimliğini pi'nın okuyacağı dosyaya yaz.
+
+            HER turda çağrılır (scripted turlar dahil) → kimlik ASLA bir önceki turdan
+            taşınmaz. Kaynak `current_user()`: ses tanıma kararı (resolve_turn) + policy
+            rol kapısı. Tanınmayan/guest → '' yazılır = hafıza kapalı.
+            Klasik modda (kişi başına ayrı pi süreci) HİÇBİR ŞEY yapmaz: orada kimlik
+            zaten süreç env'inde (MEM_USER) doğrudur. Dev modunda da yazmaz, '' basar:
+            dev sürecinin kimliği kendi kapısından (_dev_mem_user) gelir."""
+            if not PI_SHARED_ROOM_MODE:
+                return ""
+            if self._mode != "normal":
+                normal = self._saved_normal or (self._default_persona, self._default_persona)
+                write_turn_user(normal[1], "")
+                return ""
+            user = self.current_user()
+            write_turn_user(self._session_id, user)
+            return user
 
         def display_name(self, user: str = "") -> str:
             """Sesli seslenmede kullanılacak ad ('ayhan' → 'Ayhan')."""
@@ -3319,14 +3414,20 @@ if _HAS_LIVEKIT:
                     continue
                 if raw:
                     parts.append(f"{title}:\n{raw[:MEM_CONTEXT_LIMIT]}")
-            if not parts:
-                return ""
-            return (
-                f"(Sistem — {name} için yalnız bu turda kullanılacak hafıza bağlamı. "
-                "Bu bilgileri başka konuşmacılara ifşa etme; belirsiz bilgiyi kesinmiş gibi sunma.\n"
-                + "\n\n".join(parts)
-                + ")"
+            # Kimlik satırı dosyalar BOŞ olsa da verilir: ortak odada boot'ta hiçbir
+            # hafıza bağlamı enjekte edilmiyor, model "hafızam yok" sanıp memory_add'i
+            # hiç çağırmıyordu. Kimlik burada BİLDİRİLİR, tool tarafında ayrıca
+            # doğrulanır (MEM_TURN_FILE) — model bu satırı değiştirerek kimlik uyduramaz.
+            head = (
+                f"(Sistem — bu turda hafıza kimliği: {user}. memory_add / memory_search / "
+                f"soul_add / reminder_* yalnız {user} adına çalışır; kalıcı bir şey "
+                f"istenirse GERÇEKTEN memory_add'i çağır. Aşağısı {name} için yalnız bu "
+                "turda geçerli hafıza bağlamıdır. Başka konuşmacılara ifşa etme; belirsiz "
+                "bilgiyi kesinmiş gibi sunma."
             )
+            if not parts:
+                return head + ")"
+            return head + "\n" + "\n\n".join(parts) + ")"
 
         def _identity_line(self, text: str) -> Optional[str]:
             """Deterministic identity truth; model never adjudicates voice identity."""
