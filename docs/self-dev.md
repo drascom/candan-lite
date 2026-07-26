@@ -14,7 +14,9 @@ alt-süreci çalıştırır. Geliştirme modu bu alt-süreci **swap** eder:
 |---|---|---|
 | Model | Gemma (yerel) | GPT-5.6 (`openai-codex/gpt-5.6-terra`, uzak) |
 | Kod tool'ları (read/bash/edit/write/grep/find/ls) | KAPALI | AÇIK |
-| family-memory (hafıza tool'ları) | AÇIK | KAPALI |
+| family-memory (hafıza tool'ları) | AÇIK | AÇIK — ama **kendi kökünde** (kimlik kapısı açıksa) |
+| Hafıza kökü (`MEM_DIR`) | `memory/` | `memory/personas/dev/` |
+| Hafıza kimliği (`MEM_USER`) | tanınan kişi (`ayhan`) | sabit `dev` (yalnız ev sahibi açar) |
 | Çalışma dizini | repo kökü | izole worktree (`../candan-lite-selfdev`, `self-dev` branch) |
 | session-id | kişiye özel | ayrı (`self-dev`) |
 | persona | `candan` (vb.) | `dev` (`pi/personas/dev.md`) |
@@ -47,9 +49,20 @@ sonraki tur başında, `_current_client`) uygulanır. Böylece komutu söyleyen 
   (`scripts/self-dev.sh merge`, "onayla" yazmadan geçmez).
 - **Kapsam.** Dev persona'sı yalnızca `pi/` altını değiştirmesini söyler; merge
   helper'ı `pi/` dışına çıkan dosyaları ayrıca uyarır.
-- **Hafıza karışmaz.** Dev modunda family-memory yüklenmez ve kişisel hafıza
-  bağlama enjekte edilmez → dev sohbeti asistanın hafızasına ne yazar ne okur; ayrı
-  session-id ile normal sohbete de karışmaz.
+- **Hafıza karışmaz.** Dev, Candan'ın bir modu değil **ayrı bir kişilik**tir: kendi
+  hafıza kökü (`memory/personas/dev/`) ve kendi ruh dosyası vardır. Kök ayrı
+  olduğu için izolasyon **yol düzeyinde** garantidir — dev sohbeti Candan'ın
+  `soul.md` / `family.md` / `users/<kişi>/` dosyalarını ne **bağlamına alır** ne de
+  oraya **yazabilir** (extension yalnız `MEM_DIR`'i görür); tersi de doğru: normal
+  sohbet dev alanını görmez. Ayrı session-id ile sohbet geçmişi de karışmaz.
+- **Dev hafızasına yazma kimliğe bağlı.** `MEM_USER=dev` yalnızca konuşmacı ses
+  tanımayla **doğrulanmış**, normal `policy.json`'da `adult` ve (varsayılan)
+  `DEV_MEM_OWNER=ayhan` ise açılır. Tanınmayan biri dev moda geçerse hafıza
+  **kapalıdır** (bugünkü davranış): "dev" ile "guest" ayrı şeylerdir.
+- **Dev kimliğinin rolü `child`.** Dev alanının kendi `policy.json`'ında
+  `{"dev": "child"}` girdisi otomatik açılır → dev yalnız kendi private notlarına
+  (`users/dev/notes/`) ve kendi `soul.md`'sine yazar; `scope: family` (ortak ruh)
+  ve `project:` scope'una **yazamaz**. Normal `memory/policy.json`'a hiç dokunulmaz.
 
 ## Worktree + merge helper
 
@@ -82,11 +95,20 @@ worktree'yi ya da branch'i **asla sıfırlamaz** (önceki dev işi korunur).
 | `DEV_WORKTREE` | `../candan-lite-selfdev` | İzole çalışma dizini |
 | `DEV_BRANCH` | `self-dev` | İzole branch |
 | `DEV_TOOLS_ALLOWLIST` | (boş) | Boş = tüm native tool'lar açık; liste verirsen `exit_dev_mode`'u da ekle |
+| `DEV_MEM_SUBDIR` | `personas/dev` | Dev hafıza kökü (`memory/` altında) |
+| `DEV_MEM_USER` | `dev` | Dev alanındaki kimlik = `users/<ad>/` |
+| `DEV_MEM_ROLE` | `child` | Dev kimliğinin rolü (ortak ruh + project scope kapalı) |
+| `DEV_MEM_OWNER` | `ayhan` | Dev hafızasını açabilen kişi; boş = herhangi bir doğrulanmış `adult` |
 
 ## Dokunulan dosyalar
 
-- `worker/pi_brain.py` — dev config, `_build_pi_args(dev=…)`, `PiRpcClient(cwd,dev)`,
-  `PiBrain` mod-swap (`_switch_mode`/`request_mode`/`_detect_mode_signal`), worktree helper.
+- `worker/pi_brain.py` — dev config, `_build_pi_args(dev=…, mem_user=…)`,
+  `PiRpcClient(cwd,dev,mem_user)`, `PiBrain` mod-swap (`_switch_mode`/`request_mode`/
+  `_detect_mode_signal`), worktree helper, dev hafıza kökü (`_mem_root`/`_dev_mem_user`/
+  `_ensure_dev_mem_root`/`pi_mem_env`).
+- `worker/pi_broker.py` — `BrokerKey.mem_user` (hafızası açık/kapalı dev süreçleri
+  paylaşılmaz) + alt-sürecin hafıza ortamı `pi_mem_env` ile kurulur.
+- `worker/tests/test_dev_memory.py` — kimlik kapısı + iki yönlü izolasyon testleri.
 - `pi/extensions/mode-switch/index.ts` (+ `tsconfig.json`) — enter/exit tool'ları.
 - `pi/personas/dev.md` — dev persona (kapsam: yalnız `pi/`).
 - `scripts/self-dev.sh` — worktree + onaylı merge helper.

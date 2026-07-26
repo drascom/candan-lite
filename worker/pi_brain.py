@@ -248,8 +248,9 @@ PI_ISOLATED = _envflag("PI_ISOLATED", True)
 
 # ── SESLE GELİŞTİRME MODU (self-development, Faz 0) ───────────────────────────
 # Kullanıcı sesle "geliştirme moduna geç" deyince worker pi alt-sürecini SWAP eder:
-# normal beyin (Gemma, kod tool'ları KAPALI, family-memory AÇIK) → dev beyin (GPT-5.6,
-# kod tool'ları AÇIK, family-memory KAPALI, izole git worktree, AYRI session-id).
+# normal beyin (Gemma, kod tool'ları KAPALI, memory/ kökü) → dev beyin (GPT-5.6,
+# kod tool'ları AÇIK, AYRI hafıza kökü memory/personas/dev/, izole git worktree,
+# AYRI session-id).
 # "Normal moda dön" → geri swap. Tetikleyici = native pi tool'u (enter_dev_mode/
 # exit_dev_mode, pi/extensions/mode-switch): tool çağrısı worker'ın event akışından
 # yakalanır → swap. DEV_MODE_ENABLED=false → tüm mekanizma kapalı, davranış bugünküyle
@@ -270,6 +271,28 @@ DEV_BRANCH = os.environ.get("DEV_BRANCH", "self-dev")
 # native kod tool'ları (read/bash/edit/write/grep/find/ls) + mode-switch (exit_dev_mode)
 # açık. Kısıtlamak istersen virgüllü liste ver (o zaman exit_dev_mode'u da EKLE).
 DEV_TOOLS_ALLOWLIST = os.environ.get("DEV_TOOLS_ALLOWLIST", "")
+# ── Dev personasının KENDİ hafızası ───────────────────────────────────────────
+# Dev, Candan'ın bir "modu" değil AYRI BİR ASİSTAN KİŞİLİĞİ: kendi notları, kendi
+# ruh dosyası. Bu yüzden AYRI BİR HAFIZA KÖKÜ alır (memory/personas/dev/) — içi
+# normal kökle AYNI şemadadır (policy.json, users/<u>/{profile.md,soul.md,notes/},
+# family.md, projects/, .index/). Kök ayrı olduğu için izolasyon YOL DÜZEYİNDE
+# garanti: dev sohbeti normal profil/aile dosyalarını bağlamına ALAMAZ ve
+# memory_add/soul_add ile oraya YAZAMAZ (extension yalnız MEM_DIR'i görür).
+# Böylece 2026-07 tasarım kararı ("dev sohbeti asistanın hafızasına karışmaz")
+# aynen korunur; değişen tek şey dev'in artık KENDİ alanına yazabilmesi.
+DEV_MEM_SUBDIR = os.environ.get("DEV_MEM_SUBDIR", "personas/dev")
+# Dev alanındaki tek kimlik (evde dev yapan tek kişi var → kullanıcı-başı dev
+# matrisi KURULMAZ). policy anahtarı == MEM_USER == <dev kök>/users/<user>/.
+DEV_MEM_USER = os.environ.get("DEV_MEM_USER", "dev")
+# Dev alanındaki rol. 'child' BİLİNÇLİ: ortak ruha (scope 'family') ve project
+# scope'una YAZAMAZ — yalnız kendi private notları + kendi soul.md'si. Dev kökü
+# zaten ayrı olduğu için normal/aile tarafına erişimi hiçbir rolde yoktur; bu
+# seçim dev alanının İÇİNDE de en dar yetkiyi verir.
+DEV_MEM_ROLE = os.environ.get("DEV_MEM_ROLE", "child")
+# Dev hafızasına yazma hakkı KİMLİĞE bağlı: konuşmacı ses tanımayla doğrulanmış
+# VE policy.json'da 'adult' OLMALI, ayrıca bu slug'a eşit olmalı (ev sahibi).
+# Boş bırakılırsa herhangi bir doğrulanmış adult dev hafızasını açar.
+DEV_MEM_OWNER = os.environ.get("DEV_MEM_OWNER", "ayhan")
 
 
 def _ensure_dev_worktree() -> Path:
@@ -895,15 +918,16 @@ class WakeGate:
         return ("silent", None)
 
 
-def _policy_path() -> Path:
-    """memory/policy.json (MEMORY_DIR mutlak yol ise o kullanılır — test izolasyonu)."""
-    return REPO_ROOT / MEMORY_DIR / "policy.json"
+def _policy_path(root: Optional[Path] = None) -> Path:
+    """<kök>/policy.json. root=None → normal hafıza kökü (memory/; MEMORY_DIR mutlak
+    yol ise o kullanılır — test izolasyonu). Dev personası kendi kökünü verir."""
+    return (root if root is not None else (REPO_ROOT / MEMORY_DIR)) / "policy.json"
 
 
-def _read_policy() -> dict:
+def _read_policy(root: Optional[Path] = None) -> dict:
     """policy.json → dict. Dosya yok / bozuk / dict değil → {} (güvenli taban)."""
     try:
-        pol = json.loads(_policy_path().read_text())
+        pol = json.loads(_policy_path(root).read_text())
     except Exception:
         return {}
     return pol if isinstance(pol, dict) else {}
@@ -912,7 +936,7 @@ def _read_policy() -> dict:
 ROLES = ("adult", "child", "guest")
 
 
-def _policy_set(user: str, role: Optional[str] = None) -> Optional[str]:
+def _policy_set(user: str, role: Optional[str] = None, root: Optional[Path] = None) -> Optional[str]:
     """policy.json'a rol yaz — KİLİTLİ + ATOMİK (flock + tmp dosya + os.replace).
 
     role verilirse o rol yazılır (yükseltme/düşürme).
@@ -926,14 +950,14 @@ def _policy_set(user: str, role: Optional[str] = None) -> Optional[str]:
 
     if not user or (role is not None and role not in ROLES):
         return None
-    path = _policy_path()
+    path = _policy_path(root)
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         lock = path.parent / (path.name + ".lock")
         with open(lock, "w") as lf:
             fcntl.flock(lf, fcntl.LOCK_EX)
             try:
-                pol = _read_policy()
+                pol = _read_policy(root)
                 if role is None:  # enroll kuralı (kilit altında → yarış yok)
                     if user in pol:
                         return pol[user]
@@ -976,9 +1000,71 @@ def _mem_user(user: str) -> str:
 
 def _slug(name: str) -> str:
     """İsmi dosya/oturum-güvenli slug'a çevir (persona dosyası + session-id için).
-    policy.json anahtarı == MEM_USER == memory/users/<user>/ dizini = BU slug."""
+    policy anahtarı == MEM_USER == <hafıza kökü>/users/<user>/ dizini = BU slug."""
     s = "".join(c if (c.isalnum() or c in "-_") else "-" for c in (name or "").strip().lower())
     return "-".join(p for p in s.split("-") if p) or ""
+
+
+def _mem_root(dev: bool = False) -> Path:
+    """Persona'nın hafıza KÖKÜ. Normal (Candan) → memory/. Dev personası →
+    memory/personas/dev/ (AYRI kök, aynı şema). Kökler ayrı olduğu için okuma ve
+    yazma izolasyonu yol düzeyinde garantidir; extension yalnız MEM_DIR'i görür."""
+    root = REPO_ROOT / MEMORY_DIR
+    return (root / DEV_MEM_SUBDIR) if dev else root
+
+
+def _dev_mem_user(speaker: str) -> str:
+    """Dev personasının hafıza kimliği (dev kökü içindeki MEM_USER).
+
+    KİMLİK KAPISI: konuşmacı ses tanımayla doğrulanmış olmalı, normal policy.json'da
+    'adult' olmalı ve (DEV_MEM_OWNER doluysa) ev sahibi olmalı. Aksi halde ''
+    → dev hafızası YOK, yani bugünkü davranış birebir korunur. Dönen değer TEK bir
+    kimliktir (DEV_MEM_USER): evde dev yapan tek kişi var, kullanıcı-başı dev
+    alanı kurulmaz. 'dev' ile 'guest' AYRI şeylerdir: guest = hafıza yok."""
+    slug = _slug(speaker or "")
+    if not slug or _role(slug) != "adult":
+        return ""
+    if DEV_MEM_OWNER and slug != _slug(DEV_MEM_OWNER):
+        return ""
+    return DEV_MEM_USER
+
+
+def _ensure_dev_mem_root(mem_user: str) -> Path:
+    """Dev hafıza kökünü hazırla (ilk giriş): users/<u>/notes + policy girdisi.
+
+    NORMAL hafızaya (memory/policy.json, users/, family.md, soul.md) HİÇ DOKUNMAZ;
+    yalnız dev kökü altında yazar. Kimlik dev policy'sinde yoksa 'bilinmeyen'
+    düşüp guest olmasın diye girdi OTOMATİK açılır (DEV_MEM_ROLE) — mevcut girdi
+    varsa olduğu gibi bırakılır."""
+    root = _mem_root(dev=True)
+    if not mem_user:
+        return root
+    try:
+        (root / "users" / mem_user / "notes").mkdir(parents=True, exist_ok=True)
+        if _read_policy(root).get(mem_user) not in ("adult", "child"):
+            _policy_set(mem_user, DEV_MEM_ROLE, root=root)
+    except Exception as e:  # noqa: BLE001 — hafıza kurulumu sohbeti BOZMAZ
+        logger.warning("dev hafıza kökü hazırlanamadı (%s): %s", root, e)
+    return root
+
+
+def pi_mem_env(session_id: str, dev: bool = False, mem_user: Optional[str] = None) -> dict[str, str]:
+    """pi alt-sürecine geçecek hafıza ortamı. TEK KAYNAK: yerel subprocess (PiRpcClient)
+    ve broker (pi_broker.PiProcess) aynı sözleşmeyi kullanır.
+
+    Normal: {"MEM_USER": <tanınan kullanıcı|''>} — bugünkü davranış birebir.
+    Dev: ayrıca MEM_DIR = dev kökü (extension'ın TÜM dünyası) + EVENTS_DB. Olay
+    kuyruğu bilinçli olarak PAYLAŞILIR: hatırlatmaları worker normal events.db'den
+    okuyup seslendiriyor; dev kökündeki ayrı bir db'ye yazsaydık dev'de kurulan
+    hatırlatma hiç ÇALMAZDI (sessiz hata). events.db aranabilir hafıza DEĞİLDİR."""
+    user = _mem_user(session_id) if mem_user is None else (mem_user or "")
+    if not dev:
+        return {"MEM_USER": user}
+    return {
+        "MEM_USER": user,
+        "MEM_DIR": str(_mem_root(dev=True)),
+        "EVENTS_DB": os.environ.get("EVENTS_DB") or str(_mem_root() / "events.db"),
+    }
 
 
 _IDENTITY_NAME_TOKEN = r"[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü'’-]{1,31}"
@@ -1150,6 +1236,7 @@ def _build_pi_args(
     model: Optional[str] = None,
     thinking: Optional[str] = None,
     dev: bool = False,
+    mem_user: Optional[str] = None,
 ) -> list[str]:
     """pi --mode rpc bayrakları (docs/pi-brain-design.md).
 
@@ -1157,9 +1244,12 @@ def _build_pi_args(
     .env varsayılanı (PI_MODEL/PI_THINKING) = bugünkü davranış.
 
     dev=True → SESLE GELİŞTİRME modu (bkz. DEV_MODE_ENABLED): native kod tool'ları
-    AÇIK (--no-builtin-tools YOK, dev allowlist), family-memory ve kişisel hafıza
-    enjeksiyonu KAPALI (dev sohbeti asistanın hafızasına karışmaz). dev=False →
-    bugünkü normal davranış BİRE BİR korunur."""
+    AÇIK (--no-builtin-tools YOK, dev allowlist), AYRI hafıza kökü (dev personası
+    kendi notlarına/ruhuna yazar; Candan'ın kişisel/aile hafızasını ne OKUR ne de
+    ona YAZAR). dev=False → bugünkü normal davranış BİRE BİR korunur.
+
+    mem_user: hafıza kimliği. None → session_id'den çözülür (bugünkü davranış).
+    Dev'de çağıran _dev_mem_user() ile çözüp verir; '' → dev hafızası yok."""
     model = model or PI_MODEL
     thinking = PI_THINKING if thinking is None else thinking
     args = [PI_BIN, "--mode", "rpc", "--approve", "--model", model]
@@ -1201,44 +1291,60 @@ def _build_pi_args(
     # (memory/users/<user>/soul.md) SADECE tanınan kullanıcıya ve ortak tabanın
     # ARDINDAN (sonra gelen = öncelikli) yüklenir → çelişirse kişininki geçerli.
     # Dosya yoksa graceful: hiçbir şey eklenmez, davranış bugünküyle aynı.
-    # Kişisel/aile hafıza enjeksiyonu SADECE normal modda. Dev modunda KAPALI: dev
-    # sohbeti asistanın hafızasını bağlamına almaz (ve family-memory tool'u da yüklenmez
-    # → dev sohbeti hafızaya YAZAMAZ; ikinci karışmama garantisi).
+    # Hafıza enjeksiyonu PERSONA ALANINA GÖRE yapılır. Normal → memory/ (Candan'ın
+    # alanı, bugünkü davranış). Dev → memory/personas/dev/ (dev personasının KENDİ
+    # alanı). 2026-07 tasarım kararı KORUNUR: dev sohbeti Candan'ın kişisel/aile
+    # hafızasını bağlamına ALMAZ ve oraya YAZAMAZ — sadece artık "hafızasız" değil,
+    # kendi kökünde kendi notlarına/ruhuna sahip.
+    mem = _mem_root(dev=dev)
+    mem_user = _mem_user(session_id) if mem_user is None else (mem_user or "")
     if not dev:
-        soul_common = REPO_ROOT / MEMORY_DIR / "soul.md"
+        # Ortak taban memory/soul.md HERKESE (guest dahil) yüklenir — bugünkü davranış.
+        soul_common = mem / "soul.md"
         if soul_common.is_file():
             args += ["--append-system-prompt", str(soul_common)]
-        # Hafıza çekirdeği (küçük, boot'ta yüklü). Kullanıcı kimliği = session_id slug'ı
-        # (tanınan kişi). Guest/unknown → mem_user boş → hiçbir şey eklenmez (Faz 2 aynen).
-        mem_user = _mem_user(session_id)
-        if mem_user:
-            mem = REPO_ROOT / MEMORY_DIR
-            profile = mem / "users" / mem_user / "profile.md"
-            if profile.is_file():
-                args += ["--append-system-prompt", str(profile)]
-            family = mem / "family.md"
-            if family.is_file():  # role != guest zaten garanti (mem_user dolu)
-                args += ["--append-system-prompt", str(family)]
-            # Kişiye özel ruh (ortak tabanın ÜSTÜNDE; çelişirse bu geçerli).
-            soul = mem / "users" / mem_user / "soul.md"
-            if soul.is_file():
-                args += ["--append-system-prompt", str(soul)]
-            # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
-            args += [
-                "--append-system-prompt",
-                (f"Aktif kullanıcı: {mem_user}. "
-                 f"Hafıza yolun: {MEMORY_DIR}/users/{mem_user}/ "
-                 f"(notlar: notes/, profil: profile.md). "
-                 f"Ortak aile hafızası: {MEMORY_DIR}/family.md."),
-            ]
+    # Hafıza çekirdeği (küçük, boot'ta yüklü). Guest/unknown (normal) veya yetkisiz
+    # konuşmacı (dev) → mem_user boş → hiçbir şey eklenmez (bugünkü davranış).
+    if mem_user:
+        if dev:
+            _ensure_dev_mem_root(mem_user)     # ilk girişte kök + policy girdisi
+            dev_soul_common = mem / "soul.md"  # dev alanının ortak ruh tabanı
+            if dev_soul_common.is_file():
+                args += ["--append-system-prompt", str(dev_soul_common)]
+        profile = mem / "users" / mem_user / "profile.md"
+        if profile.is_file():
+            args += ["--append-system-prompt", str(profile)]
+        family = mem / "family.md"
+        if family.is_file():  # role != guest zaten garanti (mem_user dolu)
+            args += ["--append-system-prompt", str(family)]
+        # Kişiye özel ruh (ortak tabanın ÜSTÜNDE; çelişirse bu geçerli).
+        soul = mem / "users" / mem_user / "soul.md"
+        if soul.is_file():
+            args += ["--append-system-prompt", str(soul)]
+        # Sapma #4: pi $MEM_USER shell-expand'ine güvenme; açık kimlik satırı enjekte et.
+        try:
+            mem_disp = str(mem.relative_to(REPO_ROOT))
+        except ValueError:  # MEMORY_DIR mutlak (test izolasyonu)
+            mem_disp = str(mem)
+        line = (f"Aktif kullanıcı: {mem_user}. "
+                f"Hafıza yolun: {mem_disp}/users/{mem_user}/ "
+                f"(notlar: notes/, profil: profile.md). "
+                f"Ortak aile hafızası: {mem_disp}/family.md.")
+        if dev:
+            line += (" Bu, DEV personasının KENDİ hafıza alanı: Candan'ın kişisel ve "
+                     "aile hafızası bu bağlamda YOKTUR, oraya yazamazsın; geliştirme "
+                     "notların ve kendi ruh dosyan yalnız bu alanda tutulur.")
+        args += ["--append-system-prompt", line]
     skills = REPO_ROOT / PI_SKILLS_DIR
     if skills.exists():
         args += ["--skill", str(skills)]
     # LOKAL pi extension: family-memory (memory_add/memory_search + reminder_* +
     # memory_consolidate). Sadece worker'ın pi'sinde yüklenir (global DEĞİL). Guest'te de
     # yüklenebilir — tool'lar MEM_USER boşsa kendini reddeder. Dosya yoksa graceful.
-    # family-memory SADECE normal modda (dev sohbeti hafızaya yazamasın).
-    if not dev:
+    # Dev modunda YALNIZ kimlik kapısı açıksa (mem_user dolu) yüklenir ve o zaman da
+    # MEM_DIR dev köküne bakar → dev sohbeti Candan'ın hafızasına YAZAMAZ (kapı hâlâ
+    # kapalı), sadece kendi alanına yazar. Kapı kapalıysa dev bugünkü gibi TOOL'SUZ.
+    if not dev or mem_user:
         mem_ext = REPO_ROOT / "pi" / "extensions" / "family-memory" / "index.ts"
         if mem_ext.is_file():
             args += ["-e", str(mem_ext)]
@@ -1309,17 +1415,23 @@ class PiRpcClient:
         thinking: Optional[str] = None,
         cwd: Optional[Path] = None,
         dev: bool = False,
+        mem_user: Optional[str] = None,
     ):
         self._persona = persona
         self._session_id = session_id
         self._model = model
         self._thinking = thinking
-        self._args = _build_pi_args(persona, session_id, model, thinking, dev=dev)
+        # Alt-sürece geçecek hafıza ortamı (tek kaynak: pi_mem_env). Normal → bugünkü
+        # MEM_USER. Dev → dev personasının kimliği + MEM_DIR = AYRI dev kökü. mem_user
+        # verilmezse dev'de '' çıkar (kimlik kapısı kapalı = bugünkü davranış).
+        self._mem_env = pi_mem_env(session_id, dev=dev, mem_user=mem_user)
+        self._mem_user = self._mem_env["MEM_USER"]
+        self._args = _build_pi_args(
+            persona, session_id, model, thinking, dev=dev, mem_user=self._mem_user
+        )
         # cwd: normal → REPO_ROOT (bugünkü); dev → izole worktree (kod EDIT'leri orada kalır).
         self._cwd = Path(cwd) if cwd is not None else REPO_ROOT
         self._dev = dev
-        # Alt-sürece geçecek hafıza kimliği. Dev'de family-memory yüklenmez → boş (hafıza yok).
-        self._mem_user = "" if dev else _mem_user(session_id)
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._broker_reader: Optional[asyncio.StreamReader] = None
         self._broker_writer: Optional[asyncio.StreamWriter] = None
@@ -1359,7 +1471,7 @@ class PiRpcClient:
             self._proc = await asyncio.create_subprocess_exec(
                 *self._args,
                 cwd=str(self._cwd),
-                env={**os.environ, "MEM_USER": self._mem_user},
+                env={**os.environ, **self._mem_env},
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -1385,6 +1497,10 @@ class PiRpcClient:
             "model": self._model_for_broker(),
             "thinking": self._thinking_for_broker(),
             "dev": self._dev,
+            # Dev personasının hafıza kimliği: broker aynı süreci farklı kimlikle
+            # PAYLAŞTIRMASIN diye anahtarın parçası olur (normalde session_id'den
+            # çözülür ve bu alan yok sayılır → normal yol birebir aynı).
+            "mem_user": self._mem_user,
         }
         try:
             writer.write((json.dumps(hello) + "\n").encode())
@@ -3300,9 +3416,24 @@ if _HAS_LIVEKIT:
                 await asyncio.to_thread(_ensure_dev_worktree)
                 self._saved_normal = (self._persona, self._session_id)
                 persona, session_id = DEV_PERSONA, DEV_SESSION_ID
+                # Dev personasının hafıza kimliği KONUŞMACIYA bağlıdır: doğrulanmış
+                # ev sahibi (bkz. _dev_mem_user) → 'dev' kimliği + AYRI dev kökü;
+                # tanınmayan/guest → '' → bugünkü gibi hafızasız dev oturumu.
+                # Ortak oda modunda session_id kişi DEĞİL ("candan") → konuşmacı
+                # ses tanımadan gelir; klasik modda session_id zaten kişi slug'ıdır.
+                speaker = _slug(
+                    getattr(self._speaker_state, "current", None) or ""
+                ) or self._session_id
+                dev_user = _dev_mem_user(speaker)
                 new = PiRpcClient(
                     persona, session_id, DEV_MODEL, DEV_THINKING,
-                    cwd=DEV_WORKTREE, dev=True,
+                    cwd=DEV_WORKTREE, dev=True, mem_user=dev_user,
+                )
+                logger.info(
+                    "dev hafızası: %s (konuşmacı=%s)",
+                    f"AÇIK → {_mem_root(dev=True)}/users/{dev_user}/" if dev_user
+                    else "KAPALI (kimlik doğrulanmadı)",
+                    speaker or "-",
                 )
             else:  # → normal: oturum başı persona/session'a bire bir dön
                 persona, session_id = self._saved_normal or (
@@ -3406,9 +3537,11 @@ if _HAS_LIVEKIT:
                 # Süreci HER KOŞULDA geri getir: döndürme başarısız olsa bile beyinsiz
                 # kalmayalım (kullanıcı konuşmaya devam edebilsin).
                 if dev:
+                    # Dev hafıza kimliği KORUNUR: sıfırlanan yalnız sohbet geçmişi.
                     new = PiRpcClient(
                         persona, session_id, DEV_MODEL, DEV_THINKING,
                         cwd=DEV_WORKTREE, dev=True,
+                        mem_user=getattr(old, "_mem_user", "") or "",
                     )
                 else:
                     new = PiRpcClient(persona, session_id, self._model, self._thinking)

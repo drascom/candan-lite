@@ -38,7 +38,7 @@ from pi_brain import (
     PI_BROKER_SOCKET,
     REPO_ROOT,
     _build_pi_args,
-    _mem_user,
+    pi_mem_env,
     resolve_brain,
 )
 
@@ -54,6 +54,10 @@ class BrokerKey:
     model: str
     thinking: str
     dev: bool
+    # Dev personasının hafıza kimliği (yalnız dev'de dolar). Anahtarın parçası:
+    # hafızası AÇIK bir dev süreci, hafızası KAPALI bir bağlantıyla paylaşılmasın.
+    # Normal yolda hep "" → mevcut anahtarlar (prewarm dahil) aynen eşleşir.
+    mem_user: str = ""
 
     @property
     def label(self) -> str:
@@ -83,12 +87,17 @@ class PiProcess:
         async with self._state_lock:
             if self.running:
                 return
+            # Hafıza kimliği: normal → session_id'den çözülür (bugünkü davranış).
+            # Dev → client'ın çözdüğü dev kimliği (kimlik kapısı worker'da, bkz.
+            # pi_brain._dev_mem_user); dev alanı AYRI kök (MEM_DIR) ile gelir.
+            mem_user = self.key.mem_user if self.key.dev else None
             args = _build_pi_args(
                 self.key.persona,
                 self.key.session_id,
                 self.key.model,
                 self.key.thinking,
                 dev=self.key.dev,
+                mem_user=mem_user,
             )
             cwd = DEV_WORKTREE if self.key.dev else REPO_ROOT
             # Dev modundaki çalışma dizini _build_pi_args tarafından session için
@@ -96,7 +105,10 @@ class PiProcess:
             self.proc = await asyncio.create_subprocess_exec(
                 *args,
                 cwd=str(cwd),
-                env={**os.environ, "MEM_USER": "" if self.key.dev else _mem_user(self.key.session_id)},
+                env={
+                    **os.environ,
+                    **pi_mem_env(self.key.session_id, dev=self.key.dev, mem_user=mem_user),
+                },
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
@@ -299,7 +311,13 @@ def _key_from_hello(hello: dict) -> BrokerKey:
         raise RuntimeError("geçersiz model")
     if thinking and (len(thinking) > 64 or "\x00" in thinking):
         raise RuntimeError("geçersiz thinking")
-    return BrokerKey(persona, session_id, model, thinking, bool(hello.get("dev")))
+    dev = bool(hello.get("dev"))
+    # mem_user dizin adına gider (dev kökü altında users/<mem_user>/) → aynı sade
+    # karakter kümesi. Normal yolda YOK SAYILIR: kimlik orada session_id'den çözülür.
+    mem_user = str(hello.get("mem_user") or "")
+    if mem_user and not _SAFE_PART.fullmatch(mem_user):
+        raise RuntimeError("geçersiz mem_user")
+    return BrokerKey(persona, session_id, model, thinking, dev, mem_user if dev else "")
 
 
 def _prewarm_specs() -> list[BrokerKey]:
