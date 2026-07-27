@@ -53,6 +53,26 @@ LATE_HOURS = float(os.environ.get("PROACTIVE_LATE_HOURS", "12") or 12)
 ACK_SETTLE_SECONDS = float(os.environ.get("PROACTIVE_ACK_SETTLE_SECONDS", "6") or 6)
 
 
+def reload_settings() -> None:
+    """`.env` YÜKLENDİKTEN SONRA ayarları tazele. `agent.py` çağırır.
+
+    `barge.reload_settings()` ile AYNI gerekçe: `agent.py`'nin `load_dotenv()`'i
+    import blokundan SONRA çalışır → bu modül import edilirken `.env` HENÜZ
+    OKUNMAMIŞTIR. Ölçüldü (27 Tem, sunucuda): `PROACTIVE_TICK_SECONDS=99` yazılıyken
+    etkin değer 20 kalıyordu.
+
+    ⚠️ `agent.py` `HEARTBEAT_SECONDS`'i `from reminders import ...` ile DEĞERİ
+    kopyalayarak alır; burada tazelemek onun kopyasını GÜNCELLEMEZ. `agent.py`
+    bu çağrıdan sonra kendi adını yeniden bağlar (bkz. agent.py, load_dotenv altı)."""
+    global HEARTBEAT_SECONDS, REPLY_TIMEOUT, RETRY_AFTER  # noqa: PLW0603
+    global LATE_HOURS, ACK_SETTLE_SECONDS                 # noqa: PLW0603
+    HEARTBEAT_SECONDS = float(os.environ.get("PROACTIVE_TICK_SECONDS", "20") or 20)
+    REPLY_TIMEOUT = float(os.environ.get("PROACTIVE_REPLY_TIMEOUT", "8") or 8)
+    RETRY_AFTER = float(os.environ.get("PROACTIVE_RETRY_SECONDS", "300") or 300)
+    LATE_HOURS = float(os.environ.get("PROACTIVE_LATE_HOURS", "12") or 12)
+    ACK_SETTLE_SECONDS = float(os.environ.get("PROACTIVE_ACK_SETTLE_SECONDS", "6") or 6)
+
+
 def events_db_path() -> Path:
     """memory/events.db — the SAME path the pi extension uses (EVENTS_DB / MEM_DIR)."""
     p = os.environ.get("EVENTS_DB")

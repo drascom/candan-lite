@@ -22,8 +22,11 @@ from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 import barge                                # sözünü kesme: yeni komut mu, sohbet mi
+import pi_brain                             # (ayrıca modül olarak: reload_settings)
+import reminders as reminders_mod           # (ayrıca modül olarak: reload_settings)
+import truth_check                          # (ayrıca modül olarak: reload_settings)
 from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
-from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
+from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
 from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin (TTS_ENGINE=omnivoice)
 from higgs_tts import HiggsTTS               # Higgs TTS 3 HTTP plugin (TTS_ENGINE=higgs)
@@ -31,19 +34,35 @@ from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsi
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
 from reminders import (                                 # proaktif ajan (hatırlatma/olay)
-    HEARTBEAT_SECONDS, AckTracker, Deliverer, EventStore,
+    AckTracker, Deliverer, EventStore,
 )
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")
 # ⚠️ `.env` YUKARIDAKİ import'lardan SONRA yüklenir (systemd unit'i `EnvironmentFile=`
 # kullanmıyor: boşluklu değerler ayrıştırıcıyı kırıyor). Modül seviyesinde env okuyan
-# bir modül, import anında `.env`'i GÖREMEZ. Ölçüldü (27 Tem 21:20, sunucuda):
-# `BARGE_RESUME_ENABLED=false` yazılıyken modül değeri True kalıyordu → geri dönüş
-# kolu çalışmıyordu. Kapsamı DAR tutuyoruz: load_dotenv'i yukarı taşımak TÜM
-# modüllerin (pi_brain, truth_check, higgs_tts…) bugünkü davranışını değiştirirdi;
-# burada yalnız barge'ın ayarları tazelenir.
-barge.reload_settings()
+# bir modül, import anında `.env`'i GÖREMEZ → oradaki her ayar kod varsayılanında
+# KİLİTLİ KALIR ve kullanıcıya verilen "şu satırı ekle" komutu SESSİZCE çalışmaz.
+# Ölçüldü (27 Tem, sunucuda, gerçek .venv): `WAKE_ENABLED=false` yazılıyken etkin
+# değer True; `SPEAKER_CONFIRM_ASK_ENABLED=false` yazılıyken etkin değer True.
+#
+# `load_dotenv`'i import'ların ÜSTÜNE ALMIYORUZ: bu, `PI_MODEL`/`PI_BROKER_SOCKET`/
+# `PI_SHARED_ROOM_MODE` gibi SÜREÇ AÇILIŞ ayarlarını da tek hamlede devreye sokar
+# (broker yoluna geçmek, ortak-oda hafızasını açmak) — canlı davranış aynı anda
+# değişirdi. Onun yerine ilgili modüller yalnız DAVRANIŞ KOLLARINI tazeler.
+#
+# ⚠️ SIRA BURADA, TEK YERDE: env okuyan yeni bir modül eklersen `reload_settings()`
+# yaz ve çağrısını buraya koy — yoksa `.env` o ayar için ÖLÜ olur.
+# Ayrıntı + denetim tablosu: handoff/2026-07-27-env-kollari.md
+barge.reload_settings()        # BARGE_RESUME_* / BARGE_CHECK_*
+pi_brain.reload_settings()     # WAKE_* / SPEAKER_CONFIRM_* / SPEAKER_ENROLL_* / RESET_*
+truth_check.reload_settings()  # CLAIM_CHECK_*
+reminders_mod.reload_settings()  # PROACTIVE_*
+
+# `from X import NAME` DEĞERİ kopyalar: modüldeki tazeleme bu kopyaya YANSIMAZ.
+# Bu yüzden kol niteliğindeki iki ad tazeleme SONRASINDA yeniden bağlanır.
+WAKE_ENABLED = pi_brain.WAKE_ENABLED
+HEARTBEAT_SECONDS = reminders_mod.HEARTBEAT_SECONDS
 
 STT_HOST = os.environ.get("STT_HOST", "192.168.0.25")
 STT_PORT = int(os.environ.get("STT_PORT", "10300"))

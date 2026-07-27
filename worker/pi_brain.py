@@ -470,8 +470,9 @@ RESET_ENABLED = (os.environ.get("RESET_ENABLED", "true") or "").strip().lower() 
     "0", "false", "no", "off",
 )
 # Sıfırlama ifadeleri (virgülle). Eşleşme aksan/case/noktalama duyarsız (_wake_squash).
-RESET_PHRASES = os.environ.get(
-    "RESET_PHRASES",
+# Varsayılan AYRI bir sabit: `reload_settings()` de aynı listeyi kullanmalı, iki
+# kopya olursa biri güncellenip diğeri unutulur.
+_RESET_PHRASES_DEFAULT = (
     # ÇIKARMA ÖLÇÜTÜ = MUĞLAKLIK, "gereksiz tekrar" DEĞİL. Ölçüldü: listeden düşen bir
     # ifade yakın-ıska bandına (2,4] DÜŞMÜYOR, çok uzak kalıyor → sessizce LLM'e gider
     # → model "yaptım" der (sabah 2 kez yaşandı). Yani zararsız eşanlamlıyı silmek
@@ -486,8 +487,9 @@ RESET_PHRASES = os.environ.get(
     # ileride gerçek bir "beni unut" özelliği yapılırsa o ifade ONA ait olmalı.
     "yeni oturum aç,yeni oturum başlat,yeni sohbet başlat,yeni sohbete başla,"
     "sohbeti sıfırla,oturumu sıfırla,sıfırdan başlayalım,sohbeti resetle,"
-    "geçmişi sıfırla,geçmişi temizle,sohbeti temizle,yeni konuşma başlat,oturumu yenile",
+    "geçmişi sıfırla,geçmişi temizle,sohbeti temizle,yeni konuşma başlat,oturumu yenile"
 )
+RESET_PHRASES = os.environ.get("RESET_PHRASES", _RESET_PHRASES_DEFAULT)
 # Sıfırlama sonrası sesli/görsel onay (kullanıcı komutun İŞLEDİĞİNİ duysun).
 RESET_ACK = os.environ.get("RESET_ACK", "Tamam, yeni sohbet başlattım. Seni dinliyorum.")
 RESET_FAIL = os.environ.get("RESET_FAIL", "Şu anda sohbeti sıfırlayamadım, sonra tekrar deneyelim.")
@@ -624,6 +626,90 @@ def _is_expression_complete(text: str) -> bool:
 # = iki ses birbirine karışır demek. N=5 → ağ ancak 6. turda konuşur: sağlıklı akışı
 # kesmez, bozuk akışta da kullanıcıyı 5 turdan fazla oyalamaz.
 SPEAKER_ENROLL_NET_TURNS = int(os.environ.get("SPEAKER_ENROLL_NET_TURNS", "5") or 5)
+
+
+def reload_settings() -> None:
+    """`.env` YÜKLENDİKTEN SONRA DAVRANIŞ KOLLARINI tazele. `agent.py` çağırır.
+
+    NEDEN (ÖLÇÜLDÜ, sunucuda 27 Tem, `barge.reload_settings` ile aynı arıza):
+    `candan-worker.service` `.env`'i `EnvironmentFile=` ile YÜKLEMEZ (boşluklu
+    değerler systemd ayrıştırıcısını kırıyor, unit'te yazılı) — `agent.py` kendi
+    `load_dotenv()`'ini çağırır ve o çağrı **import blokundan SONRA**dır. Bu dosya
+    modül seviyesinde `os.environ` okuduğu için import anında `.env` HENÜZ YOKTUR:
+
+        .env: WAKE_ENABLED=false      →  modül değeri True   ← kol ÇALIŞMIYOR
+        .env: SPEAKER_CONFIRM_ASK_ENABLED=false → modül True  ← kol ÇALIŞMIYOR
+
+    ⚠️ KAPSAM BİLEREK DAR — buradan TAZELENMEYENLER (altyapı, kol DEĞİL):
+        PI_MODEL · PI_THINKING · PI_BROKER_SOCKET · PI_SHARED_ROOM_MODE ·
+        PI_SHARED_ROOM_SESSION_ID · PI_BIN · PI_*_DIR · PI_TOOLS_ALLOWLIST ·
+        MEM_* · DEV_* · PI_*_TIMEOUT / *_NOTICE_*
+    Bunlar SÜREÇ AÇILIŞ yapılandırmasıdır; tazelemek canlı davranışı (ör. broker
+    yoluna geçmek, ortak-oda hafızasını açmak) TEK HAMLEDE değiştirirdi. Bugün
+    `.env`'den ayarlanamıyorlar; bilerek öyle bırakıldı, `handoff/2026-07-27-env-
+    kollari.md`'de açıkça listelendi. Değiştirilecekse AYRI bir iş olarak, ölçülerek.
+    """
+    global WAKE_ENABLED, WAKE_WORD, WAKE_WINDOW_SECONDS, WAKE_VARIANTS  # noqa: PLW0603
+    global SPEAKER_PREWARM_ENABLED, SPEAKER_ENROLL_MAX, SPEAKER_ENROLL_MIN_CORE  # noqa: PLW0603
+    global SPEAKER_ENROLL_CORE_MIN, SPEAKER_ENROLL_POLL_S, SPEAKER_ENROLL_NET_TURNS  # noqa: PLW0603
+    global SPEAKER_CONFIRM_ASK_ENABLED, SPEAKER_CONFIRM_MIN_RATIO  # noqa: PLW0603
+    global SPEAKER_CONFIRM_COOLDOWN_S, SPEAKER_CONFIRM_MIN_WINDOWS  # noqa: PLW0603
+    global SPEAKER_LEARN_MAX_PER_TURN, SPEAKER_OFFER_ENROLL_ON_DENY  # noqa: PLW0603
+    global SPEAKER_CONFIRM_LOG, SPEAKER_EXPRESSION_CAPTURE_ENABLED  # noqa: PLW0603
+    global SPEAKER_EXPRESSION_DIR, RESET_ENABLED, RESET_PHRASES  # noqa: PLW0603
+    global RESET_ACK, RESET_FAIL, RESET_CONFIRM_ASK, RESET_CONFIRM_NO  # noqa: PLW0603
+    global DEV_MODE_ENABLED, PI_ISOLATED, PI_NO_BUILTIN_TOOLS  # noqa: PLW0603
+    global WEB_SEARCH_LEGACY_QWANT, CANDAN_TZ  # noqa: PLW0603
+
+    # wake gate
+    WAKE_ENABLED = _envflag("WAKE_ENABLED", True)
+    WAKE_WORD = os.environ.get("WAKE_WORD", "candan")
+    WAKE_WINDOW_SECONDS = float(os.environ.get("WAKE_WINDOW_SECONDS", "15") or 15)
+    WAKE_VARIANTS = os.environ.get(
+        "WAKE_VARIANTS", "candan,kandan,canden,candon,johndon,johndonne,jondon,candam"
+    )
+    # kimlik: kayıt + onay döngüsü
+    SPEAKER_PREWARM_ENABLED = _envflag("SPEAKER_PREWARM_ENABLED", False)
+    SPEAKER_ENROLL_MAX = int(os.environ.get("SPEAKER_ENROLL_MAX", "24") or 24)
+    SPEAKER_ENROLL_MIN_CORE = int(os.environ.get("SPEAKER_ENROLL_MIN_CORE", "3") or 3)
+    SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60") or 0.60)
+    SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
+    SPEAKER_ENROLL_NET_TURNS = int(os.environ.get("SPEAKER_ENROLL_NET_TURNS", "5") or 5)
+    SPEAKER_CONFIRM_ASK_ENABLED = _envflag("SPEAKER_CONFIRM_ASK_ENABLED", True)
+    SPEAKER_CONFIRM_MIN_RATIO = float(os.environ.get("SPEAKER_CONFIRM_MIN_RATIO", "0.6") or 0.6)
+    SPEAKER_CONFIRM_COOLDOWN_S = float(os.environ.get("SPEAKER_CONFIRM_COOLDOWN_S", "600") or 600)
+    SPEAKER_CONFIRM_MIN_WINDOWS = int(os.environ.get("SPEAKER_CONFIRM_MIN_WINDOWS", "2") or 2)
+    SPEAKER_LEARN_MAX_PER_TURN = int(os.environ.get("SPEAKER_LEARN_MAX_PER_TURN", "3") or 3)
+    SPEAKER_OFFER_ENROLL_ON_DENY = _envflag("SPEAKER_OFFER_ENROLL_ON_DENY", True)
+    SPEAKER_CONFIRM_LOG = Path(os.environ.get(
+        "SPEAKER_CONFIRM_LOG",
+        str(Path(__file__).resolve().parent / "data" / "speaker_confirm_log.jsonl"),
+    ))
+    SPEAKER_EXPRESSION_CAPTURE_ENABLED = _envflag("SPEAKER_EXPRESSION_CAPTURE_ENABLED", True)
+    SPEAKER_EXPRESSION_DIR = Path(os.environ.get(
+        "SPEAKER_EXPRESSION_DIR",
+        str(Path(__file__).resolve().parent / "data" / "expression-samples"),
+    ))
+    # sohbet sıfırlama
+    RESET_ENABLED = (os.environ.get("RESET_ENABLED", "true") or "").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
+    RESET_PHRASES = os.environ.get("RESET_PHRASES", _RESET_PHRASES_DEFAULT)
+    RESET_ACK = os.environ.get("RESET_ACK", "Tamam, yeni sohbet başlattım. Seni dinliyorum.")
+    RESET_FAIL = os.environ.get(
+        "RESET_FAIL", "Şu anda sohbeti sıfırlayamadım, sonra tekrar deneyelim."
+    )
+    RESET_CONFIRM_ASK = os.environ.get(
+        "RESET_CONFIRM_ASK", "Yeni sohbet başlatmamı mı istiyorsun?"
+    )
+    RESET_CONFIRM_NO = os.environ.get("RESET_CONFIRM_NO", "Tamam, devam ediyoruz.")
+    # özellik bayrakları
+    DEV_MODE_ENABLED = _envflag("DEV_MODE_ENABLED", True)
+    PI_ISOLATED = _envflag("PI_ISOLATED", True)
+    PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
+    WEB_SEARCH_LEGACY_QWANT = _envflag("WEB_SEARCH_LEGACY_QWANT", False)
+    CANDAN_TZ = os.environ.get("CANDAN_TZ", "Europe/London")
+
 
 # Onay sorusuna gelen RET + DÜZELTME'nin ("hayır, Havi") başındaki olumsuzlama.
 # NEDEN soyuluyor: parse_spoken_name ilk isim-olmayan sözcükte DURUR → "hayır, Havi"den
@@ -886,9 +972,16 @@ class WakeGate:
       - ikisinden hangisi SONRA biterse sayaç ORADAN başlar (set_* → touch).
     Böylece uzun kullanıcı sözü / uzun asistan cevabı sırasında pencere dolmaz."""
 
-    def __init__(self, enabled: bool = WAKE_ENABLED, word: str = WAKE_WORD,
-                 window: float = WAKE_WINDOW_SECONDS, greeting: str = "Efendim?",
+    def __init__(self, enabled: Optional[bool] = None, word: Optional[str] = None,
+                 window: Optional[float] = None, greeting: str = "Efendim?",
                  on_change: Optional[Callable[[bool], None]] = None):
+        # ⚠️ Bu üçü VARSAYILAN DEĞER olarak yazılamaz: varsayılan argümanlar TANIM
+        # (import) anında bağlanır, `reload_settings()` ise `.env` okunduktan SONRA
+        # çalışır → `WAKE_ENABLED=false` yazan kullanıcı gate'in yine açık olduğunu
+        # görürdü. Ölçüldü (27 Tem, sunucuda). Aynı tuzağın örneği: barge.resume_from.
+        enabled = WAKE_ENABLED if enabled is None else enabled
+        word = WAKE_WORD if word is None else word
+        window = WAKE_WINDOW_SECONDS if window is None else window
         self.enabled = enabled
         self.wake_norm = _wake_norm(word)
         self.wake_variants = _wake_variants(word)

@@ -484,6 +484,28 @@ CLAIM_CHECK_MODEL = os.environ.get("CLAIM_CHECK_MODEL", "local").strip() or "loc
 CLAIM_CHECK_TIMEOUT = float(os.environ.get("CLAIM_CHECK_TIMEOUT", "0.6") or 0.6)
 # Yargıca giden metin: cevabın SONU (iddia oradadır) — uzun cevap prefill yakmasın.
 CLAIM_CHECK_MAX_CHARS = int(os.environ.get("CLAIM_CHECK_MAX_CHARS", "300") or 300)
+
+
+def reload_settings() -> None:
+    """`.env` YÜKLENDİKTEN SONRA ayarları tazele. `agent.py` çağırır.
+
+    `barge.reload_settings()` ile AYNI gerekçe: `agent.py`'nin `load_dotenv()`'i
+    import blokundan SONRA çalışır, bu dosya ise modül seviyesinde `os.environ`
+    okur → import anında `.env` HENÜZ YOKTUR. Ölçüldü (27 Tem, sunucuda):
+    `CLAIM_CHECK_ENABLED=false` yazmak yargıcı KAPATMIYORDU. `barge.classify_llm`
+    de bu değerleri `truth_check.` üzerinden okur; tek yerden tazelemek ikisini
+    birden düzeltir."""
+    global CLAIM_CHECK_ENABLED, CLAIM_CHECK_URL, CLAIM_CHECK_MODEL  # noqa: PLW0603
+    global CLAIM_CHECK_TIMEOUT, CLAIM_CHECK_MAX_CHARS               # noqa: PLW0603
+    CLAIM_CHECK_ENABLED = _envflag("CLAIM_CHECK_ENABLED", True)
+    CLAIM_CHECK_URL = os.environ.get(
+        "CLAIM_CHECK_URL", "http://192.168.0.25:8082/v1/chat/completions"
+    ).strip()
+    CLAIM_CHECK_MODEL = os.environ.get("CLAIM_CHECK_MODEL", "local").strip() or "local"
+    CLAIM_CHECK_TIMEOUT = float(os.environ.get("CLAIM_CHECK_TIMEOUT", "0.6") or 0.6)
+    CLAIM_CHECK_MAX_CHARS = int(os.environ.get("CLAIM_CHECK_MAX_CHARS", "300") or 300)
+
+
 CLAIM_CHECK_PROMPT = (
     "Bu cümle bir KAYIT/EYLEM işleminin BAŞARIYLA yapıldığını iddia ediyor mu? "
     "Yalnız EVET veya HAYIR."
