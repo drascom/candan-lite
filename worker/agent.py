@@ -454,12 +454,17 @@ async def entrypoint(ctx: JobContext):
                 return
             decision = speaker_state.resolve_turn()
             logging.getLogger("worker.agent").info(
-                "speaker turn kararı: %s (sebep=%s, kabul=%d/%d, skor=%.3f)",
+                "speaker turn kararı: %s (sebep=%s, kabul=%d/%d, skor=%.3f)"
+                " | aday=%s oran=%.2f ort_skor=%.3f pencere=%d",
                 decision.name or "Bilinmeyen",
                 decision.reason,
                 decision.accepted,
                 decision.total,
                 decision.score,
+                decision.candidate or "—",
+                decision.candidate_ratio,
+                decision.candidate_score,
+                decision.candidate_windows,
             )
 
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).

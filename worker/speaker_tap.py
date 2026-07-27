@@ -32,13 +32,23 @@ TAP_CHANNELS = 1
 
 @dataclass(frozen=True)
 class TurnSpeakerDecision:
-    """One final, turn-scoped identity decision consumed by transcript and PiBrain."""
+    """One final, turn-scoped identity decision consumed by transcript and PiBrain.
+
+    `candidate*` alanları KİMLİK DEĞİLDİR. Karar `name=None` (Bilinmeyen) olsa bile
+    turun kabul edilmiş pencerelerinden bir "sormaya değer mi" adayı hesaplanır.
+    Persona swap'i, `_identity_note()` ve hafıza kimliği YALNIZ `name`e bakar —
+    aday oraya ASLA sızmaz (bkz. pi_brain._confirm_identity_line).
+    """
 
     name: str | None
     score: float
     reason: str
     accepted: int
     total: int
+    candidate: str | None = None
+    candidate_ratio: float = 0.0
+    candidate_score: float = 0.0
+    candidate_windows: int = 0
 
 
 def _f(name: str, default: float) -> float:
@@ -122,7 +132,9 @@ class SpeakerState:
         # Böylece kayan pencere hiçbir zaman yeni STT dönüşünden ÖNCEKİ sesin
         # embedding'ini üretmez.
         self._turn_generation = 0
-        self._turn_observations: list[tuple[float, str | None, float]] = []
+        # (zaman, isim, skor, embedding) — embedding onay döngüsü için taşınır
+        # (bkz. `last_turn_candidate_windows`); yoksa None.
+        self._turn_observations: list[tuple[float, str | None, float, object | None]] = []
         self.last_turn_decision = TurnSpeakerDecision(
             name=None,
             score=0.0,
@@ -130,6 +142,10 @@ class SpeakerState:
             accepted=0,
             total=0,
         )
+        # Son dönüşün ADAY pencereleri: (skor, embedding), skora göre azalan.
+        # Kullanıcı "evet" derse yalnız buradan örnek yazılır — dönüş dışı hiçbir
+        # pencere profile giremez.
+        self.last_turn_candidate_windows: list[tuple[float, object]] = []
         # İfade corpus'u yalnız açık enrollment akışında etkinleştirilir. Tap zaten
         # uzak mikrofonu dinlediği için WAV ve embedding aynı temiz pencereden gelir.
         self._expression_label: str | None = None
@@ -185,6 +201,7 @@ class SpeakerState:
         self._turn_active = True
         self._turn_started_at = time.monotonic() if now is None else float(now)
         self._turn_observations = []
+        self.last_turn_candidate_windows = []
         self.current = None
         self.score = 0.0
         self._candidate = None
@@ -262,6 +279,7 @@ class SpeakerState:
                 decision_score = min(item[2] for item in best_run)
                 reason = f"{len(best_run)} ardışık güncel pencere"
 
+        cand, ratio, cand_score, cand_windows = self._candidate_of(accepted, finished_at)
         self._turn_active = False
         self.current = decision_name
         self.score = decision_score
@@ -274,8 +292,56 @@ class SpeakerState:
             reason=reason,
             accepted=len(accepted),
             total=len(observations),
+            candidate=cand,
+            candidate_ratio=ratio,
+            candidate_score=cand_score,
+            candidate_windows=cand_windows,
         )
         return self.last_turn_decision
+
+    def _candidate_of(
+        self,
+        accepted: list[tuple[float, str | None, float, object | None]],
+        finished_at: float,
+    ) -> tuple[str | None, float, float, int]:
+        """Turun kabul edilmiş pencerelerinden "sormaya değer mi" adayını çıkar.
+
+        Seçim SKOR AĞIRLIKLI: skorlar AS-norm ölçeğinde negatif olabildiği için ham
+        skor ağırlık olarak kullanılamaz (negatif ağırlık çoğunluğu ters çevirirdi);
+        turun en düşük skoruna göre kaydırılmış pozitif ağırlık (w = s - s_min + 1)
+        kullanılır — monoton, tüm skorlar eşitse saf pencere sayımına indirgenir.
+
+        `oran` ise BİLEREK sayım tabanlıdır: eşik ("kabul edilen pencerelerin ≥ %60'ı
+        aynı adayı gösteriyor") ölçülebilir ve log'dan doğrulanabilir kalsın.
+        `pencere_sayısı` yalnız GÜNCEL pencereleri sayar (transkript anına
+        `turn_max_seconds` içinde) — bayat kanıtla soru sorulmasın.
+
+        Yan etki: `last_turn_candidate_windows` doldurulur (skora göre azalan).
+        """
+        self.last_turn_candidate_windows = []
+        if not accepted:
+            return None, 0.0, 0.0, 0
+        s_min = min(item[2] for item in accepted)
+        weights: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for _at, name, score, _emb in accepted:
+            key = str(name)
+            weights[key] = weights.get(key, 0.0) + (score - s_min + 1.0)
+            counts[key] = counts.get(key, 0) + 1
+        cand = max(weights, key=lambda k: (weights[k], counts[k]))
+        windows = [item for item in accepted if item[1] == cand]
+        fresh = [
+            item for item in windows
+            if finished_at - item[0] <= self.turn_max_seconds
+        ]
+        ratio = len(windows) / len(accepted)
+        avg_score = sum(item[2] for item in windows) / len(windows)
+        self.last_turn_candidate_windows = [
+            (item[2], item[3])
+            for item in sorted(fresh, key=lambda x: x[2], reverse=True)
+            if item[3] is not None
+        ]
+        return cand, ratio, avg_score, len(fresh)
 
     def observe(
         self,
@@ -284,18 +350,23 @@ class SpeakerState:
         *,
         capture_ok: bool = True,
         now: float | None = None,
+        embedding: object | None = None,
     ) -> bool:
         """Record one identify result only when it belongs to an active user turn.
 
         `capture_ok=False` marks agent speech/echo and is excluded. The boolean
         return is retained for compatibility; identity changes happen only in
         `resolve_turn()`, therefore this method always returns False.
+
+        `embedding` yalnız onay döngüsü içindir: kullanıcı "evet" derse profile
+        YALNIZ bu dönüşün pencereleri yazılabilsin (bkz. resolve_turn). Pencere
+        süresi tap tarafında >= SPEAKER_MIN_SECONDS garantidir.
         """
         self.score = score
         if self._turn_active and capture_ok:
             observed_at = time.monotonic() if now is None else float(now)
             if observed_at >= self._turn_started_at:
-                self._turn_observations.append((observed_at, name, score))
+                self._turn_observations.append((observed_at, name, score, embedding))
         return False
 
 
@@ -478,6 +549,7 @@ class SpeakerTap:
                     name,
                     score,
                     capture_ok=self._state.last_embedding_capture_ok is not False,
+                    embedding=emb,
                 )
         except asyncio.CancelledError:
             raise

@@ -151,6 +151,10 @@ _CLAIM_RECORD: tuple[re.Pattern[str], ...] = tuple(
         r"\bnot olarak (ald[iı]m|ekledim|yazd[iı]m)\b",
         r"\bkaydett?im\b",
         r"\bkay[iı]t ettim\b",
+        # SES KAYDI iddiası (canlı 27 Tem: "Harika Çiğdem, ses kaydını aldım" —
+        # oysa enroll REDDEDİLMİŞTİ). "not aldım" kalıbı bunu KAÇIRIYORDU.
+        r"\bkayd[iı]n[iı]?\w*\s+ald[iı]m\b",
+        r"\bkay[iı]t ald[iı]m\b",
         r"\bkaydediyorum\b",
         r"\bakl[iı]mda tut(acag[iı]m|uyorum|ar[iı]m)\b",
         r"\bakl[iı]ma (yazd[iı]m|not ettim)\b",

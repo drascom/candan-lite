@@ -103,6 +103,7 @@ class SpeakerID:
         asnorm_threshold: float = -1.0,
         asnorm_margin: float = 1.0,
         min_profiles_for_auto_match: int = 2,
+        shadow_thresholds: tuple[float, ...] = (),
     ):
         import sherpa_onnx
 
@@ -141,6 +142,12 @@ class SpeakerID:
         # diye kabul edildi. İkinci profil kaydolana kadar otomatik persona/kimlik
         # ataması YOK; kullanıcı unknown kalır ve güvenle kayıt akışına girebilir.
         self.min_profiles_for_auto_match = max(2, int(min_profiles_for_auto_match))
+        # GÖLGE ÖLÇÜM (yalnız log, karar DEĞİŞMEZ). Canlıda profili OLMAYAN üçüncü
+        # bir kişi (Çiğdem) -0.748 skorla Havi kabul edildi; asnorm eşiği -1.00
+        # yabancıyı elemiyor. Doğru eşiği TAHMİNLE seçmek yeni hata üretir → önce
+        # dağılımı ölçüyoruz: her KABUL kararında "şu eşik olsaydı reddedilirdi"
+        # yazılır. Bir sonraki turda eşik VERİYLE seçilecek.
+        self.shadow_thresholds = tuple(float(t) for t in shadow_thresholds)
         self._cohort: np.ndarray | None = None  # (N, dim) L2-normalize yabancı gömme
         # Her enrolled centroid için (μ_e, σ_e) — reload/enroll'de BİR KEZ hesaplanır,
         # her identify()'de yeniden hesaplanmaz (centroid↔cohort skorları sabit).
@@ -263,7 +270,30 @@ class SpeakerID:
             )
             return None, best
         log.info("speaker-ID tanındı [%s]: %s (skor=%.3f)", scale, ranking[0][0], best)
+        self._log_shadow(scale, ranking[0][0], best, second, thr)
         return ranking[0][0], best
+
+    def _log_shadow(
+        self, scale: str, name: str, best: float, second: float, thr: float
+    ) -> None:
+        """Kabul kararını DEĞİŞTİRMEDEN "daha sıkı eşik ne yapardı"yı yaz.
+
+        Hiçbir dönüş değeri yok, hiçbir alan güncellenmiyor: bu satır sadece bir
+        sonraki turda eşiği veriyle seçebilmek için dağılım biriktirir."""
+        if not self.shadow_thresholds:
+            return
+        try:
+            verdicts = ", ".join(
+                f"{t:+.2f}→{'KABUL' if best >= t else 'RED'}"
+                for t in self.shadow_thresholds
+            )
+            log.info(
+                "gölge ölçüm [%s]: KABUL %s skor=%.3f (2.=%.3f, marj=%.3f, canlı eşik=%.2f)"
+                " | %s — karar DEĞİŞMEDİ",
+                scale, name, best, second, best - second, thr, verdicts,
+            )
+        except Exception:  # noqa: BLE001 — ölçüm ASLA tanımayı bozmasın
+            pass
 
     def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
         """HAM en-yakın centroid (eşik/marj UYGULANMAZ). Enroll öncesi "bu ses
@@ -659,6 +689,23 @@ def _f(name: str, default: float) -> float:
         return default
 
 
+def _shadow_thresholds() -> tuple[float, ...]:
+    """SPEAKER_SHADOW_THRESHOLDS="-0.5,0.0,0.5" → (-0.5, 0.0, 0.5). Boş = kapalı."""
+    raw = os.getenv("SPEAKER_SHADOW_THRESHOLDS")
+    if raw is None:
+        raw = "-0.5,0.0,0.5"
+    out: list[float] = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.append(float(part))
+        except ValueError:
+            log.warning("SPEAKER_SHADOW_THRESHOLDS geçersiz parça: %r — atlandı", part)
+    return tuple(out)
+
+
 def build_speaker_id() -> "SpeakerID | None":
     """Env'e göre SpeakerID kur; SPEAKER_ID_ENABLED kapalı / model yok /
     sherpa-onnx yok ise None döner (Faz 2 aynen çalışsın)."""
@@ -684,6 +731,7 @@ def build_speaker_id() -> "SpeakerID | None":
             asnorm_threshold=_f("SPEAKER_ASNORM_THRESHOLD", -1.0),
             asnorm_margin=_f("SPEAKER_ASNORM_MARGIN", 1.0),
             min_profiles_for_auto_match=int(_f("SPEAKER_MIN_PROFILES_FOR_AUTO_MATCH", 2)),
+            shadow_thresholds=_shadow_thresholds(),
         )
         log.info(
             "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f,"

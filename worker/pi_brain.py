@@ -533,6 +533,40 @@ SPEAKER_ENROLL_CORE_MIN = float(os.environ.get("SPEAKER_ENROLL_CORE_MIN", "0.60"
 # Toplayıcının yoklama aralığı (sn). speaker_tap ~1 sn'de bir pencere üretiyor.
 SPEAKER_ENROLL_POLL_S = float(os.environ.get("SPEAKER_ENROLL_POLL_S", "0.3") or 0.3)
 
+# ── Kimlik ONAY DÖNGÜSÜ (belirsizken SOR, onaylanırsa ÖĞREN) ────────────────
+# Teşhis (27 Tem, canlı): 2 saatte 85 turun 43'ü "Bilinmeyen". 18 Temmuz'un
+# "emin değilsen kayıt sihirbazını başlatma" kuralı yanlış kaydı engelledi ama
+# sistemin KENDİNİ DÜZELTMESİNİ de kapattı: tanıyamıyor → sormuyor → yeni örnek
+# gelmiyor → tanıyamamaya devam ediyor. Burada yalnız o kilidi açıyoruz.
+# Bayrak false iken davranış BUGÜNKÜYLE BİRE BİR aynıdır.
+SPEAKER_CONFIRM_ASK_ENABLED = _envflag("SPEAKER_CONFIRM_ASK_ENABLED", True)
+# Kabul edilen pencerelerin en az bu oranı aynı adayı göstermeli.
+SPEAKER_CONFIRM_MIN_RATIO = float(
+    os.environ.get("SPEAKER_CONFIRM_MIN_RATIO", "0.6") or 0.6)
+# SIKLIK EN KRİTİK TASARIM KISITI. Her turda "sen Ayhan mısın?" diye soran bir ev
+# asistanı çekilmez — kullanıcı sistemi kapatır. Soğuma + oran eşiği tam bunun için;
+# şüphede kalırsak SORMAYIZ. (Belirsizlik seri hâlde gelir: art arda üç belirsiz
+# tur tek soru üretmeli, üç soru değil.)
+SPEAKER_CONFIRM_COOLDOWN_S = float(
+    os.environ.get("SPEAKER_CONFIRM_COOLDOWN_S", "600") or 600)
+# Aday en az bu kadar GÜNCEL pencerede görülmeli (tek pencereyle soru sorulmaz).
+SPEAKER_CONFIRM_MIN_WINDOWS = int(
+    os.environ.get("SPEAKER_CONFIRM_MIN_WINDOWS", "2") or 2)
+# "Evet" cevabında profile eklenecek EN FAZLA pencere (en iyi skorlular).
+SPEAKER_LEARN_MAX_PER_TURN = int(
+    os.environ.get("SPEAKER_LEARN_MAX_PER_TURN", "3") or 3)
+# "Hayır" çoğu zaman "ben senin bildiğin kimse değilim" demektir (canlı Çiğdem
+# vakası: profili olmayan üçüncü kişi en yakın profile yapıştı). Bir kez tanışma
+# teklif edilir; reddedilirse o oturumda bir daha açılmaz.
+SPEAKER_OFFER_ENROLL_ON_DENY = _envflag("SPEAKER_OFFER_ENROLL_ON_DENY", True)
+# Onay soruları ve cevapları (aday, skor, oran, cevap) buraya JSONL yazılır.
+# "Hayır" cevabı ETİKETLİ VERİdir: birkaç gün sonra asnorm eşiği bu dosyayla
+# ve gölge ölçüm log'uyla TAHMİNLE değil VERİYLE seçilecek.
+SPEAKER_CONFIRM_LOG = Path(os.environ.get(
+    "SPEAKER_CONFIRM_LOG",
+    str(Path(__file__).resolve().parent / "data" / "speaker_confirm_log.jsonl"),
+))
+
 # Kimlik kaydından sonra alınan kontrollü ifade corpus'u. Kimlik örneklerinden
 # ayrıdır: WAV + metadata + embedding yalnız sonraki analizlerde kullanılır.
 SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get(
@@ -606,6 +640,25 @@ def _parse_correction_name(text: str) -> Optional[str]:
     """Onay sorusuna gelen sözden DÜZELTİLMİŞ ismi çıkar ("hayır, Havi" → Havi).
     Olumsuzlama yoksa düz isim ayrıştırması yapar ("Havi" → Havi)."""
     return parse_spoken_name(_ENROLL_NEG_PREFIX_RE.sub("", text or "", count=1))
+
+
+def _misin(name: str) -> str:
+    """İsme göre soru eki: "Ayhan mısın" / "Havi misin" / "Umut musun".
+
+    Sesli asistanda yanlış ünlü uyumu ("Ayhan misin") kulağı tırmalar; soru
+    deterministik harness cümlesi olduğu için düzgün Türkçe kurmak BİZİM işimiz.
+    Son ünlü yoksa (isim ünlüsüz/boş) güvenli varsayılan: "misin"."""
+    last = ""
+    for ch in (name or "").casefold():
+        if ch in "aeıioöuü":
+            last = ch
+    if last in ("a", "ı"):
+        return "mısın"
+    if last in ("o", "u"):
+        return "musun"
+    if last in ("ö", "ü"):
+        return "müsün"
+    return "misin"
 
 
 def _wants_enroll(text: str) -> bool:
@@ -2062,6 +2115,14 @@ if _HAS_LIVEKIT:
                 return
             text = payload  # 'process' → wake ayıklanmış / uyanık metin
 
+            # Bekleyen kimlik ONAY sorusunun cevabı — kimlik guard'ından ÖNCE.
+            # "hayır, ben Havi'yim" guard'a kimlik İDDİASI gibi görünür ve orada
+            # yutulurdu; oysa bu, bizim sorduğumuz sorunun cevabıdır.
+            scripted = await self._brain._confirm_answer_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+
             # Kimlik sorusu veya "Ben X'im" iddiası güvenlik kararıdır; modelin
             # hafızadan isim uydurmasına ya da kullanıcının sözlü iddiasına teslim
             # edilmez. Turn-safe worker kararı scripted cevap verir, pi atlanır.
@@ -2095,6 +2156,13 @@ if _HAS_LIVEKIT:
                 _emit(scripted)
                 return
 
+            # Belirsiz tur + güçlü aday + soğuma doldu → TEK deterministik soru.
+            # En SONDA: komutlar ve kayıt akışı öncelikli, soru üstüne soru yok.
+            scripted = self._brain._confirm_ask_line()
+            if scripted is not None:
+                _emit(scripted)
+                return
+
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
@@ -2122,6 +2190,17 @@ if _HAS_LIVEKIT:
             # buffer'ı atılır) ya da tool çağrılmadıysa buffer toplu olarak söylenir.
             enroll_turn = bool(self._brain._enroll_active)
             enroll_buf: list = []
+
+            def _enroll_guard() -> bool:
+                """Kayıt anlatısını HARNESS mi devraldı? (katman-2 deseni, enroll'e)
+
+                Eskiden yalnız TUR BAŞINDAKİ `_enroll_active` bakılırdı. Canlı 27
+                Tem: kullanıcı yanlış tanındığı için latch hiç açılmamıştı → bu
+                bayrak False → modelin "ses kaydını aldım, artık seni de tanıyorum"
+                cümlesi CANLIYA ÇIKTI, oysa enroll REDDEDİLMİŞTİ. Artık kayıt
+                tool'u sinyali görüldüğü ANDAN itibaren (tur ortasında da) anlatı
+                tamponlanır; sonucu yalnız kod söyler."""
+                return enroll_turn or self._brain._pending_enroll is not None
 
             # DOĞRULUK DENETİMİ (bkz. truth_check.py). Katman 1: bu turun tool
             # sonuçları defteri — deterministik, LLM yok, maliyet yok. Katman 2:
@@ -2260,7 +2339,7 @@ if _HAS_LIVEKIT:
                                             got_delta = True
                                             notice_at = None
                                             self._client.warmed_up = True
-                                        if enroll_turn:
+                                        if _enroll_guard():
                                             enroll_buf.append(delta)
                                         elif ledger.guard_on:
                                             # Kritik yazma HATA döndü → anlatıyı harness
@@ -2359,7 +2438,7 @@ if _HAS_LIVEKIT:
                     if not got_delta:
                         full = _assistant_msg_text(final_msg)
                         if full:
-                            if enroll_turn:
+                            if _enroll_guard():
                                 enroll_buf.append(full)
                             elif ledger.guard_on:
                                 guard_buf.append(full)
@@ -2382,7 +2461,8 @@ if _HAS_LIVEKIT:
                     # ── DOĞRULUK DENETİMİ (model NE YAPILACAĞINA karar verir,
                     # harness NE OLDUĞUNU söyler). Kayıt turu bu denetimin DIŞINDA:
                     # orada zaten _run_pending_enroll otoriter cümleyi söylüyor.
-                    if not enroll_turn:
+                    enroll_guard = _enroll_guard()
+                    if not enroll_guard:
                         await self._truth_check(ledger, model_said, guard_buf, _emit, spoke)
                     # Kayıt tool'u çağrıldıysa: kaydı KOD yapar ve sonucu KOD söyler.
                     # Kayıt turunda modelin kendi cümlesi (enroll_buf) hiç canlıya
@@ -2391,9 +2471,26 @@ if _HAS_LIVEKIT:
                     # mesaj/yalan "kaydettim" duyulmaz. Tool çağrılmadıysa (rıza/isim
                     # sorma gibi ara adım) buffer toplu olarak söylenir.
                     enroll_line = await self._brain._run_pending_enroll()
-                    if enroll_turn:
+                    if enroll_guard:
                         if enroll_line:
-                            _emit(enroll_line)
+                            if enroll_buf:
+                                logger.warning(
+                                    "enrollment: model anlatısı BASTIRILDI (kayıt=%s) → %r",
+                                    "ok" if self._brain._enroll_last_ok else "ret",
+                                    "".join(enroll_buf)[:200],
+                                )
+                            # Katman 2b: tool sinyalinden ÖNCE canlıya çıkmış metin
+                            # geri alınamaz. Kayıt YAPILMADIYSA ve o metin bir
+                            # "kaydettim" iddiası taşıyorsa harness deterministik
+                            # düzeltmeyi ekler (truth_check ile AYNI cümle/desen).
+                            if (not self._brain._enroll_last_ok
+                                    and truth_check.claim_kind("".join(model_said)) == "record"):
+                                logger.warning(
+                                    "truth: kayıt REDDEDİLDİ ama model 'kaydettim' dedi"
+                                    " → harness düzeltmesi"
+                                )
+                                _emit((" " if spoke[0] else "") + truth_check.UNBACKED_LINE)
+                            _emit((" " if spoke[0] else "") + enroll_line)
                         elif enroll_buf:
                             _emit("".join(enroll_buf))
                     elif enroll_line:
@@ -2407,7 +2504,7 @@ if _HAS_LIVEKIT:
                     # söylenmediyse ağ YİNE devreye girer. Bekleme ara sözü tek başına
                     # "konuştuk" saymaz — kullanıcının sorusu hâlâ cevapsızdır.
                     silent_after_resend = resent and said_count[0] == resend_mark
-                    if (not spoke[0] or silent_after_resend) and not enroll_turn:
+                    if (not spoke[0] or silent_after_resend) and not enroll_guard:
                         logger.warning(
                             "pi turu METİNSİZ bitti → yedek cümle "
                             "(got_delta=%s stalled=%s resent=%s)",
@@ -2514,6 +2611,10 @@ if _HAS_LIVEKIT:
             self._enroll_match: Optional[str] = None      # sese benzeyen mevcut kişi
             self._enroll_core: list = []                  # seçilmiş çekirdek (yazılacak)
             self._pending_enroll: Optional[str] = None    # tool çağrıldı, tur sonunda işlenecek
+            # Son kayıt denemesinin GERÇEK sonucu (True=yazıldı). Modelin
+            # "kaydettim" anlatısı bununla karşılaştırılır (truth_check katman-2b);
+            # None = bu turda kayıt denemesi olmadı.
+            self._enroll_last_ok: Optional[bool] = None
             self._enroll_hinted = False                   # kayıt direktifi verildi mi
             # Kayıt bağlamı LATCH'i: bir kez bilinmeyen ses görülünce (current None)
             # True olur ve _reset_enroll'a kadar sürer. Toplama priming'ini DAR
@@ -2548,6 +2649,18 @@ if _HAS_LIVEKIT:
             self._expression_free_started = False
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
             self._enroll_lock = asyncio.Lock()
+            # ── Kimlik ONAY DÖNGÜSÜ durumu (bağlantı ömürlü) ──────────────────
+            # _confirm_pending: sorulmuş onay sorusu + O TURUN aday pencereleri
+            #   (skor, embedding). "Evet" gelirse YALNIZ bunlar yazılabilir.
+            # _confirm_last_ask: son soru anı (monotonic) → soğuma. SIKLIK bu
+            #   özelliğin en kritik kısıtı: soğuma olmadan kullanıcı bezer.
+            # _confirm_denied: "hayır" denen adaylar — bu oturumda bir daha SORULMAZ.
+            # _confirm_offer*: yabancıya BİR KEZ tanışma teklifi (Çiğdem vakası).
+            self._confirm_pending: Optional[dict] = None
+            self._confirm_last_ask = 0.0
+            self._confirm_denied: set[str] = set()
+            self._confirm_offer_pending = False
+            self._confirm_offered = False
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
             self._reset_pending = False
             # Wake word gate (konuşma penceresi). Kapalıysa gate yok (mevcut davranış).
@@ -3130,7 +3243,23 @@ if _HAS_LIVEKIT:
                 # düşüyordu (canlı 'gördü=0 toplanan=0'). Latch ile havuz enroll boyunca
                 # dolar. Tanınan/normal sohbette latch KAPALI → toplama YOK (kalite kapısı
                 # + echo kapısı olduğu gibi kalır).
-                if current is None and (self._enroll_active or _wants_enroll(text)):
+                # KÖK SEBEP DÜZELTMESİ (27 Tem, canlı `gördü=0 → enroll REDDEDİLDİ`):
+                # latch eskiden `current is None` şartına bağlıydı. Kapalı-küme
+                # hatası tam da burada ısırıyor: profili OLMAYAN üçüncü kişi
+                # (Çiğdem) en yakın profile (Havi) yapışınca `current` DOLU oluyor
+                # → toplayıcı hiç başlamıyor → `enroll_speaker` BOŞ havuza düşüp
+                # reddediliyor. Yani kaydolmak isteyen kişi, yanlış tanındığı için
+                # kaydolamıyordu. AÇIK kayıt isteği (`_wants_enroll`) artık
+                # `current`ten BAĞIMSIZ toplamayı başlatır. Yazma kapısı
+                # DEĞİŞMEDİ: çekirdek tutarlılığı + `best_match` belirsiz bandı
+                # (`Sen X misin?`) aynen geçerli.
+                if self._enroll_active or _wants_enroll(text):
+                    if not self._enroll_active and current is not None:
+                        logger.info(
+                            "enrollment: açık kayıt isteği — ses %r olarak eşleşmiş"
+                            " olsa da toplama BAŞLIYOR (kapalı-küme hatası olabilir)",
+                            current,
+                        )
                     self._enroll_active = True
                 if self._enroll_active:
                     if emb is not None:
@@ -3299,6 +3428,10 @@ if _HAS_LIVEKIT:
               3. bu ses zaten kayıtlı birine mi ait (best_match → merge / belirsiz bant)
             Döner: kullanıcıya SÖYLENECEK Türkçe satır. Ret hâlinde de satır döner —
             sessizce başarılı GÖRÜNMEZ."""
+            # Her denemede GERÇEK sonucu işaretle: modelin anlatısı buna karşı
+            # denetlenir (bkz. PiStream._run, truth_check katman-2b). Kayıt
+            # YAZILANA kadar sonuç "olmadı"dır.
+            self._enroll_last_ok = False
             why = self._valid_enroll_name(name)
             if why:
                 logger.info("enroll REDDEDİLDİ: %s", why)
@@ -3370,10 +3503,14 @@ if _HAS_LIVEKIT:
             # (kötü isim vb.) ona N tur daha tanı. Böylece net-driven tur ile model
             # turu asla aynı anda kaydetmeye çalışmaz.
             self._enroll_no_tool_turns = 0
+            # Varsayılan "olmadı": aşağıdaki hangi yol seçilirse seçilsin, gerçek
+            # yazma olmadan bu bayrak True olmaz (bkz. _store_samples).
+            self._enroll_last_ok = False
             try:
                 return await self._enroll_tool(name)
             except Exception as e:  # noqa: BLE001 — kayıt hatası turu BOZMASIN
                 logger.warning("enroll_speaker gövdesi patladı (%s)", e, exc_info=True)
+                self._enroll_last_ok = False
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
 
         def _best_existing(self) -> tuple[Optional[str], float]:
@@ -3412,6 +3549,7 @@ if _HAS_LIVEKIT:
                         sid, emb_to_bytes(emb), dim, mid, source=source
                     )
                     wrote += 1
+            self._enroll_last_ok = wrote > 0
             logger.info("enrollment: %d örnek yazıldı (kaynak=%s, kişi id=%s)",
                         wrote, source, sid)
             # Değişiklik hemen etkili olsun: centroid'leri DB'den yeniden kur.
@@ -3435,6 +3573,7 @@ if _HAS_LIVEKIT:
                 logger.info("enrollment: %r kaydedildi (id=%s, rol=%s)", name, sid, role)
             except Exception as e:  # noqa: BLE001
                 logger.warning("enrollment başarısız (%s)", e)
+                self._enroll_last_ok = False
                 self._reset_enroll()
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
@@ -3499,6 +3638,7 @@ if _HAS_LIVEKIT:
                 logger.info("enrollment: örnekler mevcut kişi %r'a eklendi (id=%s)", match, sid)
             except Exception as e:  # noqa: BLE001
                 logger.warning("enrollment merge başarısız (%s)", e)
+                self._enroll_last_ok = False
                 self._reset_enroll()
                 return "Şu anda seni kaydedemedim, sonra tekrar deneyelim."
             self._reset_enroll()
@@ -3591,6 +3731,200 @@ if _HAS_LIVEKIT:
             if not parts:
                 return head + ")"
             return head + "\n" + "\n\n".join(parts) + ")"
+
+        # ── Kimlik ONAY DÖNGÜSÜ ───────────────────────────────────────────────
+        # 18 Temmuz'un "emin değilsen kayıt sihirbazını başlatma" kuralı yanlış
+        # kaydı engelledi ama sistemin kendini düzeltmesini de kapattı. Burada
+        # açılan tek kilit: BELİRSİZKEN SOR, onay gelirse O TURUN pencerelerini
+        # profile EKLE. Aday KİMLİK DEĞİLDİR — persona swap'i, `_identity_note`,
+        # hafıza kimliği ve `_target` hâlâ YALNIZ `speaker_state.current`e bakar.
+        async def _confirm_answer_line(self, text: str) -> Optional[str]:
+            """Bekleyen onay/tanışma sorusuna gelen cevabı işle (yoksa None).
+
+            KİMLİK GUARD'INDAN ÖNCE çağrılır: "hayır, ben Havi'yim" bir kimlik
+            İDDİASI gibi görünür ve guard onu yutardı — oysa bu, bizim sorduğumuz
+            sorunun cevabıdır."""
+            if not SPEAKER_CONFIRM_ASK_ENABLED:
+                return None
+            if self._confirm_offer_pending:
+                self._confirm_offer_pending = False
+                declined = _is_decline_enroll(text) or bool(
+                    _ENROLL_NEG_PREFIX_RE.match(text or ""))
+                if not declined and is_affirmative_reply(text):
+                    # MEVCUT açık kayıt akışı başlar (yeni profil). Var olan bir
+                    # profile örnek EKLENMEZ — bu ses tanınmayan biri.
+                    self._enroll_active = True
+                    self._enroll_wanted = True
+                    logger.info("kimlik onayı: tanışma teklifi KABUL → açık kayıt akışı")
+                    return None
+                logger.info("kimlik onayı: tanışma teklifi reddedildi → konu kapandı")
+                return None
+            pending, self._confirm_pending = self._confirm_pending, None
+            if pending is None:
+                return None
+            return await self._confirm_answer(pending, text)
+
+        async def _confirm_answer(self, pending: dict, text: str) -> Optional[str]:
+            """Evet → öğren; hayır → HİÇBİR ŞEY yazma; başka isim → merge YOK."""
+            name = pending.get("name") or ""
+            negated = _is_decline_enroll(text) or bool(
+                _ENROLL_NEG_PREFIX_RE.match(text or ""))
+            if not negated and is_affirmative_reply(text):
+                added = await self._confirm_learn(name, pending.get("windows") or [])
+                self._confirm_log(pending, "evet", added, text)
+                if added:
+                    return "Tamam, artık sesini daha iyi tanıyacağım."
+                # Yazamadıysak "tanıyacağım" DEMEYİZ (yalan olurdu); sessizce sür.
+                return None
+            intro = parse_introduced_name(text)
+            if intro and _slug(intro) != _slug(name):
+                # Farklı isim söylendi → OTOMATİK MERGE YOK (mevcut kural).
+                self._confirm_denied.add(name)
+                self._confirm_log(pending, f"baska-isim:{intro}", 0, text)
+                logger.info("kimlik onayı: %r değil %r denildi → merge YOK, kayıt akışına"
+                            " yönlendiriliyor", name, intro)
+                return ("Anladım, karıştırdım. İstersen sesini kaydedip seni tanıyabilirim"
+                        " — 'beni kaydet' demen yeter.")
+            if negated:
+                self._confirm_denied.add(name)
+                self._confirm_log(pending, "hayir", 0, text)
+                logger.info("kimlik onayı: %r REDDEDİLDİ → örnek yazılmadı, bu oturumda"
+                            " bir daha sorulmayacak", name)
+                if SPEAKER_OFFER_ENROLL_ON_DENY and not self._confirm_offered:
+                    self._confirm_offered = True
+                    self._confirm_offer_pending = True
+                    return "Seni tanımıyorum galiba. İstersen sesini kaydedip tanıyabilirim."
+                return None
+            # Ne evet ne hayır → hiçbir şey yazma, sessizce devam (üsteleme yok).
+            self._confirm_log(pending, "belirsiz", 0, text)
+            return None
+
+        def _confirm_ask_line(self) -> Optional[str]:
+            """Bu turda kimlik onayı SORULSUN mu? Soru deterministiktir, modele
+            bırakılmaz (truth_check ilkesi: model NE YAPILACAĞINA, harness NE
+            OLDUĞUNA karar verir).
+
+            Hepsi sağlanmadan sorulmaz — şüphede SORMAYIZ:
+              tur kararı Bilinmeyen · aday var · oran >= eşik · >= 2 güncel pencere
+              · soğuma doldu · aday daha önce reddedilmemiş · kullanıcı zaten bir
+              soruya cevap vermiyor (kayıt sihirbazı / sıfırlama / bekleyen onay)."""
+            if not SPEAKER_CONFIRM_ASK_ENABLED or not self._enroll_ok:
+                return None
+            if (self._enroll_active or self._enroll_stage is not None
+                    or self._reset_pending or self._confirm_pending is not None
+                    or self._confirm_offer_pending):
+                return None
+            state = self._speaker_state
+            decision = getattr(state, "last_turn_decision", None)
+            if state is None or decision is None:
+                return None
+            # KESİN karar → soru YOK (bugünkü akış aynen korunur).
+            if decision.name is not None or getattr(state, "current", None) is not None:
+                return None
+            cand = decision.candidate
+            if not cand or cand in self._confirm_denied:
+                return None
+            windows = list(getattr(state, "last_turn_candidate_windows", None) or [])
+            if (decision.candidate_ratio < SPEAKER_CONFIRM_MIN_RATIO
+                    or decision.candidate_windows < SPEAKER_CONFIRM_MIN_WINDOWS
+                    or not windows):
+                logger.debug(
+                    "kimlik onayı: soru YOK (aday=%s oran=%.2f pencere=%d embed=%d)",
+                    cand, decision.candidate_ratio, decision.candidate_windows,
+                    len(windows),
+                )
+                return None
+            now = time.monotonic()
+            if self._confirm_last_ask and (now - self._confirm_last_ask) < SPEAKER_CONFIRM_COOLDOWN_S:
+                logger.info(
+                    "kimlik onayı: aday=%s uygun ama SOĞUMA dolmadı (%.0fs/%.0fs) → sorulmuyor",
+                    cand, now - self._confirm_last_ask, SPEAKER_CONFIRM_COOLDOWN_S,
+                )
+                return None
+            self._confirm_last_ask = now
+            self._confirm_pending = {
+                "name": cand,
+                "ratio": decision.candidate_ratio,
+                "avg_score": decision.candidate_score,
+                "windows": windows,
+                "asked_at": time.time(),
+            }
+            logger.info(
+                "kimlik onayı SORULUYOR: aday=%s oran=%.2f ort_skor=%.3f pencere=%d"
+                " (kabul=%d/%d, sebep=%s)",
+                cand, decision.candidate_ratio, decision.candidate_score,
+                len(windows), decision.accepted, decision.total, decision.reason,
+            )
+            return f"Pardon, sesinden emin olamadım — sen {cand} {_misin(cand)}?"
+
+        async def _confirm_learn(self, name: str, windows: list) -> int:
+            """Onaylanan kimliğe O TURUN en iyi pencerelerini yaz (`confirmed-learn`).
+
+            Pasif öğrenme AÇILMIYOR (`SPEAKER_LEARN_ENABLED` false kalır); öğrenme
+            YALNIZ açık onaydan sonra olur. Etiket ayrı olduğu için tek komutla
+            geri alınabilir:
+              DELETE FROM speaker_samples WHERE source='confirmed-learn';
+            Pencere süresi tap tarafında >= SPEAKER_MIN_SECONDS garantidir."""
+            if not self._enroll_ok or not name:
+                return 0
+            from speaker_id import emb_to_bytes
+
+            sid = self._speaker_id.id_for(name)
+            if sid is None:
+                logger.warning("kimlik onayı: %r için speaker id yok → yazma YOK", name)
+                return 0
+            wrote = 0
+            scores: list[float] = []
+            for score, emb in windows[:SPEAKER_LEARN_MAX_PER_TURN]:
+                if emb is None:
+                    continue
+                try:
+                    await self._speaker_store.add_speaker_sample(
+                        sid, emb_to_bytes(emb), self._speaker_id.dim,
+                        self._speaker_id.model_id, source="confirmed-learn",
+                    )
+                except Exception as e:  # noqa: BLE001 — öğrenme turu BOZMASIN
+                    logger.warning("kimlik onayı: örnek yazılamadı (%s)", e)
+                    continue
+                wrote += 1
+                scores.append(float(score))
+            if wrote:
+                try:
+                    self._speaker_id.reload(
+                        await self._speaker_store.all_speaker_embeddings())
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("kimlik onayı: centroid yenilenemedi (%s)", e)
+            logger.info(
+                "kimlik onayı ÖĞRENME: %r için %d/%d örnek yazıldı"
+                " (kaynak=confirmed-learn, skorlar=%s)",
+                name, wrote, min(len(windows), SPEAKER_LEARN_MAX_PER_TURN),
+                ", ".join(f"{s:.3f}" for s in scores) or "—",
+            )
+            return wrote
+
+        def _confirm_log(self, pending: dict, answer: str, added: int, text: str) -> None:
+            """Soru/cevap/skor satırını JSONL'e yaz — ETİKETLİ VERİ.
+
+            Kullanıcının "hayır"ı, o turun skorlarının yabancıya ait olduğunu
+            söyler. Birkaç gün sonra asnorm eşiği bu dosya + gölge ölçüm log'uyla
+            TAHMİNLE değil VERİYLE seçilecek. Best-effort: yazamazsak tur sürer."""
+            row = {
+                "ts": time.time(),
+                "aday": pending.get("name"),
+                "oran": round(float(pending.get("ratio") or 0.0), 3),
+                "ort_skor": round(float(pending.get("avg_score") or 0.0), 3),
+                "skorlar": [round(float(s), 3) for s, _ in (pending.get("windows") or [])],
+                "cevap": answer,
+                "eklenen": added,
+                "metin": (text or "")[:80],
+            }
+            try:
+                SPEAKER_CONFIRM_LOG.parent.mkdir(parents=True, exist_ok=True)
+                with SPEAKER_CONFIRM_LOG.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except OSError as e:
+                logger.debug("kimlik onay log'u yazılamadı: %s", e)
+            logger.info("kimlik onayı KAYIT: %s", row)
 
         def _identity_line(self, text: str) -> Optional[str]:
             """Deterministic identity truth; model never adjudicates voice identity."""
