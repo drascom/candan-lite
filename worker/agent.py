@@ -21,6 +21,7 @@ from livekit.plugins import silero
 # gerekir (`python -m livekit.agents download-files` ikisini de çeker).
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
+import barge                                # sözünü kesme: yeni komut mu, sohbet mi
 from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
@@ -410,6 +411,29 @@ async def entrypoint(ctx: JobContext):
             speaker_state,
             hide_when_asleep=WAKE_ENABLED and SLEEP_TRANSCRIPTS_HIDDEN,
         )
+
+    # ── SÖZÜNÜ KESME: ne söylendi, nerede kesildi (bkz. worker/barge.py) ─────
+    # Kesme anında "kullanıcı gerçekte neyi duydu" TAHMİN EDİLMEZ — framework
+    # bilir: `conversation_item_added`, ses/transkript senkronizasyonundan gelen
+    # `forwarded_text`i taşır ve `interrupted` bayrağını verir (voice/generation.py
+    # `_ForwardOutput.forwarded_text`). Bu tek olay hem devam mekaniğini
+    # (kaldığı cümlenin başından sürdür) hem geçmiş dürüstlüğünü (kesilen metin
+    # söylenmiş gibi geçmişe girmesin) besler.
+    # Bayrak kapalıysa kanca HİÇ kurulmaz → davranış bugünküyle bire bir aynı.
+    if barge.RESUME_ENABLED:
+        @session.on("conversation_item_added")
+        def _on_item_added(ev) -> None:
+            try:
+                item = getattr(ev, "item", None)
+                if getattr(item, "role", "") != "assistant":
+                    return
+                brain.note_agent_said(
+                    getattr(item, "text_content", "") or "",
+                    bool(getattr(item, "interrupted", False)),
+                )
+            except Exception:  # noqa: BLE001 — kesme defteri konuşmayı BOZMAZ
+                logging.getLogger("worker.agent").warning(
+                    "kesme defteri güncellenemedi", exc_info=True)
 
     # `mate.tool`: tool çağrısı/sonucu → odaya text-stream (web sohbette gösterir).
     # BEST-EFFORT: yayın patlarsa konuşma AYNEN sürer, sadece warning düşer.

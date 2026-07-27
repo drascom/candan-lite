@@ -38,6 +38,7 @@ from name_parser import (
     _is_enroll_command,
 )
 from log_utils import DedupeFilter
+import barge
 import truth_check
 
 logger = logging.getLogger("pi_brain")
@@ -2105,9 +2106,13 @@ if _HAS_LIVEKIT:
             said_count = [0]  # kaç PARÇA söylendi (ara sözler dahil) — emniyet ağı bunu
                               # yeniden gönderimden ÖNCE/SONRA karşılaştırır.
 
+            # Sözü kesilirse "modelin ÜRETTİĞİ tam metin" bu turun defteridir.
+            self._brain._barge_turn_start()
+
             def _emit(content: str) -> None:
                 spoke[0] = True
                 said_count[0] += 1
+                self._brain._barge_track(content)
                 self._event_ch.send_nowait(
                     llm.ChatChunk(
                         id=turn_id,
@@ -2119,7 +2124,23 @@ if _HAS_LIVEKIT:
             # ÖNCE. Uyurken + wake yok → sessiz (pi'ya GİTME, token yok). Wake ile
             # uyanınca enrollment/normal akış devam eder. Kapalıysa gate yok.
             action, payload = self._brain._wake_decide(text)
+            # Bekleyen "devam" (önceki cevabın sözü kesilmişti) HER YOLDA burada
+            # düşürülür: aşağıdaki scripted yollardan biri turu erken kapatsa bile
+            # bayat bir devam sonraki tura sarkmaz. Kararı ise scripted yollardan
+            # SONRA veriyoruz — kimlik/kayıt/sıfırlama akışları hep önceliklidir.
+            pending = self._brain._barge_take()
             if action == "silent":
+                # Uyanıkken tek başına "Candan?" buraya düşer: wake gate pi'ya
+                # göndermez ama bu bir İSİM SESLENİŞİDİR — kullanıcının kendi
+                # örneğinde sohbet sınıfındadır → kesilen cevap devam eder.
+                # Uyurken ya da proaktif seslenme sürerken (hold) devam YOK.
+                if (pending is not None and self._brain._wake.awake
+                        and not self._brain._wake.hold):
+                    resume = pending.resume()
+                    if resume:
+                        logger.info("kesme: isim seslenişi → devam (%d harf)",
+                                    barge.speakable_len(resume))
+                        _emit(resume)
                 return
             if action == "scripted":
                 _emit(payload)
@@ -2174,6 +2195,17 @@ if _HAS_LIVEKIT:
                 _emit(scripted)
                 return
 
+            # SÖZÜNÜ KESME — yeni komut mu, sadece sohbet mi? (bkz. barge.py)
+            # Deterministik kapı tipik kesmeyi bedava çözer; belirsizse küçük LLM'e
+            # sorulur; o da kararsızsa YENİ İSTEK sayılır (kullanıcının kararı).
+            # "Sohbet" kararında metin YENİDEN ÜRETİLMEZ: elde olan cevabın kalanı,
+            # kesilen cümlenin BAŞINDAN itibaren seslendirilir → pi'ya HİÇ gidilmez.
+            if pending is not None:
+                resume = await self._brain._barge_resume_line(pending, text)
+                if resume is not None:
+                    _emit(resume)
+                    return
+
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
@@ -2183,6 +2215,9 @@ if _HAS_LIVEKIT:
             # Kimlik: model KARŞILAŞTIRMAZ, worker sonucu ENJEKTE eder — her turda,
             # sadece ilk turda değil (bkz. _identity_note).
             text = self._brain._identity_note(text)
+            # Kesilen cevap konuşma geçmişine "söylenmiş" gibi girmesin: kullanıcının
+            # GERÇEKTEN duyduğu kısmı harness bildirir (canlı 27 Tem 18:37 hatası).
+            text = self._brain._barge_note(text)
             personal_memory = self._brain._personal_memory_note()
             if personal_memory:
                 text = personal_memory + "\n\n" + text
@@ -2678,6 +2713,18 @@ if _HAS_LIVEKIT:
             self._confirm_offered = False
             # Sıfırlama yakın-ıska onayı bekleniyor mu (TEK tur yaşar; bkz. _reset_line).
             self._reset_pending = False
+            # ── SÖZÜNÜ KESME / DEVAM (bkz. barge.py) ──────────────────────────
+            # _answer_buf     : bu turda kullanıcıya GİDEN metin (tur başında sıfırlanır).
+            #                   Kesilme olursa "modelin ÜRETTİĞİ tam metin" budur.
+            # _barge_pending  : kesilmiş cevap (tam metin + GERÇEKTEN duyulan kısım).
+            #                   Bir sonraki turda TEK KEZ tüketilir, ömrü sınırlı.
+            # _barge_unheard  : pi'ya söylenecek GERÇEK — kullanıcı nesini duydu.
+            #                   `truth_check` ilkesi: harness bilir, model tahmin etmez.
+            # BARGE_RESUME_ENABLED kapalıyken hepsi ölü ağırlıktır (davranış aynı).
+            self._answer_buf: list[str] = []
+            self._barge_pending: Optional[barge.Pending] = None
+            self._barge_unheard: Optional[str] = None
+            self._barge_unheard_at = 0.0
             # Wake word gate (konuşma penceresi). Kapalıysa gate yok (mevcut davranış).
             self._wake = WakeGate()
             self._wake_task: Optional[asyncio.Task] = None
@@ -2703,6 +2750,100 @@ if _HAS_LIVEKIT:
                 return self._speed_source()
             except Exception:  # noqa: BLE001 — denetim okuması ASLA turu düşürmez
                 return None
+
+        # ── Sözünü kesme: kaldığı yerden devam (bkz. barge.py) ───────────────
+        def _barge_turn_start(self) -> None:
+            """Yeni tur: bu turda söylenecek metnin defterini aç.
+
+            SADECE `_answer_buf` sıfırlanır. `_barge_pending` ÖNCEKİ turdan gelir
+            ve bu turda tüketilecektir — burada silinmez."""
+            if barge.RESUME_ENABLED:
+                self._answer_buf = []
+
+        def _barge_track(self, content: str) -> None:
+            """Kullanıcıya giden her parçayı deftere yaz (kesilirse 'tam metin' bu)."""
+            if barge.RESUME_ENABLED and content:
+                self._answer_buf.append(content)
+
+        def note_agent_said(self, spoken: str, interrupted: bool) -> None:
+            """Framework'ün GERÇEĞİ: bu cevabın nesi seslendirildi, kesildi mi?
+
+            agent.py `conversation_item_added` olayına bağlar. `spoken`,
+            livekit'in ses/transkript senkronizasyonundan gelir — TAHMİN DEĞİL,
+            hoparlöre GİDEN metindir. Defter burada TÜKETİLİR: `session.say()`
+            gibi PiStream'den geçmeyen sözler boş defter bulur ve durumu bozmaz."""
+            if not barge.RESUME_ENABLED:
+                return
+            full = "".join(self._answer_buf)
+            self._answer_buf = []
+            if not full:
+                return                       # PiStream turu değil (ör. hatırlatma sesi)
+            if not interrupted:
+                self._barge_pending = None
+                return
+            self._barge_pending = barge.Pending(full=full, spoken=spoken or "")
+            self._barge_unheard = spoken or ""
+            self._barge_unheard_at = time.monotonic()
+            logger.info(
+                "kesme: cevap %d/%d harf duyuldu → devam bekliyor",
+                barge.speakable_len(spoken or ""), barge.speakable_len(full),
+            )
+
+        def _barge_take(self) -> Optional["barge.Pending"]:
+            """Bekleyen devamı TEK KEZ al (süresi dolduysa None).
+
+            Tur başında çağrılır ve pending HER HÂLÜKÂRDA düşürülür: turun scripted
+            bir yoldan (kimlik/kayıt/sıfırlama) erken dönmesi hâlinde bile bayat bir
+            devam sonraki tura sarkmaz."""
+            pending, self._barge_pending = self._barge_pending, None
+            if pending is None or not barge.RESUME_ENABLED:
+                return None
+            if pending.expired():
+                logger.info("kesme: devam süresi doldu (%.0fs) → kalan atıldı",
+                            barge.RESUME_TTL)
+                return None
+            return pending
+
+        async def _barge_resume_line(
+            self, pending: "barge.Pending", text: str
+        ) -> Optional[str]:
+            """Kesen ifade SOHBET miydi? Öyleyse kaldığı cümlenin BAŞINDAN devam metni.
+
+            None → yeni-istek (ya da devam edecek metin kalmamış): bugünkü davranış,
+            kalan atılır. Şüphede yeni-istek sayılır (kullanıcının kararı)."""
+            try:
+                verdict, ask_llm = barge.classify_fast(text)
+                if verdict is None:
+                    verdict = (await barge.classify_llm(text)) if ask_llm else None
+                    verdict = verdict or barge.NEW
+                    logger.info("kesme sınıfı (sınıflandırıcı): %s ← %r", verdict, text[:60])
+                if verdict != barge.CHAT:
+                    return None
+                rest = pending.resume()
+            except Exception:  # noqa: BLE001 — devam mekaniği ASLA turu düşürmez
+                logger.warning("kesme devam mekaniği başarısız", exc_info=True)
+                return None
+            if not rest:
+                return None
+            # Kalan GERÇEKTEN söylenecek → geçmiş dürüstlüğü notu gereksiz.
+            self._barge_unheard = None
+            logger.info(
+                "kesme: sohbet sayıldı (%r) → kaldığı cümlenin başından devam (%d harf)",
+                text[:40], barge.speakable_len(rest),
+            )
+            return rest
+
+        def _barge_note(self, text: str) -> str:
+            """pi'ya giden prompt'a: önceki cevabın nesi DUYULDU (bir kez).
+
+            Canlı hatanın ikinci yarısı buydu — model kesilen metnin duyulduğunu
+            varsayıp "az önceki örnekleri dinledin sanırım" dedi."""
+            if not barge.RESUME_ENABLED or self._barge_unheard is None:
+                return text
+            spoken, self._barge_unheard = self._barge_unheard, None
+            if (time.monotonic() - self._barge_unheard_at) > barge.RESUME_TTL:
+                return text
+            return barge.unheard_note(spoken) + "\n\n" + text
 
         def _publish_tool_msg(self, message: Any) -> None:
             """pi mesajındaki tool çağrısı/sonucunu web'e yayınla — BEST-EFFORT.
