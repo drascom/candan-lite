@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Higgs TTS 3 vs OmniVoice — Türkçe (sunucu, RTX 3090)</title>
+<style>
+  :root {
+    --bg: #12131a; --panel: #1b1d27; --line: #2c2f3d; --fg: #e8e9f0;
+    --dim: #9a9db0; --omni: #6ea8fe; --hdef: #5ec98a; --hclone: #e0a33e;
+    --htr: #c07ee0; --bad: #e07a9a; --good: #5ec98a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  h2 { font-size: 14px; margin: 0 0 8px; color: var(--dim); letter-spacing: .4px;
+    text-transform: uppercase; }
+  .sub { color: var(--dim); font-size: 13px; margin-bottom: 16px; max-width: 980px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 16px; position: sticky; top: 0; z-index: 10; }
+  button { background: #262a38; color: var(--fg); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 12px; cursor: pointer; font-size: 13px;
+    font-family: inherit; }
+  button:hover { border-color: var(--omni); }
+  button.play { min-width: 58px; }
+  button.playing { background: var(--omni); color: #0d1017; border-color: var(--omni); }
+  button.missing { opacity: .3; cursor: not-allowed; }
+  button.on { background: var(--omni); color: #0d1017; border-color: var(--omni); }
+  label { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .spacer { flex: 1; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 16px; overflow-x: auto; }
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; background: var(--panel); }
+  #tbl { min-width: 760px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: left;
+    vertical-align: top; }
+  th { background: #21242f; font-size: 12px; white-space: nowrap; }
+  th.grp { text-align: center; font-size: 11px; letter-spacing: .6px; text-transform: uppercase; }
+  th.grp.g-omnivoice { color: var(--omni); }
+  th.grp.g-higgs-default { color: var(--hdef); }
+  th.grp.g-higgs-clone { color: var(--hclone); }
+  th.grp.g-higgs-clone-trnorm { color: var(--htr); }
+  th.sep, td.sep { border-left: 2px solid var(--line); }
+  th.sent, td.sent { min-width: 300px; max-width: 460px; border-right: 1px solid var(--line); }
+  .txt { font-size: 13.5px; }
+  .meta { color: var(--dim); font-size: 11.5px; margin-top: 3px; }
+  .tag { display: inline-block; background: #2a2e3d; color: var(--dim); border-radius: 4px;
+    padding: 1px 6px; font-size: 10.5px; margin-right: 5px; }
+  .dur { color: var(--dim); font-size: 11px; margin-top: 3px; white-space: nowrap; }
+  .cell { text-align: center; }
+  .note { color: var(--dim); font-size: 12.5px; margin-top: 14px; line-height: 1.7; max-width: 980px; }
+  .err { color: var(--hclone); }
+  code { background: #262a38; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  table.m { min-width: 0; width: auto; }
+  table.m th, table.m td { padding: 6px 14px 6px 0; border-bottom: 1px solid var(--line);
+    white-space: nowrap; }
+  table.m td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .win { color: var(--good); } .lose { color: var(--bad); }
+  .miss { color: var(--bad); font-size: 11px; }
+  details summary { cursor: pointer; color: var(--dim); font-size: 12.5px; }
+</style>
+</head>
+<body>
+
+<h1>Higgs TTS 3 (4B) &nbsp;vs&nbsp; OmniVoice — Türkçe</h1>
+<div class="sub">
+  Hepsi <b>aynı sunucuda (RTX 3090)</b>, <b>aynı 29 cümleyle</b>, <b>aynı referans sesle</b>
+  (<code>/opt/omnivoice/default-ref.wav</code>) üretildi — Mac ölçümleri DEĞİL.
+  <b style="color:var(--omni)">omnivoice-server</b> canlı köprüden (:8808, num2words
+  normalizasyonu açık) alındı; <b style="color:var(--hdef)">higgs-default</b> modelin kendi
+  zero-shot sesi; <b style="color:var(--hclone)">higgs-clone</b> aynı referansla klon, metin
+  HAM; <b style="color:var(--htr)">higgs-clone-trnorm</b> klon + trnorm.
+  <br>Asıl soru <b>kalite</b>: aynı cümleyi iki modelde arka arkaya dinle.
+</div>
+
+<div class="panel">
+  <h2>Ölçümler</h2>
+  <div id="metrics">yükleniyor…</div>
+</div>
+
+<div class="bar">
+  <button id="refBtn">▶ Referans ses (Candan, 7.2 sn)</button>
+  <div class="spacer"></div>
+  <button class="on" data-g="omnivoice">OmniVoice</button>
+  <button class="on" data-g="higgs-default">Higgs default</button>
+  <button class="on" data-g="higgs-clone">Higgs klon</button>
+  <button class="on" data-g="higgs-clone-trnorm">Higgs klon+trnorm</button>
+  <label><input type="checkbox" id="blind"> İsimleri gizle</label>
+  <label><input type="checkbox" id="onlyNorm"> Yalnız zor vakalar</label>
+  <button id="shuffle">Karıştır</button>
+  <button id="stop">■ Durdur</button>
+</div>
+
+<div class="scroll"><table id="tbl"></table></div>
+<div class="note" id="note"></div>
+
+<script>
+// Bağımlılık yok, CDN yok. Veri: out/manifest.json (merge_manifest.py üretir).
+const $ = (s) => document.querySelector(s);
+let audio = new Audio(), current = null, cols = [], data = null;
+const shown = {};
+
+function stop() {
+  audio.pause(); audio.currentTime = 0;
+  if (current) current.classList.remove('playing');
+  current = null;
+}
+
+function play(src, btn) {
+  if (current === btn) { stop(); return; }
+  stop();
+  audio = new Audio(src);
+  audio.play().catch((e) => { btn.textContent = 'hata'; console.error(e); });
+  btn.classList.add('playing');
+  current = btn;
+  audio.onended = () => { btn.classList.remove('playing'); current = null; };
+}
+
+const n1 = (x, d = 2) => (x === null || x === undefined) ? '—' : Number(x).toFixed(d);
+const mib = (x) => (x === null || x === undefined) ? '—' : Math.round(x) + ' MiB';
+
+function metrics() {
+  const o = data.ozet, y = data.yukleme, asr = data.asr;
+  const ms = cols;
+  const row = (label, fn) =>
+    `<tr><th>${label}</th>` + ms.map((m) => `<td class="num">${fn(o[m] || {}, m)}</td>`).join('') + '</tr>';
+
+  // ilk sese kadar: streaming olsaydı (Higgs) / non-streaming toplam (her ikisi)
+  const ttfa = (t) => {
+    const l = t.ilk_ses_gecikmesi;
+    if (!l || !l.orta) return '—';
+    return n1(l.orta.first_block_s, 3) + ' s';
+  };
+
+  let html = '<table class="m"><thead><tr><th></th>' +
+    ms.map((m) => `<th style="color:var(--${({'omnivoice':'omni','higgs-default':'hdef','higgs-clone':'hclone','higgs-clone-trnorm':'htr'})[data.groups[m]] || 'fg'})">${m}</th>`).join('') +
+    '</tr></thead><tbody>';
+  html += row('RTF ortalama', (t) => n1(t.mean_rtf, 3));
+  html += row('RTF kısa / orta / uzun', (t, m) => {
+    const b = data.rtf_kova[m]; return b ? `${n1(b.kisa)} / ${n1(b.orta)} / ${n1(b.uzun)}` : '—';
+  });
+  html += row('toplam ses / wall (29 cümle)', (t) => `${n1(t.total_audio_s, 1)} s / ${n1(t.total_wall_s, 1)} s`);
+  html += row('ilk sese kadar (kare bloğu)', ttfa);
+  html += row('GPU tepe — ÜRETİM (tüm kart)', (t) => mib((t.uretim || {}).gpu_peak_mib));
+  html += row('bu sürecin VRAM tepesi (torch)', (t) => mib((t.uretim || {}).torch_reserved_peak_mib));
+  html += row('RAM tepe (sistem)', (t) => mib((t.uretim || {}).ram_peak_mib));
+  html += row('başarısız cümle', (t) => (t.count_fail ?? '—'));
+  if (asr) {
+    html += row('ASR geri-dönüş WER', (t, m) => {
+      const s = asr.setler[m]; if (!s) return '—';
+      const best = Math.min(...Object.values(asr.setler).map((x) => x.ortalama_wer));
+      return `<span class="${s.ortalama_wer === best ? 'win' : ''}">${n1(s.ortalama_wer, 3)}</span>`;
+    });
+    html += row('atlanan kelime (toplam)', (t, m) => (asr.setler[m] || {}).toplam_atlanan_kelime ?? '—');
+  }
+  html += '</tbody></table>';
+
+  if (y) {
+    html += `<div class="note" style="margin-top:12px">Higgs yükleme: <b>${n1(y.load_s, 1)} s</b> · ` +
+      `torch ayrılan <b>${mib(y.torch_allocated_mib)}</b> · yükleme sırasında RAM tepe <b>${mib(y.ram_peak_mib)}</b>. ` +
+      `Referans: <b>${(data.referans || {}).frames} kare</b> ` +
+      `(kodlama tek sefer, ölçüm dışı: ${(data.referans || {}).encode_s === null
+        ? 'bu koşumda önbellekten' : n1((data.referans || {}).encode_s, 2) + ' s'}).<br>` +
+      `<b>Higgs ve OmniVoice AYNI ANDA ÇALIŞAMAZ</b> — 24 GB kartta llama-server (9.5 GB) + ` +
+      `whisper (2.3 GB) zaten duruyor; geriye ~12.2 GB kalıyor, Higgs bunun ~10.5 GB'ını alıyor.</div>`;
+  }
+  if (asr && asr.taban) {
+    html += `<div class="note">ASR taban gürültüsü (metni kesin bilinen klip): WER ` +
+      `<b>${n1(asr.taban.wer, 3)}</b> — set WER'leri bunun ÜSTÜNDEKİ kısım kadar anlamlı. ` +
+      `Whisper konuşulan sayıları rakama geri yazdığı için "atlanan kelime" listesinde ` +
+      `<code>kilogram→kilo</code>, <code>link'ten→linkten</code> gibi ÖLÇÜM artefaktları da var.</div>`;
+  }
+  $('#metrics').innerHTML = html;
+}
+
+function visibleCols() { return cols.filter((m) => shown[data.groups[m]]); }
+
+function render() {
+  const blind = $('#blind').checked, onlyNorm = $('#onlyNorm').checked;
+  const vis = visibleCols();
+
+  let grpRow = '<tr><th class="sent" rowspan="2">Cümle</th>';
+  let i = 0;
+  while (i < vis.length) {
+    const g = data.groups[vis[i]];
+    let n = 0;
+    while (i + n < vis.length && data.groups[vis[i + n]] === g) n++;
+    grpRow += `<th class="grp g-${g}${i ? ' sep' : ''}" colspan="${n}">${g}</th>`;
+    i += n;
+  }
+  grpRow += '</tr><tr>';
+  vis.forEach((m, k) => {
+    const first = k === 0 || data.groups[m] !== data.groups[vis[k - 1]];
+    grpRow += `<th class="${first && k ? 'sep' : ''}">${blind ? 'Model ' + String.fromCharCode(65 + k) : m}</th>`;
+  });
+  grpRow += '</tr>';
+
+  let body = '';
+  for (const s of data.sentences) {
+    if (onlyNorm && !s.beklenen) continue;
+    const cells = vis.map((m, k) => {
+      const first = k === 0 || data.groups[m] !== data.groups[vis[k - 1]];
+      const cls = `cell${first && k ? ' sep' : ''}`;
+      const w = s.wavs[m];
+      if (!w) return `<td class="${cls}"><button class="play missing" disabled>—</button></td>`;
+      const miss = ((data.asr || {}).detay || {})[m];
+      const item = miss && (miss.items || []).find((x) => x.id === s.id);
+      const bad = item && item.atlanan.length ? `<div class="miss">↯ ${item.atlanan.join(', ')}</div>` : '';
+      return `<td class="${cls}">
+        <button class="play" data-src="out/${encodeURIComponent(m)}/${s.id}.wav">▶</button>
+        <div class="dur">${w.duration_s.toFixed(1)}s · RTF ${s.rtf[m] ?? '—'}</div>${bad}</td>`;
+    }).join('');
+    body += `<tr><td class="sent">
+        <div class="txt">${s.text.replace(/</g, '&lt;')}</div>
+        <div class="meta"><span class="tag">${s.kategori}</span>${s.hedef}</div>
+        ${s.beklenen ? `<details><summary>beklenen sözlü form</summary><div class="meta">${s.beklenen}</div></details>` : ''}
+      </td>${cells}</tr>`;
+  }
+  $('#tbl').innerHTML = `<thead>${grpRow}</thead><tbody>${body}</tbody>`;
+  $('#tbl').querySelectorAll('button.play:not(.missing)').forEach((b) => {
+    b.onclick = () => play(b.dataset.src, b);
+  });
+}
+
+// RTF'i uzunluk kovalarına ayır (kısa <3s, orta 3-6s, uzun >6s) — OmniVoice tabanıyla
+// karşılaştırılabilir olsun diye sayfa tarafında hesaplanıyor.
+function rtfBuckets(d) {
+  const out = {};
+  for (const m of d.models) {
+    const acc = { kisa: [], orta: [], uzun: [] };
+    for (const s of d.sentences) {
+      const w = s.wavs[m], r = s.rtf[m];
+      if (!w || r === null || r === undefined) continue;
+      (w.duration_s < 3 ? acc.kisa : w.duration_s < 6 ? acc.orta : acc.uzun).push(r);
+    }
+    const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+    out[m] = { kisa: avg(acc.kisa), orta: avg(acc.orta), uzun: avg(acc.uzun) };
+  }
+  return out;
+}
+
+const ORDER = { 'omnivoice': 0, 'higgs-default': 1, 'higgs-clone': 2, 'higgs-clone-trnorm': 3 };
+
+fetch('out/manifest.json')
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((d) => {
+    data = d;
+    data.rtf_kova = rtfBuckets(d);
+    for (const g of Object.values(d.groups)) shown[g] = true;
+    cols = d.models.slice().sort((a, b) =>
+      (ORDER[d.groups[a]] ?? 9) - (ORDER[d.groups[b]] ?? 9) || a.localeCompare(b));
+    metrics();
+    render();
+    const n = d.sentences.reduce((a, s) => a + Object.keys(s.wavs).length, 0);
+    $('#note').innerHTML = `${d.models.length} set · ${d.sentences.length} cümle · ${n} wav. ` +
+      `Ham sayılar: <code>out/higgs_report.json</code>, <code>out/asr_eval.json</code>, ` +
+      `<code>out/&lt;set&gt;/timings.json</code>.`;
+  })
+  .catch((e) => {
+    $('#note').innerHTML = `<span class="err">out/manifest.json okunamadı (${e.message}).</span> ` +
+      `Önce <code>python3 merge_manifest.py</code>, sonra bu sayfayı <code>./serve.sh</code> ` +
+      `ile aç (file:// ile fetch engellenir).`;
+  });
+
+$('#blind').onchange = render;
+$('#onlyNorm').onchange = render;
+$('#stop').onclick = stop;
+document.querySelectorAll('button[data-g]').forEach((b) => {
+  b.onclick = () => { shown[b.dataset.g] = !shown[b.dataset.g]; b.classList.toggle('on'); render(); };
+});
+$('#shuffle').onclick = () => {
+  for (let i = cols.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+  }
+  render();
+};
+$('#refBtn').onclick = (e) => play('refs/default-ref.wav', e.target);
+</script>
+
+</body>
+</html>

@@ -59,3 +59,9 @@ experiments/tts-local-bench/vendor/
 experiments/tts-local-bench/refs/*.wav
 # referans sesten türetilen ses-klon prompt tensörleri — *.wav gibi biyometrik veri, girmez.
 experiments/tts-local-bench/refs/*.pt
+
+# higgs-tts3 (experiments/): aynı kural. Araçlar (run_*.py, compare.html, README,
+# sentences.json) commit edilir; sunucudan çekilen ses ve referans türevleri EDİLMEZ.
+experiments/higgs-tts3/out/
+experiments/higgs-tts3/refs/*.wav
+experiments/higgs-tts3/refs/*.pt
