@@ -82,7 +82,7 @@ Kademe `reset_mood()` ile SIFIRLANMAZ: mood cümlelik bir renk, hız kalıcı ay
 Bayrak: `worker/.env` → `SPEECH_SPEED=0` (işaret yine silinir, tempo uygulanmaz).
 
 ⚠️ OMNIVOICE'A GERİ DÖNÜŞ ARTIK İKİ ADIM. 27 Tem'de prompt'a Higgs'e ÖZGÜ etiketler
-eklendi (`[pause]`, `[long_pause]`, `[mood:warm|calm|proud|confused]`, `[speed:X]`)
+eklendi (`[pause]`, `[long_pause]`, `[whisper]`, `[mood:*]` ondu, `[speed:X]`)
 — ölçüldüler, Higgs'te temizler. Ama `omnivoice_tts._MOOD_RE` yalnız `excited|sad`
 biliyor ve OmniVoice tanımadığı `[...]`'yi HARFİ HARFİNE OKUR. Motoru geri alırken:
     1) `worker/.env` → `TTS_ENGINE=higgs` satırını sil
@@ -166,17 +166,43 @@ _FINAL_PUNCT = ".!?…:;"
 #
 # ⚠️ `speed_very_slow` ŞÜPHELİ: 24'te 23 anlaşıldı, WER 0.075 (diğerlerinde 0.000)
 # ve cümlenin ilk hecesini kırpabiliyor ("Bugün" → "Gün"). Eşlemeye ALINMADI.
+#
+# ── SESİN KİMLİĞİNİ BOZAN TOKEN'LAR — ÖLÇÜMDE TEMİZ, KULAKTA YASAK ───────────
+# Kalıcı ders (27 Tem, kullanıcı kulaklıkla dinledi): "temiz" yalnızca ANLAŞILIR
+# demek; Candan'ın SESİ olarak kabul edilebilir demek DEĞİL.
+#   • `prosody:pitch_low`  → "taban kadın sesi, etiketli erkek ses". Konuşanın
+#     KİMLİĞİNİ değiştiriyor. ASLA kullanılmasın (`affection+pitch_low`nun "şuh"
+#     bulunmasının sebebi de buydu).
+#   • `style:shouting`     → "ses başkasına ait gibi, ses rengi değişmiş". Aynı sebep.
+#   • `emotion:longing`    → KÖTÜ: "her kelimeyi uzatması fazla".
+#   • `prosody:speed_*`    → ÖLÜ YOL. Kulakla da doğrulandı ("taban ile aynı",
+#     `speed_fast` için "taban olan daha iyi"). Hız artık WSOLA ile yapılıyor
+#     (`worker/tempo.py`, +%14.8/+%29.7 ve WER tabanla aynı).
+#   • `emotion:arousal` / `fear` / `style:singing` → idare/uygunsuz.
+#
+# ── KOMBO (`<|emotion:X|><|prosody:Y|>`) ─────────────────────────────────────
+# 27 Tem kombo ölçümü: 14 koşul / 168 wav, HEPSİ TEMİZ (12/12, WER 0.000, cümle
+# başı yeme YOK). Token sırası ölçüldü, fark standart sapmanın altında; sıra
+# tutarlılık için `emotion` önce (resmi PROMPTING.md örnekleriyle aynı).
+# Tablo: `handoff/2026-07-27-kombo-olcumu.md`. Kombolar kulakla SEÇİLDİ.
 MOOD_PRESETS: dict[str, str] = {
     "excited": "<|emotion:enthusiasm|>",   # 12/12 · canlıda onaylı
     "sad": "<|emotion:sadness|>",          # 12/12 · canlıda onaylı
     # 27 Tem'de ÖLÇÜLÜP eklenenler (hepsi 12/12, boş yok, baş yeme yok). Seçim
     # ölçütü: Türkçe sohbette SIK geçen ve birbirinden AYIRT EDİLEBİLİR duygular.
-    # Katalogda temiz çıkan ama eklenMEyenler (anger/disgust/fear/shame/…) bir ev
-    # asistanının ağzına uymuyor — temiz olması gerekli, yeterli değil.
+    # Katalogda temiz çıkan ama eklenMEyenler (anger/disgust/fear/shame/
+    # bitterness/helplessness) bir ev asistanının ağzına uymuyor — temiz olması
+    # gerekli, yeterli değil.
     "warm": "<|emotion:affection|>",       # 12/12 · şefkat/destek — Candan'ın tonu
-    "calm": "<|emotion:contentment|>",     # 12/12 · sakinleştirme, huzur
-    "proud": "<|emotion:pride|>",          # 12/12 · kullanıcı bir şey başardığında
     "confused": "<|emotion:confusion|>",   # 12/12 · "tam anlamadım"
+    # Kulakla onaylanıp 27 Tem akşamı eklenenler.
+    "amused": "<|emotion:amusement|>",         # 12/12 · şakalaşma, hafif alay
+    "thinking": "<|emotion:contemplation|>",   # 12/12 · "bir düşüneyim"
+    "determined": "<|emotion:determination|>", # 12/12 · söz verme, kararlılık
+    "relieved": "<|emotion:relief|>",          # 12/12 · "çözüldü, geçmiş olsun"
+    # KOMBO — kullanıcı tekiliyle yan yana dinledi, ikisinde de komboyu seçti.
+    "proud": "<|emotion:pride|><|prosody:expressive_high|>",       # "kesinlikle kombo daha güzel"
+    "calm": "<|emotion:contentment|><|prosody:expressive_low|>",   # tekili "yoga hocası" gibi düz kalıyordu
 }
 
 # `[mood:X]` KONTROL işareti — seslendirilmez, metinden SİLİNİR. Desen tek kaynaktan
@@ -190,18 +216,25 @@ HIGGS_TAG_MAP: dict[str, str] = {
     # sesli taklit gerektirenler — SATIR İÇİ, taklit etikete bitişik
     "laughter": "<|sfx:laughter|>Haha, ",
     "sigh": "<|sfx:sigh|>Haah, ",
-    # şaşkınlık aileleri → tek emotion karşılığı (CÜMLE BAŞINA taşınır)
-    # ⚠️ 27 Tem: karşılık `surprise` DEĞİL `awe`. `surprise` ölçümde temizdi (12/12,
-    # WER 0.000) ama KULAKTA şaşkın DUYULMUYORDU — 21 emotion içinde en düşük Δsüre
-    # (-0.02 s), yani tabandan neredeyse farksız; kullanıcının ilk şikâyeti buydu.
-    # `awe` de ölçülü (12/12, WER 0.000, Δsüre +0.35 s) ve kullanıcı 8 aday arasından
-    # ünlemsiz cümlede KULAKLA seçti (`experiments/higgs-tts3/surprise_set.py`).
-    # `surprise`+`prosody:expressive_high` kombosu ünlemli cümlede beğenildi ama
-    # ÖLÇÜLMEDİ → alınmadı. Etiket adları (`[surprise-*]`) ve prompt DEĞİŞMEDİ.
-    "surprise-ah": "<|emotion:awe|>",
-    "surprise-oh": "<|emotion:awe|>",
-    "surprise-wa": "<|emotion:awe|>",
-    "surprise-yo": "<|emotion:awe|>",
+    # sessiz ortam biçemi — CÜMLE BAŞINA taşınır. `[mood:]` altına SOKULMADI:
+    # mood'ların hepsi `<|emotion:…|>`, bu ise `style` — duygu değil biçem, ve
+    # `[laughter]`/`[pause]` gibi çıplak etiket deseni zaten yerleşik.
+    # ⚠️ KAPSAMI CÜMLE: livekit cümle cümle sentezliyor, yani token yalnız
+    # konduğu cümleye etki eder (mood gibi TUR boyu yaşamaz). Prompt bu yüzden
+    # "fısıltıyla söylenecek her cümlenin başına" diyor.
+    "whisper": "<|style:whispering|>",     # 12/12 · kullanıcı: "harika"
+    # şaşkınlık aileleri → KOMBO (CÜMLE BAŞINA taşınır)
+    # ⚠️ `awe` DENENDİ, KULAKLA ELENDİ — geri getirmeyin. Ölçümü temizdi (12/12,
+    # WER 0.000, Δsüre +0.35 s) ve 15:0x'te bir süre canlıdaydı; kullanıcı
+    # kulaklıkla dinleyince tekil `awe`'yi KÖTÜ buldu ("şuh kalmış, heyecan yok").
+    # Tekil `surprise` de yetmiyordu (en düşük Δsüre, -0.02 s, tabandan farksız).
+    # Kombo ölçüldü (ünlemli+ünlemsiz cümle, iki sıra, hepsi 12/12 TEMİZ) ve
+    # kullanıcı kulakla SEÇTİ: "kombo her ikisinin tam bir karışımı olmuş".
+    # NOT: `awe+expressive_high` de temiz çıktı — yedek aday, ama seçilen bu değil.
+    "surprise-ah": "<|emotion:surprise|><|prosody:expressive_high|>",
+    "surprise-oh": "<|emotion:surprise|><|prosody:expressive_high|>",
+    "surprise-wa": "<|emotion:surprise|><|prosody:expressive_high|>",
+    "surprise-yo": "<|emotion:surprise|><|prosody:expressive_high|>",
     # SATIR İÇİ duraklama — duygu gerektirmez, konuşmanın RİTMİNİ düzeltir.
     # Ölçüm (24 örnek, cümle ortasında, bitişik): ikisi de 24/24 anlaşıldı,
     # `pause` +0.32 s, `long_pause` +0.51 s sessizlik ekliyor. Gerçekten duruyor.
@@ -256,6 +289,7 @@ _READABLE: dict[str, str] = {
     "dissatisfaction-hnn": "hoşnutsuzluk",
     "pause": "duraklama",
     "long_pause": "uzun duraklama",
+    "whisper": "fısıltı",
     "mood:excited": "heyecanlı ton",
     "mood:sad": "üzgün ton",
     "speed:slow": "yavaş tempo",
@@ -374,12 +408,20 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
     prefixes: list[str] = []
     seen_categories: set[str] = set()
 
-    def _add_prefix(token: str) -> None:
-        category = token[2:token.index(":")]
-        if category in seen_categories:   # istifleme evet, AYNI kategoriden iki tane hayır
+    def _add_prefix(preset: str) -> None:
+        """Ön eki yerleştir. Preset KOMBO olabilir (`<|emotion:X|><|prosody:Y|>`).
+
+        Kombo ATOMİK: parçalarından biri dolu bir kategoriye düşüyorsa TAMAMI
+        atılır. Yarısını almak eşlemeyi bozardı — `[mood:sad] … [surprise-oh]`
+        cümlesinde `surprise` düşüp `expressive_high` kalsaydı üzgün cümle
+        sebepsiz yere canlanırdı. İstifleme yine serbest (farklı kategoriler).
+        """
+        tokens = _HIGGS_TOKEN_RE.findall(preset)
+        categories = {t[2:t.index(":")] for t in tokens}
+        if not tokens or categories & seen_categories:
             return
-        seen_categories.add(category)
-        prefixes.append(token)
+        seen_categories.update(categories)
+        prefixes.extend(tokens)
 
     if mood in MOOD_PRESETS:
         _add_prefix(MOOD_PRESETS[mood])
