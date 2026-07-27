@@ -23,7 +23,9 @@ import { Type } from "typebox";
 
 const ENROLL_NOTE = `
 <speaker-enroll>
-Tanımadığın biriyle konuşuyorsan kayıt akışını şu sırayla izle: önce nazikçe "Pardon,
+Ses kaydı yeteneğin VAR (enroll_speaker); "yapamıyorum" deme. Tanımadığın biriyle
+konuşuyorsan ya da biri (kendisi veya yanındaki kişi) kaydedilmek isterse — sesi zaten
+tanınıyor olsa bile — kayıt akışını şu sırayla izle: önce nazikçe "Pardon,
 sesinizi henüz tanıyamadım. Sizi kaydedebilmem için adınızı tek kelime olarak söyler misiniz?"
 de → SADECE adı TEK KELİMEYLE al → anladığın adı GERİ OKU ve doğrulat → doğrulandıktan sonra
 "Teşekkür ederim. Şimdi ses kaydınızı alacağım. Lütfen normal bir sesle: Bugün kendimi iyi

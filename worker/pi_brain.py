@@ -707,6 +707,42 @@ SPEAKER_CONFIRM_LOG = Path(os.environ.get(
     str(Path(__file__).resolve().parent / "data" / "speaker_confirm_log.jsonl"),
 ))
 
+# ── KAYIT SIRASI: `enroll_speaker` "KARAR VER" değil "TOPLAMAYA BAŞLA" demektir ──
+# CANLI KANIT (27 Tem 22:25:40, Aslı denemesi) — sinyalden redde 537 ms:
+#     22:25:40,131  enroll_speaker sinyali yakalandı (isim='Aslı')
+#     22:25:40,668  kayıt havuzu BOŞ (gördü=0): toplayıcı hiç pencere görmedi
+#     22:25:40,668  çekirdek < 3 → KAYIT YAPILMIYOR   → enroll REDDEDİLDİ
+# Aslı daha TEK KELİME etmeden karar verilmişti. Tool sözleşmesi zaten "Kayıt
+# isteği alındı; sonucu worker bildirecek" diyor — uygulama onu tutmuyordu.
+# Doğru sıra: istek görülür → TOPLAMA BAŞLAR → yeterli pencere birikir → SONRA
+# karar verilir. Bu yüzden havuz yetersizken artık REDDETMİYORUZ, ERTELİYORUZ.
+#
+# ⚠️ Erteleme İÇİNDE beklemek (tur sonunda `await`) YANLIŞ olurdu: kayıt turunda
+# modelin cümleleri tampona alınıp ATILIYOR (bkz. PiStream._run, enroll_buf) →
+# 30 sn bloklamak kullanıcıyı SESSİZ bırakırdı ve "şu cümleyi söyle" talimatını
+# hiç duymazdı. Bu yüzden karar TURA YAYILIR: erteleme anında talimat söylenir,
+# sonraki turların BAŞINDA (_enrollment_line) havuz yeniden yoklanır.
+#
+# Üst sınır: ikisinden hangisi önce dolarsa. Süre sıfır/negatifse erteleme KAPALI
+# (eski davranış: havuz yetersizse anında ret) — tek satırlık geri dönüş.
+SPEAKER_ENROLL_WAIT_S = float(os.environ.get("SPEAKER_ENROLL_WAIT_S", "30") or 0)
+SPEAKER_ENROLL_WAIT_TURNS = int(os.environ.get("SPEAKER_ENROLL_WAIT_TURNS", "4") or 4)
+# Erteleme anında SÖYLENEN cümle. Bu, sihirbazın "nötr cümleyi söyle" talimatının
+# ta kendisidir: kullanıcı konuşunca havuz dolar, karar bir sonraki turda verilir.
+SPEAKER_ENROLL_WAIT_LINE = os.environ.get(
+    "SPEAKER_ENROLL_WAIT_LINE",
+    "Şimdi sesini kaydediyorum. Lütfen normal bir sesle şunu söyle: "
+    "Bugün kendimi iyi hissediyorum.",
+)
+SPEAKER_ENROLL_WAIT_MORE_LINE = os.environ.get(
+    "SPEAKER_ENROLL_WAIT_MORE_LINE",
+    "Sesini hâlâ alıyorum, biraz daha konuş.",
+)
+SPEAKER_ENROLL_GIVEUP_LINE = os.environ.get(
+    "SPEAKER_ENROLL_GIVEUP_LINE",
+    "Sesini alamadım, kaydedemedim. İstersen sonra tekrar deneyelim.",
+)
+
 # Kimlik kaydından sonra alınan kontrollü ifade corpus'u. Kimlik örneklerinden
 # ayrıdır: WAV + metadata + embedding yalnız sonraki analizlerde kullanılır.
 SPEAKER_EXPRESSION_CAPTURE_ENABLED = os.environ.get(
@@ -2939,6 +2975,16 @@ if _HAS_LIVEKIT:
             self._enroll_taken = 0           # kapıyı geçip havuza giren
             self._enroll_drop_echo = 0       # agent_busy → Candan yankısı, elendi
             self._enroll_drop_silence = 0    # user_speaking yok → sessizlik, elendi
+            # Toplama sırasında SpeakerState'in çözdüğü kimlikler. Odada başkası
+            # konuşursa havuza onun sesi girer → en azından İZ bırak (tek konuşmacı
+            # beklentisi; birden fazla ad görülürse log uyarır).
+            self._enroll_speakers: set[str] = set()
+            # ── ERTELENMİŞ KARAR (kayıt sırası düzeltmesi) ────────────────────
+            # `enroll_speaker` çağrıldı ama havuz henüz yetersiz → karar SONRAKİ
+            # turlara ertelenir; toplama sürer. None = bekleyen karar yok.
+            self._enroll_wait_name: Optional[str] = None
+            self._enroll_wait_until = 0.0     # time.monotonic() üst sınırı
+            self._enroll_wait_turns = 0       # erteleme başladıktan sonra geçen tur
             self._expression_active = False
             self._expression_index = 0
             self._expression_speaker_id: Optional[int] = None
@@ -3353,6 +3399,16 @@ if _HAS_LIVEKIT:
             self._enroll_retried = 0
             self._enroll_name_tries = 0
             self._enroll_match = None
+            # Havuz ve ölçüm sayaçlarının TEK sıfırlama yeri burasıdır (artık
+            # `_start_collect` değil — bkz. oradaki not).
+            self._enroll_speakers = set()
+            self._enroll_seen = 0
+            self._enroll_taken = 0
+            self._enroll_drop_echo = 0
+            self._enroll_drop_silence = 0
+            # Bekleyen karar da düşer (kayıt bitti ya da iptal edildi).
+            self._enroll_wait_name = None
+            self._enroll_wait_turns = 0
             # Kayıt bağlamı bitti → LATCH kapanır: bundan sonra tanınan/normal sohbette
             # (enroll DIŞI) toplama YAPILMAZ; yalnız yeni bir bilinmeyen ses yeniden açar.
             self._enroll_active = False
@@ -3473,14 +3529,16 @@ if _HAS_LIVEKIT:
             `state.last_embedding`i tazeliyor ama olay yayınlamıyor; ona dokunmadan
             çok örnek almanın yolu bu alanı okumak. Yeni nesne kimliği = yeni pencere.
             Kullanıcı adını söylerken + onaylarken geçen sürede tipik olarak birkaç
-            pencere birikir; tek turun tek embed'inden çok daha sağlam."""
+            pencere birikir; tek turun tek embed'inden çok daha sağlam.
+
+            ⚠️ Bu metot SADECE "toplayıcı çalışsın" der; havuzu SİLMEZ. Silme yeri
+            `_reset_enroll` (kayıt bitti/iptal edildi). Eskiden burada sıfırlanıyordu
+            ve "idempotent" sanılıyordu — DEĞİLDİ: `_select_enroll_core()` toplayıcıyı
+            DURDURUYOR, hemen ardından gelen `_start_collect()` de o ana kadar
+            birikmiş TÜM pencereleri çöpe atıyordu. Kararın turlara yayıldığı yeni
+            sırada (bkz. `_defer_enroll`) bu, havuzun hiç dolmaması demekti."""
             if self._enroll_collector is not None or self._speaker_state is None:
                 return
-            self._enroll_embs = []
-            self._enroll_seen = 0
-            self._enroll_taken = 0
-            self._enroll_drop_echo = 0
-            self._enroll_drop_silence = 0
             self._enroll_collector = asyncio.create_task(self._collect_loop())
 
         def _stop_collect(self) -> None:
@@ -3537,6 +3595,12 @@ if _HAS_LIVEKIT:
                         # elenir — sonradan aynı emb'i açık kapıda toplamayız.
                         last = emb
                         self._enroll_seen += 1
+                        # KİMİN konuştuğu kritik: kaydedilen kişi konuşmalı. Odada
+                        # başkası konuşursa havuza onun sesi girer. Çekirdek seçimi
+                        # aykırıyı zaten atıyor ama İZ olmadan bunu göremiyorduk.
+                        who = getattr(self._speaker_state, "current", None)
+                        if who:
+                            self._enroll_speakers.add(str(who))
                         # Kalite kararını tap embedding'i üretirken dondurur. Eski
                         # SpeakerState / gate bağlanmamış testlerde None gelir →
                         # mevcut davranışı korumak için canlı kapıya düş.
@@ -3603,6 +3667,15 @@ if _HAS_LIVEKIT:
                 SPEAKER_ENROLL_CORE_MIN,
                 float(getattr(self._speaker_id, "threshold", 0.45)),
             )
+            # TEK KONUŞMACI beklentisi: toplama sırasında birden fazla kimlik
+            # çözüldüyse havuza başkasının sesi karışmış OLABİLİR. Kaydı bu yüzden
+            # DURDURMUYORUZ (çekirdek seçimi aykırıyı zaten atar) ama iz bırakıyoruz.
+            if len(self._enroll_speakers) > 1:
+                logger.warning(
+                    "kayıt uyarısı: toplama sırasında %d farklı kimlik çözüldü (%s) "
+                    "→ havuza başkasının sesi karışmış olabilir",
+                    len(self._enroll_speakers), ", ".join(sorted(self._enroll_speakers)),
+                )
             if not core:
                 logger.info(
                     "kayıt ölçümü: çekirdek < %d → KAYIT YAPILMIYOR (kirli centroid "
@@ -3627,6 +3700,12 @@ if _HAS_LIVEKIT:
                 expression = await self._expression_step(text)
                 if expression is not None:
                     return expression
+                # SIRA: `enroll_speaker` bir "toplamayı başlat" komutudur; karar
+                # veri biriktikten SONRA verilir. Ertelenmiş bir karar varsa önce
+                # ona bak — kullanıcı bu turda konuştuğu için havuz büyümüş olabilir.
+                deferred = await self._resolve_deferred_enroll(text)
+                if deferred is not None:
+                    return deferred
                 # KOD'a ait tek deterministik alt-akış: kimlik AYRIMI onayı. Bu bir
                 # sohbet tercihi değil, "iki kimliğe bölünme" koruması → modele
                 # bırakılmaz (bkz. _enroll_tool'daki belirsiz bant).
@@ -3860,9 +3939,81 @@ if _HAS_LIVEKIT:
             # kayıt yapmamak yeğdir — kirli centroid yabancıyı ev halkı sanıyor.
             core = self._select_enroll_core()
             if not core:
+                # SIRA DÜZELTMESİ: burada RET YOK. Kişi henüz yeterince konuşmamış
+                # olabilir (canlıda sinyalden 537 ms sonra reddediliyordu). Kararı
+                # ertele, toplamayı sürdür; sonraki turların başında yeniden bak.
+                return self._defer_enroll(name)
+            return await self._enroll_finish(name, core)
+
+        def _defer_enroll(self, name: str) -> str:
+            """Havuz yetersiz → kararı ERTELE, toplamayı sürdür, talimatı SÖYLE.
+
+            Döner: kullanıcıya söylenecek satır. Bu satır kayıt turunda modelin
+            (atılan) cümlesinin YERİNE geçer, o yüzden nötr cümle talimatını
+            KENDİSİ taşımak zorunda — yoksa kullanıcı ne yapacağını duymaz."""
+            if SPEAKER_ENROLL_WAIT_S <= 0:
+                # Erteleme kapalı → eski davranış (tek satırlık geri dönüş).
                 logger.info("enroll REDDEDİLDİ: ses örnekleri tutarsız/yetersiz")
-                self._start_collect()  # yeniden dene: toplamayı sürdür
+                self._start_collect()
                 return "Sesini tam alamadım. Biraz daha konuşur musun, tekrar deneyelim?"
+            first = self._enroll_wait_name is None
+            self._enroll_wait_name = name
+            # İsim ONAYLANMIŞ durumdayız (emniyet ağı yolu buraya net_confirm'den
+            # gelir). Aşama SIFIRLANMAZSA sonraki tur ismi tekrar onaylatmaya
+            # çalışır ve kullanıcı döngüye girer.
+            self._enroll_stage = None
+            if first:
+                self._enroll_wait_until = time.monotonic() + SPEAKER_ENROLL_WAIT_S
+                self._enroll_wait_turns = 0
+            self._start_collect()          # idempotent; birikeni SİLMEZ
+            logger.info(
+                "enroll KARARI ERTELENDİ (isim=%r, gördü=%d): havuz yetersiz → "
+                "toplama sürüyor, üst sınır %.0f sn / %d tur",
+                name, self._enroll_seen, SPEAKER_ENROLL_WAIT_S,
+                SPEAKER_ENROLL_WAIT_TURNS,
+            )
+            return SPEAKER_ENROLL_WAIT_LINE if first else SPEAKER_ENROLL_WAIT_MORE_LINE
+
+        async def _resolve_deferred_enroll(self, text: str) -> Optional[str]:
+            """Ertelenmiş kayıt kararını TUR BAŞINDA yeniden değerlendir.
+
+            Döner: scripted satır (karar verildi/vazgeçildi) ya da None (henüz
+            yeterli veri yok → sohbet normal aksın, sonraki turda tekrar bakılır).
+            `_enroll_lock` altında çağrılır."""
+            name = self._enroll_wait_name
+            if name is None:
+                return None
+            if _is_decline_enroll(text):
+                logger.info("enroll: ertelenmiş karar sırasında vazgeçildi")
+                self._reset_enroll()
+                return "Peki, kaydetmiyorum."
+            self._enroll_wait_turns += 1
+            # Kullanıcı bu turda konuştu → yeni pencereler havuza girmiş olmalı.
+            core = self._select_enroll_core()      # NOT: toplayıcıyı DURDURUR
+            if core:
+                logger.info(
+                    "enroll: ertelenmiş karar VERİLDİ (isim=%r, %d tur sonra)",
+                    name, self._enroll_wait_turns,
+                )
+                self._enroll_wait_name = None
+                return await self._enroll_finish(name, core)
+            expired = (
+                time.monotonic() >= self._enroll_wait_until
+                or self._enroll_wait_turns >= SPEAKER_ENROLL_WAIT_TURNS
+            )
+            if expired:
+                logger.info(
+                    "enroll REDDEDİLDİ: üst sınır doldu (%d tur), çekirdek birikmedi",
+                    self._enroll_wait_turns,
+                )
+                self._reset_enroll()
+                return SPEAKER_ENROLL_GIVEUP_LINE
+            self._start_collect()                  # bekle: toplamayı sürdür
+            return None
+
+        async def _enroll_finish(self, name: str, core: list) -> str:
+            """Çekirdek HAZIR — kimlik kapısı + yazma. `_enroll_apply`ın kuyruğu."""
+            self._enroll_wait_name = None
             self._enroll_core = core
             self._enroll_name = name
             # Kimlik kapısı: mevcut _best_existing/_merge_into mantığı (çekirdek
@@ -5068,6 +5219,179 @@ def _wake_timer_test() -> int:
     return 0 if all_ok else 1
 
 
+def _enroll_order_test() -> int:
+    """KAYIT SIRASI: `enroll_speaker` "karar ver" değil "toplamayı başlat" demek.
+
+    GEÇİCİ speakers.db + GEÇİCİ memory kökü kullanır (kullanıcının gerçek
+    `worker/data/speakers.db`'sine ve `memory/policy.json`'a DOKUNMAZ).
+    Sherpa/onnx/model/GPU GEREKMEZ (sahte SpeakerID).
+
+    Senaryolar:
+      (a) havuz BOŞken tool çağrılır → RET YOK, karar ERTELENİR, DB'ye yazılmaz
+      (b) kişi konuşur (havuz dolar) → sonraki turun BAŞINDA karar verilir, yazılır
+      (c) havuz hiç dolmaz → tur üst sınırında "sesini alamadım", yazma YOK
+      (d) erteleme sırasında vazgeçme → iptal, yazma YOK
+      (e) SPEAKER_ENROLL_WAIT_S=0 → ESKİ davranış (anında ret) — geri dönüş kolu
+      (f) toplama sırasında havuz SİLİNMEZ (_start_collect artık sıfırlamıyor)
+    """
+    global MEMORY_DIR  # noqa: PLW0602 — atama globals()[..] ile (bkz. _policy_test)
+    import shutil
+    import tempfile
+
+    if not _HAS_LIVEKIT:
+        print("[enrollorder] SKIP: livekit yok (worker/.venv ile çalıştır)")
+        return 1
+
+    import numpy as np
+    from speaker_id import SpeakerStore
+
+    tmp = tempfile.mkdtemp(prefix="candan-enrollorder-test-")
+    old_mem = MEMORY_DIR
+    old_wait = SPEAKER_ENROLL_WAIT_S
+    results: list[tuple[str, bool, str]] = []
+
+    class FakeSpeakerID:
+        model_id, dim, threshold, merge_low = "fake-v1", 4, 0.45, 0.35
+
+        def __init__(self):
+            self._names: list[str] = []
+            self._ids: dict[str, int] = {}
+            self.match: tuple[Optional[str], float] = (None, 0.0)
+
+        def best_match(self, emb):
+            return self.match
+
+        def id_for(self, name):
+            return self._ids.get(name)
+
+        def names(self):
+            return list(self._names)
+
+        def reload(self, speakers):
+            self._names = [s["name"] for s in speakers]
+            self._ids = {s["name"]: s["id"] for s in speakers}
+
+    class FakeState:
+        current = None
+        last_embedding = None
+        last_embedding_capture_ok = None
+        last_embedding_capture_reason = None
+
+        def begin_expression_capture(self, emotion):   # ifade corpus'u: no-op
+            pass
+
+    def new_brain(store, sid):
+        state = FakeState()
+        brain = PiBrain(speaker_state=state, speaker_id=sid, speaker_store=store)
+        brain._enroll_active = True        # kayıt bağlamı açık (latch)
+        return brain, state
+
+    def voice(n: int) -> list:
+        """Aynı kişinin n penceresi (birbirine çok benzer, çekirdek kurar)."""
+        base = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+        out = []
+        for i in range(n):
+            e = base.copy()
+            e[1] = 0.02 * i            # hafif fark → distinct nesne, yüksek benzerlik
+            out.append(e)
+        return out
+
+    async def run() -> None:
+        nonlocal results
+        MEM = Path(tmp) / "memory"
+        MEM.mkdir(parents=True, exist_ok=True)
+        globals()["MEMORY_DIR"] = str(MEM)
+        store = SpeakerStore(str(Path(tmp) / "speakers.db"))
+        sid = FakeSpeakerID()
+        sid.match = (None, 0.0)
+
+        # (a) havuz BOŞ + tool çağrıldı → ERTELE (canlı 27 Tem: 537 ms'de RET)
+        brain, state = new_brain(store, sid)
+        line_a = await brain._enroll_tool("Aslı")
+        ok = (brain._enroll_wait_name == "Aslı"
+              and line_a == SPEAKER_ENROLL_WAIT_LINE
+              and store.list_speakers_sync() == [])
+        results.append(("(a) havuz boş + enroll_speaker → RET YOK, karar ERTELENDİ",
+                        ok, f"bekleyen={brain._enroll_wait_name!r} line={line_a!r}"))
+
+        # (b) kişi konuşur → havuz dolar → SONRAKİ turun başında karar verilir
+        brain._enroll_embs = voice(5)
+        line_b = await brain._enrollment_line("Bugün kendimi iyi hissediyorum")
+        names = [s["name"] for s in store.list_speakers_sync()]
+        ok = (brain._enroll_wait_name is None and names == ["Aslı"]
+              and line_b is not None and "Aslı" in line_b)
+        results.append(("(b) veri birikince SONRAKİ turda karar → kayıt YAPILDI", ok,
+                        f"kayıtlılar={names} line={line_b!r}"))
+
+        # (c) havuz hiç dolmaz → tur üst sınırında pes et, YAZMA YOK
+        store2 = SpeakerStore(str(Path(tmp) / "speakers2.db"))
+        sid2 = FakeSpeakerID()
+        sid2.match = (None, 0.0)
+        brain, state = new_brain(store2, sid2)
+        line_c0 = await brain._enroll_tool("Cem")
+        lines_c = [line_c0]
+        for _ in range(SPEAKER_ENROLL_WAIT_TURNS):
+            lines_c.append(await brain._enrollment_line("hı hı"))
+        ok = (lines_c[-1] == SPEAKER_ENROLL_GIVEUP_LINE
+              and store2.list_speakers_sync() == []
+              and brain._enroll_wait_name is None
+              and all(x is None for x in lines_c[1:-1]))
+        results.append((f"(c) {SPEAKER_ENROLL_WAIT_TURNS} tur veri gelmedi → "
+                        "'sesini alamadım', YAZMA YOK", ok, f"lines={lines_c}"))
+
+        # (d) erteleme sırasında vazgeçme → iptal, YAZMA YOK
+        store3 = SpeakerStore(str(Path(tmp) / "speakers3.db"))
+        sid3 = FakeSpeakerID()
+        sid3.match = (None, 0.0)
+        brain, state = new_brain(store3, sid3)
+        await brain._enroll_tool("Deniz")
+        brain._enroll_embs = voice(5)          # veri VAR ama kullanıcı vazgeçti
+        line_d = await brain._enrollment_line("istemiyorum")
+        ok = (store3.list_speakers_sync() == [] and brain._enroll_wait_name is None
+              and line_d == "Peki, kaydetmiyorum.")
+        results.append(("(d) erteleme sırasında vazgeçme → iptal, YAZMA YOK", ok,
+                        f"line={line_d!r} kayıtlılar={store3.list_speakers_sync()}"))
+
+        # (e) GERİ DÖNÜŞ KOLU: SPEAKER_ENROLL_WAIT_S=0 → eski davranış (anında ret)
+        globals()["SPEAKER_ENROLL_WAIT_S"] = 0.0
+        store4 = SpeakerStore(str(Path(tmp) / "speakers4.db"))
+        sid4 = FakeSpeakerID()
+        sid4.match = (None, 0.0)
+        brain, state = new_brain(store4, sid4)
+        line_e = await brain._enroll_tool("Efe")
+        ok = (brain._enroll_wait_name is None and "Sesini tam alamadım" in line_e
+              and store4.list_speakers_sync() == [])
+        results.append(("(e) WAIT_S=0 → ESKİ davranış (anında ret) korunuyor", ok,
+                        f"line={line_e!r}"))
+        globals()["SPEAKER_ENROLL_WAIT_S"] = old_wait
+
+        # (f) _start_collect artık havuzu SİLMİYOR (dur/başlat arasında birikim kalır)
+        brain, state = new_brain(store, sid)
+        brain._enroll_embs = voice(3)
+        brain._stop_collect()
+        brain._start_collect()
+        await asyncio.sleep(0)
+        kept = len(brain._enroll_embs)
+        brain._stop_collect()
+        results.append(("(f) dur/başlat arasında biriken pencereler SİLİNMİYOR",
+                        kept >= 3, f"kalan={kept} (beklenen >= 3)"))
+
+    try:
+        asyncio.run(run())
+    finally:
+        globals()["MEMORY_DIR"] = old_mem
+        globals()["SPEAKER_ENROLL_WAIT_S"] = old_wait
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    print(f"[enrollorder] geçici kök: {tmp} (silindi)")
+    all_ok = True
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[enrollorder] RESULT: {'PASS' if all_ok else 'FAIL'}")
+    return 0 if all_ok else 1
+
+
 def _policy_test() -> int:
     """Enroll → policy.json rol yazımı + rol yükseltme birim testi.
 
@@ -5118,6 +5442,9 @@ def _policy_test() -> int:
         current = None
         last_embedding = None
 
+        def begin_expression_capture(self, emotion):   # ifade corpus'u: no-op
+            pass
+
     def policy() -> dict:
         return _read_policy()
 
@@ -5150,20 +5477,27 @@ def _policy_test() -> int:
         sid.match = ("Ayhan", 0.10)  # benzemiyor → gerçekten yeni kişi
         line_b = await brain._enroll_tool("Zeynep")
         pol = policy()
-        ok = pol == {"ayhan": "adult", "zeynep": "guest"} and "misafir" in line_b
-        results.append(("(b) policy dolu + 2. enroll → guest (+ sınır bildirildi)", ok,
+        # NOT: kayıt satırını artık ifade-corpus'u adımı üretiyor (bkz.
+        # _start_expression_capture) → "misafir" sınır cümlesi bu satırda DEĞİL.
+        # Test policy'ye bakar; cümlenin metni ayrı bir sorumluluk.
+        ok = pol == {"ayhan": "adult", "zeynep": "guest"} and "Zeynep" in line_b
+        results.append(("(b) policy dolu + 2. enroll → guest", ok,
                         f"policy={pol} line={line_b!r}"))
 
-        # (c) ses-benzerlik kapısı MEVCUT kişiye merge etti → YENİ policy girdisi YOK
+        # (c) ses-benzerlik kapısı: OTOMATİK merge YOK → önce "Sen X misin?" sorulur,
+        #     onaydan sonra merge olur ve YENİ policy girdisi açılmaz.
         before = dict(policy())
         state.current = None
+        brain._expression_active = False      # (b)'nin ifade turu bu senaryoyu kesmesin
         brain._enroll_embs = [np.array([1, 0, 0, 0], dtype=np.float32)] * 5
-        sid.match = ("Ayhan", 0.90)  # >= threshold → merge
-        line_c = await brain._enroll_tool("Ahmet")
+        sid.match = ("Ayhan", 0.90)  # >= merge_low → belirsiz bant, açık onay
+        ask_c = await brain._enroll_tool("Ahmet")
+        line_c = await brain._enrollment_line("evet")
         pol = policy()
-        ok = (pol == before and "ahmet" not in pol and state.current == "Ayhan")
-        results.append(("(c) benzerlik merge → policy'ye YENİ girdi eklenmiyor", ok,
-                        f"policy={pol} current={state.current!r} line={line_c!r}"))
+        ok = (ask_c == "Sen Ayhan misin?" and pol == before and "ahmet" not in pol
+              and state.current == "Ayhan")
+        results.append(("(c) benzerlik → açık onay, merge sonrası YENİ girdi YOK", ok,
+                        f"policy={pol} current={state.current!r} soru={ask_c!r} line={line_c!r}"))
 
         # (d) adult "Zeynep'i yetişkin yap" → zeynep = adult
         state.current = "Ayhan"  # aktör: adult
@@ -5951,6 +6285,8 @@ if __name__ == "__main__":
         raise SystemExit(asyncio.run(_reminder_e2e()))
     if cmd == "policy":
         raise SystemExit(_policy_test())
+    if cmd == "enrollorder":
+        raise SystemExit(_enroll_order_test())
     if cmd == "waketimer":
         raise SystemExit(_wake_timer_test())
     if cmd == "wake":
@@ -5968,4 +6304,4 @@ if __name__ == "__main__":
         raise SystemExit(asyncio.run(_prompt_test(msg)))
     print("usage: python pi_brain.py "
           "[smoke|prompt <text>|wake|waketimer|reset|compaction|rotate|policy|"
-          "proactive|soul|e2e|name]")
+          "enrollorder|proactive|soul|e2e|name]")

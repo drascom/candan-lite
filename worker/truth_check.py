@@ -144,13 +144,24 @@ def failure_line(name: str, reason: str) -> str:
 # İki tür: "record" (bir şey KAYDETTİM) ve "action" (bir işi YAPTIM). Düzeltme
 # cümlesi buna göre seçilir — kayıt iddiasına "yapamadım", eylem iddiasına
 # "kaydetmedim" demek kullanıcıyı yanıltır.
-_CLAIM_RECORD: tuple[re.Pattern[str], ...] = tuple(
+# KAYIT iddiaları İKİ GÜÇTE. Ayrımın sebebi canlı bir YANLIŞ ALARM (27 Tem 22:25):
+#   Candan: "Aslı, seni not aldım. Şimdi ses kaydınızı alacağım. Lütfen normal bir
+#            sesle: Bugün kendimi iyi hissediyorum, deyin."
+#           → arkasına "Aslında bunu kaydetmedim, kusura bakma." eklendi.
+# Model hiçbir şey kaydettiğini İDDİA ETMİYORDU: kayıt sihirbazının TALİMATINI
+# veriyordu. "not aldım" günlük Türkçede "anladım/dinliyorum" demektir; o turda
+# hiçbir yazma aracı ÇAĞRILMAMIŞTI bile. Doğru cümlenin arkasına yanlış bir özür
+# koymak, hiç düzeltmemekten kötüdür.
+#
+# YUMUŞAK (soft): sohbet dilinde de kurulabilen geçmiş zamanlı "yaptım" kalıpları.
+# Bunlar düzeltilmek için BAĞLAM ister — o turda gerçekten bir yazma aracı çalışmış
+# olmalı (bkz. decide → Katman 2b).
+_CLAIM_RECORD_SOFT: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p) for p in (
         # Türkçe ekli hâlleri de yakala: "notumu aldım", "notunu ettim" (canlı vaka
         # "Notumu aldım Ayhan!" düz "not aldım" kalıbıyla KAÇIYORDU).
         r"\bnot\w* al(d[iı]m|[iı]yorum)\b",
         r"\bnot\w* ettim\b",
-        r"\bnot olarak (ald[iı]m|ekledim|yazd[iı]m)\b",
         r"\bkaydett?im\b",
         r"\bkay[iı]t ettim\b",
         # SES KAYDI iddiası (canlı 27 Tem: "Harika Çiğdem, ses kaydını aldım" —
@@ -158,16 +169,26 @@ _CLAIM_RECORD: tuple[re.Pattern[str], ...] = tuple(
         r"\bkayd[iı]n[iı]?\w*\s+ald[iı]m\b",
         r"\bkay[iı]t ald[iı]m\b",
         r"\bkaydediyorum\b",
+        r"\bekledim\b",
+    )
+)
+# GÜÇLÜ (strong): harness'ın GELECEKTE bir şey yapacağına dair SÖZ ya da kayıt
+# fiilinin sohbet dilinde karşılığı olmayan hâlleri. Bunlar araçsız da düzeltilir —
+# çünkü sohbet dolgusu olarak kurulamazlar: "aklımda tutacağım" diyen bir asistan
+# hafızaya yazmadıysa YALAN söylemiştir (canlı vaka, hiç tool çağrılmadan).
+_CLAIM_RECORD_STRONG: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p) for p in (
+        r"\bnot olarak (ald[iı]m|ekledim|yazd[iı]m)\b",
         r"\bakl[iı]mda tut(acag[iı]m|uyorum|ar[iı]m)\b",
         r"\bakl[iı]ma (yazd[iı]m|not ettim)\b",
         r"\bunutmam\b",
         r"\bunutmayacag[iı]m\b",
         r"\bhat[iı]rlat(acag[iı]m|acam|[iı]r[iı]m)\b",
         r"\b(hat[iı]rlatma|alarm)\w* (kurdum|ayarlad[iı]m|olusturdum)\b",
-        r"\bekledim\b",
         r"\byazd[iı]m bile\b",
     )
 )
+_CLAIM_RECORD: tuple[re.Pattern[str], ...] = _CLAIM_RECORD_STRONG + _CLAIM_RECORD_SOFT
 _CLAIM_ACTION: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p) for p in (
         r"\bduzelttim\b",
@@ -192,6 +213,19 @@ def claim_kind(text: str) -> Optional[str]:
 def has_claim_phrase(text: str) -> bool:
     """Metin, kelime listesindeki bir BAŞARI İDDİASI kalıbını içeriyor mu?"""
     return claim_kind(text) is not None
+
+
+def soft_record_claim(text: str) -> bool:
+    """Kayıt iddiası YALNIZCA yumuşak kalıplarla mı kurulmuş?
+
+    True → cümle sohbet dilinde de kurulabilir ("not aldım" = "anladım"); düzeltme
+    için BAĞLAM gerekir. False → ya güçlü bir kalıp var (araçsız da düzeltilir) ya
+    da hiç kayıt iddiası yok.
+    """
+    low = fold(text)
+    if any(p.search(low) for p in _CLAIM_RECORD_STRONG):
+        return False
+    return any(p.search(low) for p in _CLAIM_RECORD_SOFT)
 
 
 # ── Katman 2 (mod): "hangi moddayım" iddiası da harness'ın bileceği bir şeydir ─
@@ -383,6 +417,14 @@ class TurnLedger:
             if not e["failed"] and e["name"] in CRITICAL_WRITE_TOOLS
         ]
 
+    def write_attempts(self) -> list[dict]:
+        """Turda ÇAĞRILMIŞ kritik yazma araçları (sonucu ne olursa olsun).
+
+        Katman 2b'nin BAĞLAM ŞARTI: yumuşak bir "kaydettim/not aldım" cümlesini
+        düzeltmek için o turda gerçekten bir yazma DENEMESİ olmalı. Hiç araç
+        çağrılmadıysa cümle büyük olasılıkla sohbet dolgusudur."""
+        return [e for e in self.entries if e["name"] in CRITICAL_WRITE_TOOLS]
+
     def ok_any(self) -> list[dict]:
         """Turda BAŞARIYLA dönen herhangi bir araç (eylem iddiasının dayanağı)."""
         return [e for e in self.entries if not e["failed"]]
@@ -437,6 +479,10 @@ def decide(
          bir araç YOK (kayıt iddiası → yazma aracı, eylem iddiası → herhangi bir
          araç). Deterministik düzeltme. LLM YOK.
          (Canlı vaka: model hiç tool çağırmadan "aklımda tutacağım" diyor.)
+         **BAĞLAM ŞARTI** (27 Tem yanlış alarmı): kayıt iddiası YALNIZCA yumuşak
+         kalıplarla kurulmuşsa ("not aldım", "kaydettim") ve turda hiçbir yazma
+         aracı ÇAĞRILMAMIŞSA düzeltme EKLENMEZ — o cümle sohbet dolgusudur.
+         Güçlü kalıplar ("aklımda tutacağım", "hatırlatırım") araçsız da düzeltilir.
       4. Turda hata dönen bir araç VAR ama yukarıdakiler tutmadı → tek risk
          sinyali bu; sınıflandırıcıya SORULUR (~115 ms).
       5. Hiçbiri → (None, False). **Tipik hatasız turda buraya düşülür: LLM çağrısı
@@ -454,7 +500,15 @@ def decide(
         return hiz, False
     kind = claim_kind(said)
     if kind == "record" and not ledger.ok_writes():
-        return UNBACKED_LINE, False
+        # Bağlam şartı: yumuşak kalıp + turda hiç yazma denemesi yok → SUS.
+        # (Kritik yazma HATA döndüyse zaten 1. adımda dönüldü; buraya düşen
+        # "yazma denemesi var" hâli, listede olmayan bir aracın ya da başarısız
+        # sayılmayan bir sonucun peşinden gelen iddiadır.)
+        if ledger.write_attempts() or not soft_record_claim(said):
+            return UNBACKED_LINE, False
+        logger.info(
+            "truth: yumuşak kayıt iddiası + turda yazma aracı YOK → düzeltme EKLENMEDİ"
+        )
     if kind == "action" and not ledger.ok_any():
         return UNVERIFIED_LINE, False
     if ledger.has_failure() and (said or "").strip():
@@ -587,6 +641,83 @@ __all__ = [
     "has_claim_phrase",
     "mode_claim",
     "parse_verdict",
+    "soft_record_claim",
     "speed_claim",
     "speed_line",
 ]
+
+
+# ── Birim test: `python worker/truth_check.py` (ağ/GPU/DB GEREKMEZ) ───────────
+def _truth_test() -> int:
+    """Katman 1-2b karar tablosu. Ağ YOK, LLM YOK, DB YOK — saf fonksiyon testi.
+
+    En kritik iki kilit:
+      * 27 Tem'de KAPATILAN gerçek hata (memory_add guest'te `isError` OLMADAN
+        "kaydedilmedi." dönüyor) GERİ AÇILMAMALI → (c) ve (d).
+      * 27 Tem 22:25 canlı YANLIŞ ALARM (araçsız "not aldım") tekrar ETMEMELİ → (f).
+    """
+    cases: list[tuple[str, list[tuple], str, Optional[str], bool]] = [
+        # (ad, defter girdileri, modelin dediği, beklenen satır, yargıç sorulsun mu)
+        ("(a) tool yok + araçsız 'aklımda tutacağım' → düzeltme (güçlü kalıp)",
+         [], "Merak etme, aklımda tutacağım.", UNBACKED_LINE, False),
+        ("(b) tool yok + araçsız 'hatırlatırım' → düzeltme (güçlü kalıp)",
+         [], "Tamam, sana hatırlatırım.", UNBACKED_LINE, False),
+        ("(c) memory_add guest reddi (isError YOK) → Katman 2 devralır",
+         [("memory_add", "guest: hafıza yok, kaydedilmedi.", False)],
+         "Notunu aldım Ayhan!",
+         "Kaydedemedim, seni henüz tanımıyorum.", False),
+        ("(d) memory_add isError=True → Katman 2 devralır",
+         [("memory_add", "boom", True)], "Kaydettim.",
+         "Kaydedemedim, bir hata oldu.", False),
+        ("(e) memory_add BAŞARILI + 'kaydettim' → müdahale YOK",
+         [("memory_add", "Kaydedildi (private).", False)], "Kaydettim.",
+         None, False),
+        ("(f) CANLI YANLIŞ ALARM: araç YOK + 'seni not aldım' → müdahale YOK",
+         [], "Aslı, seni not aldım. Şimdi ses kaydınızı alacağım. "
+             "Lütfen normal bir sesle: Bugün kendimi iyi hissediyorum, deyin.",
+         None, False),
+        ("(g) araç YOK + 'kaydettim' (yumuşak) → müdahale YOK",
+         [], "Tamam, kaydettim.", None, False),
+        ("(h) salt-okuma aracı hata + yumuşak iddia → yargıca sorulur",
+         [("memory_search", "acilamadi", False)], "Not aldım.", None, True),
+        ("(i) eylem iddiası + hiç araç yok → düzeltme (değişmedi)",
+         [], "Durumu düzelttim.", UNVERIFIED_LINE, False),
+        ("(j) hiç iddia yok, hiç araç yok → sessizlik",
+         [], "Bugün hava güzel.", None, False),
+    ]
+    results: list[tuple[str, bool, str]] = []
+    for name, entries, said, want_line, want_ask in cases:
+        ledger = TurnLedger()
+        for tool, result, is_err in entries:
+            ledger.record(tool, result, is_err)
+        line, ask = decide(ledger, said)
+        ok = (line == want_line) and (ask == want_ask)
+        results.append((name, ok, f"satır={line!r} yargıç={ask}"))
+
+    # Mod denetimi (bağlam şartından ETKİLENMEMELİ)
+    ledger = TurnLedger()
+    line, ask = decide(ledger, "Artık normal moddayım.", mode="dev")
+    results.append(("(k) mod iddiası gerçekle çelişiyor → düzeltme",
+                    line == "Aslında hâlâ geliştirme modundayım." and not ask,
+                    f"satır={line!r}"))
+
+    # Kalıp sınıflandırması
+    strong_ok = (not soft_record_claim("Aklımda tutacağım.")
+                 and not soft_record_claim("Hatırlatma kurdum.")
+                 and soft_record_claim("Not aldım.")
+                 and soft_record_claim("Kaydettim.")
+                 and not soft_record_claim("Bugün hava güzel."))
+    results.append(("(l) güçlü/yumuşak kalıp ayrımı", strong_ok, ""))
+
+    all_ok = True
+    for name, ok, detail in results:
+        all_ok = all_ok and ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name}  [{detail}]")
+    print(f"[truth] RESULT: {'PASS' if all_ok else 'FAIL'}  ({len(results)} vaka)")
+    return 0 if all_ok else 1
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(_truth_test())
