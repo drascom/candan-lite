@@ -192,3 +192,58 @@ Traceback        yok
 **KAYBOLAN NOTUN yeri:** Home Assistant maddesi hâlâ
 `handoff/2026-07-26-canli-dogrulama.md` sonunda duruyor. Hafıza çalıştığını teyit edince
 oraya taşımak sana kalıyor — ben pi'nin hafızasına yazamam.
+
+---
+
+# EK — HIGGS TTS 3 SABAH TESTİNE HAZIR
+
+**Tek komut:** `cd experiments/higgs-tts3 && ./serve.sh` → 4 sütun yan yana dinleme sayfası.
+Sesler zaten Mac'te (117 wav), sunucuya bağlanmana gerek yok.
+Ayrıntı: `handoff/2026-07-27-higgs-tts3-hazirlik.md`
+
+## Ölçümler (aynı sunucu, aynı 29 cümle, aynı referans ses)
+
+| | OmniVoice | higgs-default | higgs-clone | **higgs-clone-trnorm** |
+|---|---|---|---|---|
+| RTF ortalama | **0.305** | 0.491 | 0.516 | 0.516 |
+| VRAM tepe | ~9.9 GB | 8.9 GB | 10.2 GB | 10.2 GB |
+| RAM tepe | 4.3 GB | 4.2 GB | 4.2 GB | 4.2 GB |
+| **ASR WER** | 0.085 | 0.076 | 0.058 | **0.028** |
+| atlanan kelime | 14 | 11 | 9 | **4** |
+
+**Takas net: Higgs ~1.7× yavaş ama Türkçe doğruluğu ~3× iyi.** İkisi de gerçek zamandan
+hızlı (RTF < 1), yani yavaşlık pratikte tolere edilebilir.
+
+## Türkçe zor vakalar — Higgs'in asıl üstünlüğü
+`%25`, `3.500 lira`, `14:30'da`, `1994'te`, `%8'den`, `12.03.2026` → **ham metinden doğru
+okuyor** (WER 0.000). OmniVoice bunları ancak köprünün `num2words`'ü sayesinde çözüyor ve
+üstüne `750 gr` / `Sözleşme` / `$€`'da hata yapıyor. Higgs'in tek zaafı `1.250.000`, onu da
+`trnorm` düzeltiyor. `higgs-clone-trnorm`'da **gerçek kelime düşmesi yok**.
+
+Yani 25 Tem'de yazdığımız `trnorm` çöpe gitmiyor — Higgs ile birlikte de en iyi sonucu veriyor.
+
+## Kararın önüne konması gerekenler
+
+1. **İkisi AYNI ANDA ÇALIŞAMAZ.** Higgs 10.2 GB istiyor, şu an GPU'da 8 GB boş. Sabah
+   testinde `omnivoice-bridge.service` durdurulacak. Kalıcı geçiş kararı ayrı.
+2. **Hız kaybı gerçek:** RTF 0.305 → 0.516. Beyin + STT ile GPU paylaşımında bu fark büyür.
+3. **Lisans: araştırma / ticari olmayan.** Kişisel ev asistanı kapsamda, ama ileride
+   ticari bir şeye dönerse ayrı lisans gerekir.
+4. **Çalıştırma yolu resmi değil.** `bosonai/higgs-tts-3-4b` ağırlık+config içeriyor ama
+   çalıştırma kodu içermiyor; `higgs_multimodal_qwen3` mimarisi hiçbir transformers
+   sürümünde yok. Ajan `multimodalart/higgs-audio-v3-tts-4b-transformers` paketlemesini
+   kullandı — **ağırlıklar bayt bayt aynı** (9 309 834 930 B), üstüne 16 KB topluluk
+   modeling kodu + v2 kodeki. Çalışıyor ve Türkçe çıktı temiz, AMA:
+   - `trust_remote_code=True` ile üçüncü taraf kod çalışıyor — güvenlik açısından bilinçli
+     bir tercih olmalı.
+   - Örnekleme mantığının resmi SGLang yoluyla birebir aynı olduğu doğrulanamadı.
+   Kalıcı geçiş kararı verilirse resmi SGLang-Omni yoluna geçmek daha sağlam olur.
+5. **Streaming YAPILMADI.** Model destekliyor ama SGLang-Omni gerekiyor; bu gece kapsam
+   dışı bırakıldı. Sesi beğenirsen ikinci adım.
+
+## Doğrulanan sistem durumu (gece sonu)
+```
+omnivoice-bridge active · candan-worker active · candan-brain active · pi-service active
+canlı sentez testi: RTF kısa 0.51 · orta 0.27 · uzun 0.23   → TTS çalışıyor
+GPU 16593/24576 MiB · disk 149 GB boş
+```
