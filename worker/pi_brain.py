@@ -253,6 +253,13 @@ class BrainPrefillProbe:
         return moved
 
 
+def _envflag(name: str, default: bool) -> bool:
+    v = os.environ.get(name)
+    if v is None:
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 # Soğuk yükleme bu saniyeyi geçerse kullanıcıya TEK kısa cümle söyle (10+ sn sessiz
 # bekletmek kötü). 0 → hiç söyleme. Yalnız soğuk turda, tur başına EN FAZLA bir kez.
 PI_COLD_NOTICE_DELAY = float(os.environ.get("PI_COLD_NOTICE_DELAY", "5") or 0)
@@ -290,6 +297,32 @@ PI_COMPACTION_STALL_TIMEOUT = float(
 PI_COMPACTION_NOTICE_DELAY = float(
     os.environ.get("PI_COMPACTION_NOTICE_DELAY", "1.5") or 1.5
 )
+# ── Compaction PENCERESİ: haber ver + o sırada komut alma ────────────────────
+# İLK ÖLÇÜM (27 Tem, `candan-brain` print_timing — sıkıştırma pi'nın llama-server'a
+# attığı TEK istektir, süresi orada birebir yazıyor). Yedi sıkıştırma:
+#   20.7 · 21.2 · 23.3 · 23.6 · 33.3 · 35.2 · 61.5 sn   (ortanca 23.6, tepe 61.5)
+# Yani sıkıştırma 3 saniyelik bir duraklama DEĞİL, yarım dakikalık bir kesinti.
+# Kullanıcı bunu zaten yaşıyordu ("sistem yavaşladı") ama sebebini bilmiyordu.
+# Karar: pencereyi (a) HABER VER, (b) o sırada yeni komut ALMA — ama sıkıştırma
+# ARKA PLANDA kalsın (senkron yapmak 2026-07-26'daki sessizlik hatasını geri getirir).
+PI_COMPACT_GATE_ENABLED = _envflag("PI_COMPACT_GATE_ENABLED", True)
+# Bu saniyeden KISA süren sıkıştırma için ne haber verilir ne de tur reddedilir —
+# gürültü olurdu. Aynı değer kapının "nezaket beklemesi"dir: pencereye denk gelen
+# tur önce bu kadar bekler, sıkıştırma bu sürede biterse HİÇBİR ŞEY olmamış gibi
+# normal cevaplanır (ölçülen sürelerde bu neredeyse hiç olmaz; kol geleceğe dönük).
+PI_COMPACT_NOTIFY_MIN_S = float(os.environ.get("PI_COMPACT_NOTIFY_MIN_S", "2") or 0)
+# Başlangıç cümlesi: ~yarım dakikalık bekleme SÖYLENİR (kullanıcı bilerek bekleyebilsin).
+PI_COMPACT_START_TEXT = (
+    os.environ.get("PI_COMPACT_START_TEXT")
+    or "Hafızamı toparlıyorum, yarım dakika kadar sürebilir. Bitince haber vereceğim."
+)
+# Bitiş: her sıkıştırmada tekrarlanacak → başlangıçtan KISA olmalı.
+PI_COMPACT_END_TEXT = os.environ.get("PI_COMPACT_END_TEXT") or "Tamam, hazırım."
+# Pencerede konuşan kullanıcıya verilen kısa işaret. SESSİZCE YUTMAK YASAK: hiçbir
+# şey duymayan kullanıcı sistemi bozuk sanar (DEVİR §2'deki asıl hata buydu).
+PI_COMPACT_BUSY_TEXT = (
+    os.environ.get("PI_COMPACT_BUSY_TEXT") or "Bir saniye, hâlâ toparlanıyorum."
+)
 # SON EMNİYET cümlesi: tur gerçekten metinsiz bittiğinde (stall/error, ya da yeniden
 # gönderim de tutmadıysa) kullanıcı sessiz kalmasın diye söylenir. ESKİ metin
 # "Bir saniye, tekrar dener misin?" idi; canlıda (2026-07-26 22:23) kullanıcı bunu
@@ -310,13 +343,6 @@ MEM_TURN_TTL = float(os.environ.get("MEM_TURN_TTL", "300") or 300)
 # Dosyanın dizini (varsayılan: hafıza kökü — last_speaker.json ile aynı yer). Broker ve
 # worker AYNI değeri görmeli; ikisi de worker/.env yükler.
 MEM_TURN_DIR = os.environ.get("MEM_TURN_DIR", "").strip()
-
-
-def _envflag(name: str, default: bool) -> bool:
-    v = os.environ.get(name)
-    if v is None:
-        return default
-    return v.strip().lower() in ("1", "true", "yes", "on")
 
 
 # Tool politikası (gecikme + güvenlik). pi bir KODLAMA ajanı: read/bash/edit/write/
@@ -833,6 +859,8 @@ def reload_settings() -> None:
     global RESET_ACK, RESET_FAIL, RESET_CONFIRM_ASK, RESET_CONFIRM_NO  # noqa: PLW0603
     global DEV_MODE_ENABLED, PI_ISOLATED, PI_NO_BUILTIN_TOOLS  # noqa: PLW0603
     global WEB_SEARCH_LEGACY_QWANT, CANDAN_TZ  # noqa: PLW0603
+    global PI_COMPACT_GATE_ENABLED, PI_COMPACT_NOTIFY_MIN_S  # noqa: PLW0603
+    global PI_COMPACT_START_TEXT, PI_COMPACT_END_TEXT, PI_COMPACT_BUSY_TEXT  # noqa: PLW0603
 
     # wake gate
     WAKE_ENABLED = _envflag("WAKE_ENABLED", True)
@@ -882,6 +910,20 @@ def reload_settings() -> None:
     PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
     WEB_SEARCH_LEGACY_QWANT = _envflag("WEB_SEARCH_LEGACY_QWANT", False)
     CANDAN_TZ = os.environ.get("CANDAN_TZ", "Europe/London")
+    # compaction penceresi (haber ver + komut alma). ⚠️ Bu blok BİLEREK kolun içinde:
+    # yukarıdaki kapsam notunda `*_NOTICE_*`/`*_TIMEOUT` altyapı sayılıp DIŞARIDA
+    # bırakılmıştı; bunlar ise kullanıcının açıp kapatacağı DAVRANIŞ kollarıdır ve
+    # `.env`'den gerçekten çalıştıkları ÖLÇÜLDÜ (tests/test_env_kollari.py).
+    PI_COMPACT_GATE_ENABLED = _envflag("PI_COMPACT_GATE_ENABLED", True)
+    PI_COMPACT_NOTIFY_MIN_S = float(os.environ.get("PI_COMPACT_NOTIFY_MIN_S", "2") or 0)
+    PI_COMPACT_START_TEXT = (
+        os.environ.get("PI_COMPACT_START_TEXT")
+        or "Hafızamı toparlıyorum, yarım dakika kadar sürebilir. Bitince haber vereceğim."
+    )
+    PI_COMPACT_END_TEXT = os.environ.get("PI_COMPACT_END_TEXT") or "Tamam, hazırım."
+    PI_COMPACT_BUSY_TEXT = (
+        os.environ.get("PI_COMPACT_BUSY_TEXT") or "Bir saniye, hâlâ toparlanıyorum."
+    )
 
 
 # Onay sorusuna gelen RET + DÜZELTME'nin ("hayır, Havi") başındaki olumsuzlama.
@@ -1875,6 +1917,16 @@ class PiRpcClient:
         self._deferred = 0
         self._settled_ev = asyncio.Event()
         self._settled_ev.set()
+        # ── Compaction PENCERESİ (turlar arası ortak durum) ──────────────────
+        # `_compact_ev` KURULU = sıkıştırma YOK. Pencere hem tur İÇİ (overflow) hem
+        # tur SONU (arka plan) sıkıştırmayı kapsar; kapı (bkz. PiStream._compact_gate)
+        # ve haber verme bunu okur. Durum BİLEREK client'ta: PiBrain oturum başına tek
+        # olsa da tur nesneleri gelip geçicidir, pencere ise turları AŞAR.
+        self._compact_ev = asyncio.Event()
+        self._compact_ev.set()
+        self._compact_since = 0.0            # pencere başlangıcı (monotonic)
+        self._compact_task: Optional[asyncio.Task] = None   # arka plan izleyicisi
+        self._compact_resend = False         # devredilen tur soruyu YENİDEN gönderecek
         # Bu SÜREÇ hiç text_delta üretti mi? False iken ilk tur "soğuk" sayılır
         # (oturum geçmişi baştan yüklenir, KV cache soğuk) → uzun stall toleransı.
         # İlk delta ile True olur ve süreç ölene kadar öyle kalır (yeni PiRpcClient =
@@ -2026,9 +2078,41 @@ class PiRpcClient:
         self._settled_ev.clear()
 
     def force_settled(self) -> None:
-        """Devredilen koşuyu kapat (agent_settled geldi / süreç öldü / zaman aşımı)."""
+        """Devredilen koşuyu kapat (agent_settled geldi / süreç öldü / zaman aşımı).
+
+        Koşu kapandıysa arka plan sıkıştırması da bitmiştir (ya da süreç ölmüştür) →
+        compaction penceresi burada da kapanır. Pencerenin AÇIK KALMASI kapıyı
+        (bkz. _compact_gate) sonsuza dek kapalı tutardı: fail-open şart."""
         self._deferred = 0
         self._settled_ev.set()
+        self.compact_end()
+
+    # ── Compaction penceresi ─────────────────────────────────────────────────
+    def compact_begin(self) -> None:
+        """`compaction_start` görüldü → pencere AÇIK (tur içi de olsa, tur sonu da)."""
+        if self._compact_ev.is_set():
+            self._compact_since = time.monotonic()
+        self._compact_ev.clear()
+
+    def compact_end(self) -> float:
+        """Pencereyi kapat; geçen süreyi (sn) döndür. Kapalıysa 0.0."""
+        if self._compact_ev.is_set():
+            return 0.0
+        self._compact_ev.set()
+        return max(0.0, time.monotonic() - self._compact_since)
+
+    def compacting(self) -> bool:
+        return not self._compact_ev.is_set()
+
+    async def wait_compact_done(self, timeout: float) -> bool:
+        """Pencere kapanana kadar bekle. True = kapandı/zaten kapalı."""
+        if self._compact_ev.is_set():
+            return True
+        try:
+            await asyncio.wait_for(self._compact_ev.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
 
     async def wait_settled(self, timeout: float) -> bool:
         """Devredilen koşu bitene kadar bekle. True = bitti, False = zaman aşımı."""
@@ -2303,6 +2387,48 @@ if _HAS_LIVEKIT:
                 )
                 client.force_settled()
 
+        @staticmethod
+        def _compact_mark(client, begin: bool) -> float:
+            """Sıkıştırma penceresini client'a işle; kapanışta geçen süreyi döndür.
+
+            Eski/kısmi client (öz-testlerdeki FakeClient gibi) bu API'yi bilmez →
+            NO-OP. Pencere yoksa kapı da yoktur; davranış bugünküyle aynı kalır."""
+            if begin:
+                if hasattr(client, "compact_begin"):
+                    client.compact_begin()
+                return 0.0
+            return client.compact_end() if hasattr(client, "compact_end") else 0.0
+
+        async def _compact_gate(self, emit) -> bool:
+            """Sıkıştırma penceresindeysek bu turu KABUL ETME. True = devam et.
+
+            Kullanıcının isteği: "compaction'a girdiğinde yeni sesli komut almasın."
+            Ölçüldü: sıkıştırma 21-62 sn sürüyor (ortanca ~24) — o pencerede pi tek
+            oturumdur, gönderilen prompt ya kilitte sıraya girer ya olayları karışır.
+            Bugüne dek kullanıcı bunu "sistem yavaşladı / cevap vermedi" diye yaşıyordu.
+
+            İKİ TUZAK, ikisi de burada kapatılıyor:
+              1. SESSİZCE YUTMA — reddedilen tur kısa bir işaret ALIR
+                 (`PI_COMPACT_BUSY_TEXT`). Hiçbir şey duymayan kullanıcı sistemi
+                 bozuk sanar; asıl hata buydu.
+              2. GEREKSİZ GÜRÜLTÜ — önce `PI_COMPACT_NOTIFY_MIN_S` kadar beklenir.
+                 Sıkıştırma o sürede biterse tur HİÇ reddedilmez, normal cevaplanır.
+
+            Kapı YALNIZ pencere boyunca kapalıdır; `PI_COMPACT_GATE_ENABLED=false`
+            ile bugünkü davranışa (bekle ve yine de gönder) bire bir dönülür."""
+            client = self._client
+            if not PI_COMPACT_GATE_ENABLED or not hasattr(client, "compacting"):
+                return True
+            if not client.compacting():
+                return True
+            if await client.wait_compact_done(PI_COMPACT_NOTIFY_MIN_S):
+                return True     # kısa sıkıştırma → kullanıcı hiçbir şey fark etmesin
+            logger.info(
+                "pi compaction penceresi → tur KABUL EDİLMEDİ, kısa işaret verildi"
+            )
+            emit(PI_COMPACT_BUSY_TEXT)
+            return False
+
         async def _truth_check(
             self,
             ledger: "truth_check.TurnLedger",
@@ -2471,6 +2597,12 @@ if _HAS_LIVEKIT:
                 if resume is not None:
                     _emit(resume)
                     return
+
+            # COMPACTION KAPISI — pi'ya giden yolun EN BAŞI. Buraya kadar olan yollar
+            # (wake/kimlik/kayıt/sıfırlama/kesme-devamı) beyne GİTMEZ, o yüzden
+            # sıkıştırma sürerken de çalışmaya devam ederler.
+            if not await self._compact_gate(_emit):
+                return
 
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
@@ -2699,6 +2831,9 @@ if _HAS_LIVEKIT:
                                 # HİÇ olay gelmez → watchdog'u uzun toleransa al.
                                 compacting = True
                                 reason = obj.get("reason") or "?"
+                                # Pencere AÇIK (turlar arası) → yeni turlar kapıda
+                                # karşılanır (bkz. _compact_gate).
+                                self._compact_mark(self._client, True)
                                 # TUR SONU compaction → ARKA PLANA AL. Koşunun söyleyeceği
                                 # bitmişse (turn_end geldi, ya da son assistant mesajı
                                 # hatasız KAPANDI ve içinde bekleyen tool çağrısı YOK) bu
@@ -2714,6 +2849,12 @@ if _HAS_LIVEKIT:
                                         "sıkıştırma ARKA PLANDA", reason,
                                     )
                                     self._client.defer_settle()
+                                    self._client._compact_resend = False
+                                    # Süreyi ÖLÇ + (uzarsa) kullanıcıya haber ver.
+                                    # Tur burada bittiği için bunu tur DIŞI bir görev
+                                    # yapar: bitişte söylenecek "hazırım" cümlesinin
+                                    # sahibi artık bu akış değildir.
+                                    self._brain._watch_compaction(self._client, reason)
                                     deferred_here = True
                                     break
                                 # Kullanıcı bu turda cevabın bir kısmını DUYDUYSA (got_delta)
@@ -2731,9 +2872,14 @@ if _HAS_LIVEKIT:
                                     _emit(PI_COMPACTION_NOTICE_TEXT)
                             elif etype == "compaction_end":
                                 compacting = False
+                                # Tur İÇİ sıkıştırma (overflow) burada biter; tur SONU
+                                # devrinde bu olay zaten yutulur (bkz. _route_output) ve
+                                # pencereyi izleyici görev kapatır.
+                                secs = self._compact_mark(self._client, False)
                                 logger.info(
-                                    "pi compaction bitti (aborted=%s willRetry=%s)",
-                                    obj.get("aborted"), obj.get("willRetry"),
+                                    "pi compaction bitti: %.1f sn "
+                                    "(aborted=%s willRetry=%s)",
+                                    secs, obj.get("aborted"), obj.get("willRetry"),
                                 )
                             elif etype == "agent_settled":
                                 break
@@ -2748,6 +2894,13 @@ if _HAS_LIVEKIT:
                                 and not _assistant_msg_text(final_msg)):
                             break
                         resent = True
+                        # KAYBOLAN SORU mekanizması KORUNDU (kapı onu KAPSAMIYOR):
+                        # kapı, sıkıştırma BAŞLADIKTAN sonra gelen YENİ turu reddeder;
+                        # buradaki soru ise sıkıştırma başlamadan ÖNCE sorulmuş ve
+                        # cevapsız kalmıştır — kullanıcı onun için beklemeyi seçmedi,
+                        # yutuldu. Silinseydi canlı 2026-07-26 22:23 hatası geri gelirdi.
+                        # Tek uyum: bu turda "hazırım" DENMEZ, cevabın kendisi işarettir.
+                        self._client._compact_resend = True
                         logger.warning(
                             "pi turu compaction devriyle METİNSİZ kapandı → sıkıştırma "
                             "bitince kullanıcının sorusu YENİDEN gönderiliyor (tek sefer)"
@@ -2854,6 +3007,18 @@ if _HAS_LIVEKIT:
                     if aborted:
                         self._client._write({"type": "abort"})
                     self._client._turn_q = None
+                    # FAIL-OPEN: tur İÇİ sıkıştırma penceresini `compaction_end`
+                    # kapatır — ama tur stall/abort/hata ile biterse o olay HİÇ
+                    # gelmeyebilir. Devredilmiş koşu yoksa (izleyici görev de yoksa)
+                    # pencereyi kapatacak başka kimse kalmaz ve kapı SONSUZA DEK
+                    # kapalı kalırdı: her tur reddedilirdi.
+                    if getattr(self._client, "_deferred", 0) == 0:
+                        left = self._compact_mark(self._client, False)
+                        if left:
+                            logger.warning(
+                                "pi compaction penceresi tur bitiminde AÇIK kalmıştı "
+                                "→ zorla kapatıldı (%.1f sn)", left,
+                            )
 
     class PiBrain(llm.LLM):
         """livekit-agents LLM: warm `pi --mode rpc` beyni. openai.LLM(...) yerine geçer."""
@@ -3025,6 +3190,82 @@ if _HAS_LIVEKIT:
             self._wake_task: Optional[asyncio.Task] = None
             # Konsolidasyon: dosya başına son çalıştırma (günde en çok 1 → LLM turu yakma).
             self._consolidated: dict[str, float] = {}
+            # Tur DIŞI söz (compaction haberleri). agent.py bağlar; None → haber YOK.
+            self._announcer: Optional[Callable[[str], Any]] = None
+
+        # ── Tur DIŞI söz (compaction haberleri) ──────────────────────────────
+        def set_announcer(self, cb: Optional[Callable[[str], Any]]) -> None:
+            """Tur dışında konuşma yolunu bağla (agent.py → `session.say`).
+
+            Compaction bir turun İÇİNDE başlar ama turun DIŞINDA biter: "hazırım"
+            cümlesini söyleyecek açık bir LLM akışı yoktur. Bağlanmazsa (testler,
+            eski çağıranlar) haber verme sessizce KAPALI kalır — davranış bugünküyle
+            birebir aynı olur."""
+            self._announcer = cb
+
+        async def _announce(self, text: str) -> None:
+            """Deterministik harness cümlesini tur dışında söyle (best-effort)."""
+            cb = getattr(self, "_announcer", None)
+            if cb is None or not text:
+                return
+            try:
+                res = cb(text)
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception:  # noqa: BLE001 — haber verilemedi diye sohbet ÖLMEZ
+                logger.warning("compaction haberi söylenemedi", exc_info=True)
+
+        # ── Arka plan compaction izleyicisi (ÖLÇÜM + haber verme) ────────────
+        def _watch_compaction(self, client: "PiRpcClient", reason: str) -> None:
+            """Tur sonu compaction arka plana devredildi → izlemeyi başlat.
+
+            Aynı pencere için TEK görev; sıkıştırma bitince pencere kapanır."""
+            if not hasattr(client, "wait_settled"):
+                return          # eski/kısmi client → izleme yok (bugünkü davranış)
+            task = getattr(client, "_compact_task", None)
+            if task is not None and not task.done():
+                return
+            client._compact_task = asyncio.create_task(
+                self._compaction_watch(client, reason)
+            )
+
+        async def _compaction_watch(self, client: "PiRpcClient", reason: str) -> None:
+            """Sıkıştırmayı ÖLÇ, uzarsa kullanıcıya haber ver, bitince "hazırım" de.
+
+            ÖLÇÜM her hâlükârda log'lanır (bayrak kapalıyken de): bugüne dek log'da
+            yalnız BAŞLANGIÇ satırı vardı, bitiş/süre YOKTU — sıkıştırmanın gerçekte
+            ne kadar sürdüğünü kimse bilmiyordu (ilk ölçüm: ortanca 23.6 sn, tepe
+            61.5 sn; bkz. sabitler bloğu).
+
+            Haber verme YALNIZ bayrak açıkken ve süre eşiği aşarsa. Bitiş cümlesi
+            sadece başlangıç cümlesi söylendiyse söylenir (yoksa kullanıcı hiç
+            duymadığı bir işin bittiğini duyar) ve yeniden gönderim varsa ATLANIR —
+            orada "hazırım" demek, hemen ardından gelen cevabın önüne geçerdi."""
+            t0 = time.monotonic()
+            told = False
+            ok = False
+            try:
+                if not await client.wait_settled(PI_COMPACT_NOTIFY_MIN_S):
+                    if PI_COMPACT_GATE_ENABLED:
+                        told = True
+                        logger.info(
+                            "pi compaction %.1fs'i geçti → kullanıcıya HABER veriliyor",
+                            PI_COMPACT_NOTIFY_MIN_S,
+                        )
+                        await self._announce(PI_COMPACT_START_TEXT)
+                    ok = await client.wait_settled(PI_COMPACTION_STALL_TIMEOUT)
+                else:
+                    ok = True
+            finally:
+                elapsed = time.monotonic() - t0
+                client.force_settled()      # fail-open: pencere ASLA açık kalmaz
+                logger.info(
+                    "pi arka plan compaction BİTTİ: %.1f sn (reason=%s haber=%s%s)",
+                    elapsed, reason, "evet" if told else "hayır",
+                    "" if ok else " ZAMAN AŞIMI",
+                )
+            if told and not client._compact_resend:
+                await self._announce(PI_COMPACT_END_TEXT)
 
         # ── `mate.tool` yayını (Candan ne yapıyor) ───────────────────────────
         def set_tool_publisher(self, cb: Optional[Callable[[dict], None]]) -> None:

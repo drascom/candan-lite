@@ -486,6 +486,20 @@ async def entrypoint(ctx: JobContext):
 
     brain.set_tool_publisher(_publish_tool)
 
+    # Compaction haberleri (tur DIŞI söz). Sıkıştırma bir turun içinde başlar ama
+    # DIŞINDA biter — "hazırım" cümlesini söyleyecek açık bir LLM akışı yoktur, o
+    # yüzden doğrudan `session.say`. Kesilebilir bırakıldı: kullanıcı araya girmek
+    # isterse bu harness cümlesi onu engellememeli.
+    async def _announce(text: str) -> None:
+        try:
+            await session.say(text, allow_interruptions=True)
+        except Exception:  # noqa: BLE001 — haber verilemedi diye sohbet ÖLMEZ
+            logging.getLogger("worker.agent").warning(
+                "compaction haberi söylenemedi", exc_info=True
+            )
+
+    brain.set_announcer(_announce)
+
     # Web UI "yeni sohbet" butonu → RPC. Sesli komutla AYNI yola iner
     # (brain.new_session): davranış tek yerde, iki tetikleyici. Sıfırlanan yalnız
     # SOHBET geçmişi; memory/ (memory_add/soul_add) KORUNUR.
