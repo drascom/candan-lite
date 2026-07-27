@@ -48,8 +48,7 @@ motor kimliğiyle ÖNEKLİ (bkz. `ref_fingerprint`). Ayrıca geçişte
 
 ⚠️ ETİKET SÖZDİZİMİ — GEÇİŞİ BLOKE EDEN FARK. OmniVoice `[laughter]`, `[sigh]`,
 `[surprise-oh]`, `[question-en]`, `[confirmation-en]` etiketlerini SESLENDİRİYORDU;
-`pi/AGENTS.md` ve `pi/personas/candan.md` modele bunları hâlâ ürettiriyor (prompt
-tarafına DOKUNULMADI — OmniVoice'a geri dönüş bozulmasın). Higgs'in resmi
+`pi/AGENTS.md` ve `pi/personas/candan.md` modele bunları hâlâ ürettiriyor. Higgs'in resmi
 `PROMPTING.md`'si ise net: **tanınmayan etiket ya çıktıyı bozar ya da HARFİ HARFİNE
 OKUNUR.** Yani müdahalesiz Higgs "laughter", "sigh", "mood excited" diye konuşurdu.
 Üstelik `trnorm` köşeli parantez içini BİLEREK koruyor (OmniVoice için doğruydu),
@@ -62,6 +61,14 @@ Higgs'in yerleşim kuralı da korunur — emotion/style/prosody CÜMLE BAŞINA t
 `sfx` yerinde kalır (etiketin hemen ardından ses taklidi, arada boşluk YOK).
 
 SIRA (kritik): mood çıkarma → trnorm → etiket dönüşümü → gönderim.
+
+⚠️ OMNIVOICE'A GERİ DÖNÜŞ ARTIK İKİ ADIM. 27 Tem'de prompt'a Higgs'e ÖZGÜ etiketler
+eklendi (`[pause]`, `[long_pause]`, `[mood:warm|calm|proud|confused]`) — ölçüldüler,
+Higgs'te temizler. Ama `omnivoice_tts._MOOD_RE` yalnız `excited|sad` biliyor ve
+OmniVoice tanımadığı `[...]`'yi HARFİ HARFİNE OKUR. Motoru geri alırken:
+    1) `worker/.env` → `TTS_ENGINE=higgs` satırını sil
+    2) `git checkout <higgs öncesi> -- pi/AGENTS.md pi/personas/candan.md`
+İkincisi atlanırsa Candan "pause", "mood warm" diye konuşur.
 """
 from __future__ import annotations
 
@@ -109,40 +116,54 @@ _STREAM_STALL_S = 20.0
 _REF_TIMEOUT_S = 2.0
 _REF_TTL_S = 300.0
 
-# `[mood:excited]` / `[mood:sad]` KONTROL işareti — seslendirilmez, metinden SİLİNİR.
-# omnivoice_tts ile AYNI sözleşme: pi_brain aynı işareti üretiyor, iki motor da anlamalı.
-_MOOD_RE = re.compile(r"\s*\[mood:(excited|sad)\]\s*", re.IGNORECASE)
-KNOWN_MOODS = ("excited", "sad")
-
 _FINAL_PUNCT = ".!?…:;"
 
 # ── OmniVoice etiketi → Higgs etiketi ────────────────────────────────────────
-# TEK DÜZENLEME YERİ. Duygu işi ayrı bir görevde derinleştirilecek; katalog burada
-# genişletilir, `_to_higgs_markup()` değişmez.
+# TEK DÜZENLEME YERİ. Katalog burada genişler, `_to_higgs_markup()` değişmez.
 #
 # Higgs sözdizimi `<|kategori:etiket|>`, iki yerleşim sınıfı var:
 #   • CÜMLE BAŞI  : emotion (21), style (3), prosody'nin speed_*/pitch_*/expressive_*
 #   • SATIR İÇİ   : sfx (tam yerinde) ve prosody'nin pause / long_pause
 # `sfx` tuzağı: etiketten hemen SONRA ses taklidi gelmeli, ARADA BOŞLUK YOK
-# (`<|sfx:laughter|>Haha, ...`).
+# (`<|sfx:laughter|>Haha, ...`). Ölçüm `pause` için de AYNI kuralı gösterdi
+# (aşağıya bak) — o yüzden `_HUG_INLINE_RE` iki yanındaki boşluğu yutuyor.
 #
 # Boş dize ("") = "karşılığı yok, SİL". Sözlükte HİÇ olmayan anahtar da silinir —
 # fark yalnız niyet beyanında: burada olan "bilerek atıldı", olmayan "tanınmadı".
-# ⚠️ `excited` için AKLA İLK GELEN `<|emotion:elation|>` KULLANILMIYOR — ÖLÇÜLDÜ ve
-# BOZUK çıktı. Aynı cümle (`"Bugün harika bir haber var."`), sunucuda 12'şer örnek,
-# Whisper geri-dönüşüyle anlaşılırlık:
-#     düz (etiketsiz)            12/12      <|emotion:sadness|>     12/12
-#     <|emotion:enthusiasm|>     12/12      <|emotion:surprise|>    12/12
-#     <|emotion:amusement|>      12/12      <|sfx:laughter|>        12/12
-#     <|emotion:elation|>       5-7/12  ← cümle BAŞINI yiyor; 3 örnek tamamen boş,
-#                                          2 örnek alakasız gevezelik ("Bye bye!")
-# Katalogdaki temiz çıkan en yakın karşılık `enthusiasm` seçildi. Duygu işi ayrı
-# görevde derinleştirilirken YENİ TOKEN AYNI ŞEKİLDE ÖLÇÜLSÜN — tokenizer etiketi
-# tanıyor olması (hepsi tek özel token) çalıştığı anlamına GELMİYOR.
+#
+# ── 27 Tem ÖLÇÜMÜ (`experiments/higgs-tts3/token_probe.py` + `token_eval.py`) ──
+# 43 etiketin TAMAMI canlı streaming ucundan, token başına 12 (sınırdakiler 24)
+# örnek, Whisper geri-dönüşü. SONUÇ: 21 emotion + 3 style + 8 prosody-cümle-başı +
+# 2 sfx + 2 prosody-satır-içi — hepsi 12/12 anlaşıldı, boş çıktı YOK.
+# Buradaki eşleme o havuzdan SEÇİLMİŞTİR; ölçülmemiş token hâlâ girmez.
+#
+# ⚠️ `elation` DÜZELTMESİ: bu dosyada "5-7/12, bozuk" yazıyordu. Aynı cümleyle
+# 24 örnekte 24/24 TEMİZ çıktı — eski ölçüm canlı yoldan (referans klonu +
+# streaming) DEĞİL, deney koşumundan alınmıştı. `excited` yine de `enthusiasm`'da
+# kalıyor: ikisi de temiz, `enthusiasm` canlıda kullanıcı tarafından onaylandı,
+# ölçülmüş bir kazanç olmadan canlı davranış değiştirilmiyor.
+#
+# ⚠️ `speed_very_slow` ŞÜPHELİ: 24'te 23 anlaşıldı, WER 0.075 (diğerlerinde 0.000)
+# ve cümlenin ilk hecesini kırpabiliyor ("Bugün" → "Gün"). Eşlemeye ALINMADI.
 MOOD_PRESETS: dict[str, str] = {
-    "excited": "<|emotion:enthusiasm|>",
-    "sad": "<|emotion:sadness|>",
+    "excited": "<|emotion:enthusiasm|>",   # 12/12 · canlıda onaylı
+    "sad": "<|emotion:sadness|>",          # 12/12 · canlıda onaylı
+    # 27 Tem'de ÖLÇÜLÜP eklenenler (hepsi 12/12, boş yok, baş yeme yok). Seçim
+    # ölçütü: Türkçe sohbette SIK geçen ve birbirinden AYIRT EDİLEBİLİR duygular.
+    # Katalogda temiz çıkan ama eklenMEyenler (anger/disgust/fear/shame/…) bir ev
+    # asistanının ağzına uymuyor — temiz olması gerekli, yeterli değil.
+    "warm": "<|emotion:affection|>",       # 12/12 · şefkat/destek — Candan'ın tonu
+    "calm": "<|emotion:contentment|>",     # 12/12 · sakinleştirme, huzur
+    "proud": "<|emotion:pride|>",          # 12/12 · kullanıcı bir şey başardığında
+    "confused": "<|emotion:confusion|>",   # 12/12 · "tam anlamadım"
 }
+
+# `[mood:X]` KONTROL işareti — seslendirilmez, metinden SİLİNİR. Desen tek kaynaktan
+# (MOOD_PRESETS) üretilir ki yeni bir duygu eklenince regex'i güncellemek unutulmasın.
+KNOWN_MOODS = tuple(MOOD_PRESETS)
+_MOOD_RE = re.compile(
+    r"\s*\[mood:(" + "|".join(KNOWN_MOODS) + r")\]\s*", re.IGNORECASE
+)
 
 HIGGS_TAG_MAP: dict[str, str] = {
     # sesli taklit gerektirenler — SATIR İÇİ, taklit etikete bitişik
@@ -153,7 +174,14 @@ HIGGS_TAG_MAP: dict[str, str] = {
     "surprise-oh": "<|emotion:surprise|>",
     "surprise-wa": "<|emotion:surprise|>",
     "surprise-yo": "<|emotion:surprise|>",
-    # karşılığı NET DEĞİL → sil (okunmaması yeter; uydurma eşleme YAPMIYORUZ)
+    # SATIR İÇİ duraklama — duygu gerektirmez, konuşmanın RİTMİNİ düzeltir.
+    # Ölçüm (24 örnek, cümle ortasında, bitişik): ikisi de 24/24 anlaşıldı,
+    # `pause` +0.32 s, `long_pause` +0.51 s sessizlik ekliyor. Gerçekten duruyor.
+    "pause": "<|prosody:pause|>",
+    "long_pause": "<|prosody:long_pause|>",
+    # karşılığı NET DEĞİL → sil (okunmaması yeter; uydurma eşleme YAPMIYORUZ).
+    # NOT: `[question-*]` için `<|prosody:pitch_high|>` ölçüldü ve TEMİZ çıktı ama
+    # "soru tonu" demek DEĞİL — uydurma eşleme olurdu, kulakla doğrulanmadan girmez.
     "question-en": "",
     "question-ah": "",
     "question-oh": "",
@@ -162,6 +190,60 @@ HIGGS_TAG_MAP: dict[str, str] = {
     "confirmation-en": "",
     "dissatisfaction-hnn": "",
 }
+
+# ── Etiketi KULLANMAK ile ANLATMAK'ı ayırt et ────────────────────────────────
+# CANLI HATA (27 Tem 13:09:46): model etiketi kullanmıyor, kullanıcıya ANLATIYORDU —
+#     model yazdı : "...şaşırdığımda [surprise-oh] gibi efektlerle tepki verebilirim..."
+#     kullanıcı duydu: "...şaşırdığımda ___ gibi efektlerle..."
+# Temizleyici etiketi sildiği için cümlede DELİK kaldı. Silmek burada yanlış: etiket
+# cümlenin ÖZNESİ, atılınca cümle bozuluyor. Doğrusu okunabilir karşılığına çevirmek.
+#
+# Ayırt etme SAĞ BAĞLAMLA yapılıyor (dar ve kanıtlanabilir): etiketten hemen sonra
+# "gibi / diye / etiketi / efektini / yazarak..." geliyorsa etiket ANLATILIYOR. Bu kalıp
+# gerçek kullanımda görünmez — `[laughter] Bunu gerçekten yaptın mı?` sağında normal
+# cümle var, eşleşmez. Tırnak içindeki etiket de anlatımdır.
+_MENTION_AFTER_RE = re.compile(
+    r"^\s*(?:gibi|diye|şeklinde|biçiminde|"
+    r"etiket\w*|işaret\w*|efekt\w*|komut\w*|"
+    r"yaz\w*|koy\w*|kullan\w*|ekle\w*)\b",
+    re.IGNORECASE,
+)
+_MENTION_QUOTES = "\"'«»“”‘’"
+
+# Anlatılan etiketin SESLİ karşılığı. "gibi/etiketi" ile devam eden cümleye
+# oturacak biçimde seçildi: "…şaşırdığımda ŞAŞIRMA gibi efektlerle…".
+_READABLE: dict[str, str] = {
+    "laughter": "kahkaha",
+    "sigh": "iç çekme",
+    "surprise-ah": "şaşırma",
+    "surprise-oh": "şaşırma",
+    "surprise-wa": "şaşırma",
+    "surprise-yo": "şaşırma",
+    "question-en": "soru tonu",
+    "question-ah": "soru tonu",
+    "question-oh": "soru tonu",
+    "question-ei": "soru tonu",
+    "question-yi": "soru tonu",
+    "confirmation-en": "onaylama",
+    "dissatisfaction-hnn": "hoşnutsuzluk",
+    "pause": "duraklama",
+    "long_pause": "uzun duraklama",
+    "mood:excited": "heyecanlı ton",
+    "mood:sad": "üzgün ton",
+}
+
+
+def _is_mention(text: str, start: int, end: int) -> bool:
+    """`text[start:end]` etiketi KULLANILIYOR mu, ANLATILIYOR mu?
+
+    Sınırlar etiketin ETRAFINDAKİ boşluğu içerebilir (`_MOOD_RE` öyle yakalıyor),
+    o yüzden iki yanda da boşluk kırpılır.
+    """
+    left = text[:start].rstrip()
+    if left and left[-1] in _MENTION_QUOTES:
+        return True
+    return bool(_MENTION_AFTER_RE.match(text[end:end + 40].lstrip(_MENTION_QUOTES)))
+
 
 # Metindeki HER `[...]` kalıbı. Eşlemesi olmayan da bu regex'e takılır ve SİLİNİR —
 # "tanınmayan etiket asla seslendirilmez" garantisi buradan geliyor.
@@ -173,16 +255,40 @@ _PREFIX_TOKEN_RE = re.compile(
 # Higgs kontrol token'ı — "söylenecek bir şey kaldı mı" sayımında sayılmaz.
 _HIGGS_TOKEN_RE = re.compile(r"<\|[a-z_]+:[a-z_]+\|>")
 
+# ── Duraklama token'ının YERLEŞİM KURALLARI (ikisi de ÖLÇÜLDÜ) ───────────────
+# 1) BOŞLUKSUZ. `"Bir saniye <|prosody:pause|> düşüneyim"` (boşluklu) 12 örnekte 3
+#    kez cümlenin ilk kelimesini yedi; boşluksuzu 0/12 → aradaki boşluk zararlı.
+# 2) CÜMLE BAŞINA ÇOK YAKIN OLMASIN. Boşluksuz hâli bile etiket 2. kelimeden
+#    hemen sonraysa 24'te 2 kez "Bir"i yuttu; AYNI etiket cümlenin ortasında
+#    (4 kelime sonra) 24/24 temiz ve +0.32 s sessizlik ekliyor. Yani sorun
+#    token'da değil, token'ın cümle başına yakınlığında.
+_HUG_INLINE_RE = re.compile(r"\s*(<\|prosody:(?:pause|long_pause)\|>)\s*")
+_MIN_WORDS_BEFORE_PAUSE = 3
+
 
 def _extract_mood(text: str) -> tuple[Optional[str], str]:
-    """Metinden `[mood:X]` KONTROL işaretini çıkar → (mood | None, temiz metin)."""
+    """Metinden `[mood:X]` KONTROL işaretini çıkar → (mood | None, temiz metin).
+
+    ANLATILAN mood işareti (`"[mood:sad] etiketini kullanırım"`) çıkarılmaz ve
+    silinmez — metinde bırakılır, `_to_higgs_markup` onu okunabilir karşılığına
+    çevirir. Aksi hâlde cümlede delik kalırdı (bkz. `_MENTION_AFTER_RE`).
+    """
     if not text or "[" not in text:
         return None, text
-    m = _MOOD_RE.search(text)
-    if not m:
+    mood: Optional[str] = None
+
+    def _drop(m: re.Match) -> str:
+        nonlocal mood
+        if _is_mention(text, m.start(), m.end()):
+            return m.group(0)          # anlatılıyor → DOKUNMA
+        if mood is None:
+            mood = m.group(1).lower()
+        return " "
+
+    cleaned = _MOOD_RE.sub(_drop, text)
+    if mood is None:
         return None, text
-    cleaned = re.sub(r"\s{2,}", " ", _MOOD_RE.sub(" ", text)).strip()
-    return m.group(1).lower(), cleaned
+    return mood, re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 def _has_speakable(text: str) -> bool:
@@ -219,6 +325,14 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
 
     def _replace(match: re.Match) -> str:
         key = match.group(0)[1:-1].strip().lower()
+        if _is_mention(text, match.start(), match.end()):
+            # Etiket KULLANILMIYOR, ANLATILIYOR: silmek cümlede delik bırakır.
+            readable = _READABLE.get(key)
+            if readable:
+                logger.info("TTS: anlatılan etiket okunur hâle çevrildi: %r → %r",
+                            match.group(0), readable)
+                return readable
+            # Tanınmayan etiket anlatılıyor → uydurma karşılık YOK, silinir.
         repl = HIGGS_TAG_MAP.get(key)
         if repl is None:
             # TANINMAYAN: Higgs bunu SESLİ OKUR → tek güvenli davranış silmek.
@@ -229,10 +343,21 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
         if _PREFIX_TOKEN_RE.match(repl):
             _add_prefix(repl)
             return " "
+        if repl.startswith("<|prosody:") and (
+            len(text[:match.start()].split()) < _MIN_WORDS_BEFORE_PAUSE
+        ):
+            # Cümle başına çok yakın duraklama İLK KELİMEYİ yiyor (ölçüldü).
+            # Duraklama süs; ilk kelime değil. Şüphede kalırsak duraklamayı atarız.
+            logger.info("TTS: cümle başına çok yakın duraklama atıldı: %r",
+                        match.group(0))
+            return " "
         return repl        # satır içi (sfx / pause) — yerinde kalır
 
     body = _BRACKET_RE.sub(_replace, text)
     body = re.sub(r"\s{2,}", " ", body).strip()
+    # Duraklama token'ı İKİ YANINDAKİ boşluğu yutar (ölçüldü: boşluklu hâli
+    # cümlenin ilk kelimesini yiyor). `sfx`'in resmi "boşluk yok" kuralının aynısı.
+    body = _HUG_INLINE_RE.sub(r"\1", body)
     body = re.sub(r"\s+([,.!?;:…])", r"\1", body)   # silinen etiketin bıraktığı boşluk
     if body.endswith(","):                          # "…Haha," gibi asılı kalan taklit
         body = body[:-1] + "."

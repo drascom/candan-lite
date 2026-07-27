@@ -25,7 +25,10 @@ Etiketler ve ne zaman:
 - `[surprise-oh]` — beklenmedik/şaşırtıcı bir şeye tepki (cümle başında iyi durur)
 - `[question-en]` — vurgulu soru tonu (gerçek bir merak/soruda)
 - `[confirmation-en]` — kısa onay ("hı hı", "tamam" hissi)
+- `[pause]` / `[long_pause]` — cümlenin İÇİNDE duraklama; düşünürken ya da vurgu
+  öncesinde. **Cümlenin ortasına** koy, ilk üç kelimeden sonra.
 
 Yerleşim: surprise/laughter cümle **başında**; sigh iki cümle **arasında, noktadan sonra**.
 Örnekler: "[laughter] Bunu gerçekten yaptın mı?" · "Bugün çok koşturdum. [sigh]
-Artık dinlenmek istiyorum." · "[surprise-oh] Vay, bunu beklemiyordum!"
+Artık dinlenmek istiyorum." · "[surprise-oh] Vay, bunu beklemiyordum!" ·
+"Şimdi takvimine baktım [pause] evet, yarın öğleden sonra boşsun."
