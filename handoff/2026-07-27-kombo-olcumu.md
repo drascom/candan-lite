@@ -133,6 +133,35 @@ en altta JSON kopyalanıyor (atlas sayfasıyla aynı desen, `localStorage`).
 Δsüre işareti bu kombonun zayıf olabileceğini söylüyor. Aynı cümlede satır 5
 (`awe+expressive_high`) yedek — ikisi arka arkaya dinlenip seçilmeli.
 
+## 5b. KULAK SONUCU — beşinin beşi de "komboyu al" (20:55 UTC)
+
+Kullanıcı setin tamamını dinledi ve **beş kombonun beşini de seçti.** Ham not
+sayfadan JSON olarak alındı:
+
+| kombo | karar | kullanıcının notu |
+|---|---|---|
+| `surprise+expressive_high@U1` | **kombo** | "tek tek sürpriz sürpriz gibi, `expressive_high` şaşırmayı gayet güzel veriyor. Kombo her ikisinin tam bir karışımı olmuş. **Farklı durumlarda üçünü de ayrı ayrı kullanabiliriz.**" |
+| `surprise+expressive_high@U2` | **kombo** | "Hem kombo hem yalnız `surprise` gayet güzel." |
+| `pride+expressive_high@P1` | **kombo** | "**Kesinlikle kombo daha güzel.**" |
+| `contentment+expressive_low@C1` | **kombo** | — |
+| `awe+expressive_high@U2` | **kombo** | — |
+
+Buradan çıkan üç şey:
+
+1. **§4'teki öneri tabloso kulakla onaylandı.** Üç eşleme değişikliği de aday:
+   `[surprise-*]`, `[mood:proud]`, `[mood:calm]`. Uygulama SONRAKİ TUR.
+2. ⚠️ **Δsüre işareti YANILDI — ve bu bir ders.** `surprise+expressive_high@U2`
+   on koşulun en zayıf Δsüre'siydi (+0.09 s) ve "zayıf olabilir" diye işaretlenmişti;
+   kullanıcı onu "gayet güzel" buldu. DEVİR'deki *"Δsüre ≈ 0 olan bir duygu token'ı
+   büyük ihtimalle hiçbir şey yapmıyordur"* sezgisi **kombolar için geçerli değil**:
+   `expressive_high` süreyi uzatmadan tonu değiştirebiliyor. Δsüre'yi eleme ölçütü
+   yapmama kararı (kullanıcının kararıydı) burada kendini doğruladı.
+3. **Yeni fikir — `expressive_high` kendi başına bir kol olabilir.** Kullanıcının U1
+   notu üç sesin de (tekil `surprise`, tekil `expressive_high`, kombo) ayrı ayrı
+   kullanılabileceğini söylüyor. Yani `expressive_high` duygu değil **vurgu** kolu;
+   duygudan bağımsız bir etikete (ör. `[emphasis]`) bağlanabilir. TEMİZ ölçümü zaten
+   var (27 Tem, 12/12). Karar verilmedi, sonraki tura not.
+
 ## 6. Dosyalar
 
 * `experiments/higgs-tts3/kombo_probe.py` — kombo ölçümü (yeni). `token_probe.py`'nin
