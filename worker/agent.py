@@ -1,7 +1,7 @@
 """candan-lite voice worker — livekit-agents AgentSession.
 
 Ağır adapter.py'ın yerine ince worker: VAD/turn-detect/barge-in framework'ten;
-sadece STT (Whisper wyoming) ve TTS (OmniVoice) custom plugin.
+sadece STT (Whisper wyoming) ve TTS (OmniVoice | Higgs, `TTS_ENGINE`) custom plugin.
 Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain-design.md).
 
 Çalıştırma (dev): python agent.py dev
@@ -24,7 +24,8 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
 from pi_brain import PiBrain, WAKE_ENABLED   # warm pi --mode rpc beyni + wake gate
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
-from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin
+from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin (TTS_ENGINE=omnivoice)
+from higgs_tts import HiggsTTS               # Higgs TTS 3 HTTP plugin (TTS_ENGINE=higgs)
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
@@ -39,6 +40,14 @@ STT_HOST = os.environ.get("STT_HOST", "192.168.0.25")
 STT_PORT = int(os.environ.get("STT_PORT", "10300"))
 TTS_HOST = os.environ.get("TTS_HOST", "192.168.0.25")
 TTS_PORT = int(os.environ.get("TTS_PORT", "8808"))
+# TTS motoru: "omnivoice" (WS streaming, eski yol) | "higgs" (Higgs TTS 3, HTTP).
+# Kod VARSAYILANI bilerek omnivoice: `.env` okunamasa/boş kalsa bile eski, denenmiş
+# yola düşülür. GERİ DÖNÜŞ TEK SATIR → worker/.env'deki `TTS_ENGINE=higgs` satırını sil.
+# Higgs KENDİ portunda dinler (8809); TTS_PORT OmniVoice'a ait kalır, iki motorun
+# ayarı birbirini EZMEZ ve geri dönüşte tek satır yeter.
+TTS_ENGINE = (os.environ.get("TTS_ENGINE") or "omnivoice").strip().lower()
+HIGGS_TTS_HOST = os.environ.get("HIGGS_TTS_HOST") or TTS_HOST
+HIGGS_TTS_PORT = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
@@ -249,7 +258,15 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(_finalize_memory)
 
-    tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
+    # İki motorun yüzeyi AYNI (synthesize + reset_mood) → aşağıdaki session/mood
+    # kablolaması motordan bağımsız çalışır.
+    if TTS_ENGINE == "higgs":
+        tts_plugin = HiggsTTS(host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT)
+    else:
+        tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
+    logging.getLogger("worker.agent").info(
+        "TTS motoru: %s (%s:%d)", TTS_ENGINE, tts_plugin._host, tts_plugin._port
+    )
 
     # ── SEMANTİK TUR-SONU (EOU) — cümle ortasındaki nefes turu BÖLMESİN ──────────
     # `turn_detection` verilmezse framework VARSAYILANI `inference.TurnDetector()`

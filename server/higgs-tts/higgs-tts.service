@@ -1,0 +1,32 @@
+# /etc/systemd/system/higgs-tts.service
+# Higgs TTS 3 (4B) canlı sentez servisi — omnivoice-bridge.service'in yerine geçer.
+#
+# ⚠️ AYNI ANDA ÇALIŞAMAZLAR: 24 GB kartta candan-brain (9.5 GB) + whisper (2.4 GB)
+# sürekli duruyor, geriye ~12.3 GB kalıyor. OmniVoice 9.9 GB, Higgs 10.2 GB tepe
+# yapıyor. `Conflicts=` bunu systemd düzeyinde zorlar: higgs-tts başlarsa
+# omnivoice-bridge DURUR (silinmez — `systemctl start omnivoice-bridge` ile döner,
+# o da higgs-tts'i durdurur).
+[Unit]
+Description=Higgs TTS 3 (4B) live synthesis service
+After=network.target
+Conflicts=omnivoice-bridge.service
+# `Conflicts` tek başına SIRA vermez: aynı işlemde omnivoice'un durdurulmasıyla
+# higgs'in başlatılması EŞZAMANLI olabilir → iki model bir an aynı anda VRAM ister
+# → CUDA OOM. `After=` ile omnivoice'un DURMASI higgs'in BAŞLAMASINDAN önceye çekilir.
+After=omnivoice-bridge.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/higgs-tts
+EnvironmentFile=/opt/higgs-tts/higgs.env
+ExecStart=/opt/higgs-venv/bin/python /opt/higgs-tts/server.py
+Restart=on-failure
+RestartSec=10
+# Model yüklemesi + ısıtma ~40 sn; systemd erken "failed" demesin.
+TimeoutStartSec=300
+TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
