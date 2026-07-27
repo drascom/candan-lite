@@ -296,6 +296,7 @@ _READABLE: dict[str, str] = {
     "pause": "duraklama",
     "long_pause": "uzun duraklama",
     "whisper": "fısıltı",
+    "emphasis": "vurgu",
     "mood:excited": "heyecanlı ton",
     "mood:sad": "üzgün ton",
     "speed:slow": "yavaş tempo",
@@ -336,6 +337,49 @@ _HIGGS_TOKEN_RE = re.compile(r"<\|[a-z_]+:[a-z_]+\|>")
 #    token'da değil, token'ın cümle başına yakınlığında.
 _HUG_INLINE_RE = re.compile(r"\s*(<\|prosody:(?:pause|long_pause)\|>)\s*")
 _MIN_WORDS_BEFORE_PAUSE = 3
+
+# ── VURGU (`[emphasis]`) — kelimeyi öne çıkarma ──────────────────────────────
+# 28 Tem, `experiments/vurgu/` (4 tur ölçüm + 3 tur kulak testi).
+#
+# Higgs kataloğunda kelime düzeyinde vurgu YOK: uydurma `<|prosody:emphasis|>`,
+# `<|emphasis:strong|>` ve SSML `<emphasis>` HARFİ HARFİNE OKUNUYOR (WER 0.22-0.56,
+# `katalog_yoklama.py`). O yüzden vurgu bir TOKEN'a değil, ÖLÇÜLMÜŞ bir NOKTALAMA
+# yerleşimine çevrilir — kullanıcının kulakla seçtiği yol (`tire-on`):
+#
+#     Bugün kendine iyi bakmayı unutma — olur mu, ben hep buradayım.
+#                                      ↑ sınır YALNIZ ÖNDE, arkada HİÇBİR ŞEY
+#
+# Dizge `experiments/vurgu/vurgu_set.py::_on_isaretli(c, " — ")` ile BİREBİR:
+# soldaki boşluk ve VİRGÜL atılır, yerine " — " (boşluk + U+2014 + boşluk) gelir,
+# hedeften SONRASI olduğu gibi kalır.
+#
+# ⚠️ ARKAYA İŞARET KOYMAK YASAK. 2. turda tire hedefin İKİ yanındaydı; kullanıcı
+# altı ayrı notta "kelime sonrası uzun bekleme" dedi, ölçüm de doğruladı (hedeften
+# sonra +0.31 s fazladan sessizlik; `confusion` +0.56, `arousal` +0.50). Arkadaki
+# işaret atılınca bekleme taban seviyesine düştü (-0.02 s).
+#
+# ⚠️ SINIR HEDEFİN TAM ÖNÜNE. Deneyde "bağlı öbeği de kapsa" (işaretin "hem de"nin
+# önüne alınması) denendi: ÖLÇÜM onu üstün gördü (Δ perde +2.17 vs -0.72), KULAK
+# çürüttü (0/3 vs 3/3). Geriye doğru öbek kapsama mantığı canlıya ALINMADI.
+#
+# ⚠️ HER CÜMLEDE TUTMUYOR — yaklaşık YARISINDA tutuyor (kulak: 2/4 cümlede 3/3,
+# 2/4'ünde 0/3). Kullanıcı bunu bilerek seçti çünkü başarısızlık ZARARSIZ: vurgu
+# gelmez ama ses bozulmaz (dört turda da WER 0.000, baş yeme 0, bekleme yok).
+EMPHASIS_TAG = "emphasis"
+_EMPHASIS_SEP = " — "        # ölçülen dizge — DEĞİŞTİRME (bkz. vurgu_set._on_isaretli)
+# Dönüşüm iki adımlı: `_replace` yerine bir işaretçi bırakır, `_apply_emphasis`
+# sınırı kurar. Sebep: kararlar (kaçıncı vurgu, solunda kaç kelime var, sağında
+# kelime kaldı mı) ancak etiketler temizlendikten SONRA verilebilir.
+_EMPHASIS_MARK = "\x01"
+_EMPHASIS_RE = re.compile(r"[ \t]*(,*)[ \t]*" + _EMPHASIS_MARK + r"\s*")
+# Cümle başındaki vurgu ATILIR. `pause` için ölçülmüş `_MIN_WORDS_BEFORE_PAUSE = 3`
+# kuralının vurguya AYNEN uygulanması gerekmiyor: ölçüm tam da bu yerleşimi kapsıyor —
+# `confusion` cümlesinde ("Tam — anlamadım şimdi…") sınır 1. kelimeden sonra ve
+# `tire-on` 5/5, `tire` 8/8 örnekte baş yeme 0, WER 0.000. Yani tire duraklama
+# token'ı gibi ilk kelimeyi yemiyor. Ölçülmemiş tek yerleşim SIFIR kelimeli hâl
+# (cümlenin en başı), o da atılır: vurgulanacak bir bağlam yok, tire orada diyalog
+# çizgisine benzer. Şüphede kalırsak vurguyu kaybederiz, ilk kelimeyi ASLA.
+_MIN_WORDS_BEFORE_EMPHASIS = 1
 
 
 def _extract_mood(text: str) -> tuple[Optional[str], str]:
@@ -397,6 +441,41 @@ def _has_speakable(text: str) -> bool:
     return any(ch.isalnum() for ch in text)
 
 
+def _apply_emphasis(body: str) -> str:
+    """`_EMPHASIS_MARK` işaretçilerini ölçülen vurgu sınırına (` — `) çevir.
+
+    Cümlede EN FAZLA BİR vurgu kalır — çok vurgu vurgusuzluktur. İlki kazanır
+    (mood'da olduğu gibi), gerisi silinir. İşaretin solunda kelime yoksa ya da
+    sağında söylenecek bir şey kalmadıysa işaret DÜŞER: sınır bir kelimeyi öne
+    çıkarmak içindir, cümlenin ucunu süslemek için değil.
+
+    Soldaki virgül, ölçülen metinle birebir kalmak için atılır
+    (`vurgu_set._on_isaretli` → `on.rstrip().rstrip(",")`); işaret düşerse virgül
+    yerinde kalır, cümlenin noktalaması bozulmaz.
+    """
+    if _EMPHASIS_MARK not in body:
+        return body
+    used = False
+
+    def _place(m: re.Match) -> str:
+        nonlocal used
+        comma = m.group(1)
+        before = len(_speakable_body(body[:m.start()]).split())
+        after = _speakable_body(body[m.end():])
+        if used:
+            logger.info("TTS: fazladan vurgu işareti atıldı (cümlede en fazla bir vurgu)")
+        elif before < _MIN_WORDS_BEFORE_EMPHASIS:
+            logger.info("TTS: cümle başındaki vurgu işareti atıldı")
+        elif not _has_speakable(after):
+            logger.info("TTS: vurgulanacak kelime yok → vurgu işareti atıldı")
+        else:
+            used = True
+            return _EMPHASIS_SEP
+        return f"{comma} " if comma else " "
+
+    return _EMPHASIS_RE.sub(_place, body)
+
+
 def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
     """OmniVoice `[etiket]`lerini Higgs sözdizimine çevir; TANINMAYANI SİL.
 
@@ -411,6 +490,9 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
     (OmniVoice etiketleri seslendiriyordu), yani dönüşüm ondan önce yapılırsa
     ürettiğimiz `<|...|>` token'ları normalizasyona yakalanır.
     """
+    # İç işaretçi model metninden GELEMEZ (uzunluğu koruyarak temizlenir ki
+    # `_is_mention`'ın kullandığı konumlar kaymasın).
+    text = text.replace(_EMPHASIS_MARK, " ")
     prefixes: list[str] = []
     seen_categories: set[str] = set()
 
@@ -442,6 +524,10 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
                             match.group(0), readable)
                 return readable
             # Tanınmayan etiket anlatılıyor → uydurma karşılık YOK, silinir.
+        if key == EMPHASIS_TAG:
+            # Vurgu bir Higgs TOKEN'ı değil, ölçülmüş bir NOKTALAMA yerleşimi →
+            # `HIGGS_TAG_MAP`'e girmez. Kararı `_apply_emphasis` verir.
+            return _EMPHASIS_MARK
         repl = HIGGS_TAG_MAP.get(key)
         if repl is None:
             # TANINMAYAN: Higgs bunu SESLİ OKUR → tek güvenli davranış silmek.
@@ -463,6 +549,7 @@ def _to_higgs_markup(text: str, mood: Optional[str]) -> str:
         return repl        # satır içi (sfx / pause) — yerinde kalır
 
     body = _BRACKET_RE.sub(_replace, text)
+    body = _apply_emphasis(body)
     body = re.sub(r"\s{2,}", " ", body).strip()
     # Duraklama token'ı İKİ YANINDAKİ boşluğu yutar (ölçüldü: boşluklu hâli
     # cümlenin ilk kelimesini yiyor). `sfx`'in resmi "boşluk yok" kuralının aynısı.
