@@ -41,6 +41,13 @@ worker/data/
 # ham ses varlıkları — aile ses kayıtları (*.opus), PUBLIC repo'ya ASLA girmez.
 /asset/
 
+# Candan'ın referans sesi (ses kimliği). Dosyanın KENDİSİ girmez — depo PUBLIC ve
+# yukarıdaki iki kural da referans wav'ını "biyometrik veri" sayıyor; public geçmişe
+# yazmak GERİ ALINAMAZ. README.md (md5, köken, geri getirme) commit EDİLİR.
+# Kullanıcı aksini isterse: git add -f assets/voice/default-ref.wav
+/assets/voice/*.wav
+/assets/voice/*.pt
+
 # testler: kullanıcı kararı — ne git'te ne sunucuda dursun.
 worker/tests/
 

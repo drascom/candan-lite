@@ -144,7 +144,8 @@ _ABBREV = {
     "No.": "numara", "Av.": "Avukat", "Sn.": "Sayın",
 }
 
-# Korunacaklar: OmniVoice etiketleri ve [mood:...] — AYNEN geçer.
+# Korunacaklar: TTS etiketleri ve [mood:...] — AYNEN geçer (higgs_tts._to_higgs_markup
+# trnorm'dan SONRA çalışıp bunları Higgs sözdizimine çevirir).
 _PROTECT_RE = re.compile(r"\[[^\]]*\]")
 _SUF = r"(?:'([a-zçğıöşü]+))?"  # kesme işaretli ek (opsiyonel)
 

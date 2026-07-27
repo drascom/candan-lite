@@ -1,4 +1,4 @@
-"""tts_cache — kalıp/kısa cümleler için ses cache'i (OmniVoice klon maliyetini sıfırlar).
+"""tts_cache — kalıp/kısa cümleler için ses cache'i (ses klonlama maliyetini sıfırlar).
 
 NEDEN: sabit ses için klonlama zorunlu ve bedeli ~3.4× (4 sn referansla ~1.7×) —
 bkz. `handoff/2026-07-25-tts-arastirma-ve-server-adimlari.md` §2. Sık tekrar eden kısa
@@ -8,7 +8,7 @@ seferinde ödemenin anlamı yok: aynı metin + aynı ses + aynı referans → ay
 GENEL LRU DEĞİL — bilinçli olarak sadece iki şey cache'lenir:
   • `CACHED_PHRASES` içindeki kalıp satırlar (pi_brain.py'deki scripted sabitler),
   • `CACHE_MAX_CHARS`'tan kısa metinler (LLM'in "Tamam."/"Evet." tipi yanıtları —
-    zaten kısa-metin guard'ının koruduğu sınıf, bkz. omnivoice_tts._run).
+    zaten kısa-metin guard'ının koruduğu sınıf, bkz. higgs_tts._run_short).
 Uzun/serbest cümleler cache'e HİÇ girmez (disk şişmesin, isabet oranı sıfıra yakın).
 
 ANAHTAR (bkz. make_key):
@@ -23,7 +23,7 @@ FORMAT: dosyalar ham PCM, 24 kHz mono s16le (`.pcm`). AudioEmitter'a dönüşüm
 push edilir. Başka örnekleme hızı/kanal sayısı gelirse o çıktı cache'lenmez.
 
 PREWARM (elle, otomatik ÇALIŞMAZ):
-    cd worker && TTS_HOST=192.168.0.25 TTS_PORT=8808 python3 -m tts_cache --prewarm
+    cd worker && HIGGS_TTS_HOST=192.168.0.25 HIGGS_TTS_PORT=8809 python3 -m tts_cache --prewarm
     python3 -m tts_cache --list      # cache içeriği
     python3 -m tts_cache --clear     # cache'i boşalt
 """
@@ -139,7 +139,8 @@ def _fingerprint_from_payload(payload: object) -> Optional[str]:
     """`GET /api/default` gövdesinden parmak izi. `ref_audio` + `ref_text` varsa onlar
     (anlamlı ve kararlı); yoksa gövdenin tamamı (kararlı JSON sıralamasıyla).
 
-    ⚠️ SINIR: `ref_audio` bir YOL (`/opt/omnivoice/default-ref.wav`). Aynı yola BAŞKA bir
+    ⚠️ SINIR: `ref_audio` bir YOL (`/opt/candan-lite/assets/voice/default-ref.wav`).
+    Aynı yola BAŞKA bir
     wav yazılıp `ref_text` aynı bırakılırsa parmak izi değişmez → cache eski sesle çalar.
     Pratikte §1.B'nin iki seçeneği de `ref_text`'i değiştiriyor, o yüzden yeterli; yine de
     referansı elle değiştirdikten sonra `python3 -m tts_cache --clear` çalıştırın.
@@ -325,14 +326,18 @@ async def prewarm(host: str, port: int, *, voice: Optional[str] = None,
                   moods: tuple[Optional[str], ...] = (None,)) -> int:
     """Kalıp listesini (ve cümle parçalarını) üret + cache'e yaz. Otomatik ÇAĞRILMAZ.
 
-    `omnivoice_tts` üzerinden gider → canlıdaki ile BİREBİR aynı yol/normalizasyon.
-    Yalnız sentez isteği atar (`/ws`, `POST /api/tts`); referansa/ayara DOKUNMAZ.
+    `higgs_tts` üzerinden gider → canlıdaki ile BİREBİR aynı yol/normalizasyon.
+    Yalnız sentez isteği atar (`POST /api/tts[/stream]`); referansa/ayara DOKUNMAZ.
     Döner: yazılan dosya sayısı.
-    """
-    from omnivoice_tts import OmniVoiceTTS  # döngüsel importu çalışma anına ertele
 
-    tts = OmniVoiceTTS(host=host, port=port, voice=voice)
-    ref = await ref_fingerprint(host, port)
+    ⚠️ PARMAK İZİ `higgs_tts.ref_fingerprint` OLMALI — bu modülünki DEĞİL. Canlı yol
+    (higgs_tts._run_short) anahtarı motor kimliğiyle ÖNEKLİ üretir; burada bu modülün
+    kendi parmak izini kullanmak ULAŞILMAYAN anahtarlar yazar (cache hep ıskalar).
+    """
+    import higgs_tts  # döngüsel importu çalışma anına ertele
+
+    tts = higgs_tts.HiggsTTS(host=host, port=port, voice=voice)
+    ref = await higgs_tts.ref_fingerprint(host, port)
     if ref is None:
         print("HATA: pinned referans okunamadı → prewarm iptal (cache anahtarı üretilemez)")
         return 0
@@ -376,11 +381,11 @@ def _main(argv: list[str]) -> int:
         return 0
     if "--prewarm" in argv:
         logging.basicConfig(level=logging.INFO)
-        host = os.environ.get("TTS_HOST", "127.0.0.1")
-        port = int(os.environ.get("TTS_PORT", "8808"))
+        host = os.environ.get("HIGGS_TTS_HOST") or os.environ.get("TTS_HOST", "127.0.0.1")
+        port = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
         moods: tuple[Optional[str], ...] = (None,)
         if "--moods" in argv:
-            from omnivoice_tts import MOOD_PRESETS
+            from higgs_tts import MOOD_PRESETS
             moods = (None, *MOOD_PRESETS)
         print(f"prewarm → {host}:{port} (mood: {[m or 'nötr' for m in moods]})")
         n = asyncio.run(prewarm(host, port, moods=moods))

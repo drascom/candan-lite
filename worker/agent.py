@@ -1,7 +1,7 @@
 """candan-lite voice worker — livekit-agents AgentSession.
 
 Ağır adapter.py'ın yerine ince worker: VAD/turn-detect/barge-in framework'ten;
-sadece STT (Whisper wyoming) ve TTS (OmniVoice | Higgs, `TTS_ENGINE`) custom plugin.
+sadece STT (Whisper wyoming) ve TTS (Higgs TTS 3) custom plugin.
 Beyin = pi CLI, warm `--mode rpc` alt-süreci (worker/pi_brain.py, docs/pi-brain-design.md).
 
 Çalıştırma (dev): python agent.py dev
@@ -28,8 +28,7 @@ import truth_check                          # (ayrıca modül olarak: reload_set
 from log_utils import setup_file_logging    # tüm logları dosyaya da yaz (ana süreç)
 from pi_brain import PiBrain                 # warm pi --mode rpc beyni
 from whisper_stt import WhisperWyomingSTT    # Wyoming (faster-whisper) STT plugin
-from omnivoice_tts import OmniVoiceTTS       # OmniVoice WS TTS plugin (TTS_ENGINE=omnivoice)
-from higgs_tts import HiggsTTS               # Higgs TTS 3 HTTP plugin (TTS_ENGINE=higgs)
+from higgs_tts import HiggsTTS               # Higgs TTS 3 HTTP plugin (:8809) — TEK motor
 from speaker_id import build_speaker_id, SpeakerStore  # Faz 3: speaker-ID (opsiyonel)
 from speaker_tap import SpeakerState, SpeakerTap       # paralel speaker tap
 from wake_stt import WakeSTT                            # paralel erken-wake dinleyici (opsiyonel)
@@ -67,13 +66,10 @@ HEARTBEAT_SECONDS = reminders_mod.HEARTBEAT_SECONDS
 STT_HOST = os.environ.get("STT_HOST", "192.168.0.25")
 STT_PORT = int(os.environ.get("STT_PORT", "10300"))
 TTS_HOST = os.environ.get("TTS_HOST", "192.168.0.25")
-TTS_PORT = int(os.environ.get("TTS_PORT", "8808"))
-# TTS motoru: "omnivoice" (WS streaming, eski yol) | "higgs" (Higgs TTS 3, HTTP).
-# Kod VARSAYILANI bilerek omnivoice: `.env` okunamasa/boş kalsa bile eski, denenmiş
-# yola düşülür. GERİ DÖNÜŞ TEK SATIR → worker/.env'deki `TTS_ENGINE=higgs` satırını sil.
-# Higgs KENDİ portunda dinler (8809); TTS_PORT OmniVoice'a ait kalır, iki motorun
-# ayarı birbirini EZMEZ ve geri dönüşte tek satır yeter.
-TTS_ENGINE = (os.environ.get("TTS_ENGINE") or "omnivoice").strip().lower()
+# TTS motoru TEK: Higgs TTS 3 (:8809, higgs-tts.service). 28 Tem'de OmniVoice
+# sistemden tamamen kaldırıldı (kullanıcı kararı: model ağır, RAM bütçesi yok) →
+# `TTS_ENGINE` dallanması ve `omnivoice_tts.py` YOK. Higgs kalıcı arıza verirse
+# yol Piper'dır (ayrı iş); bkz. handoff/2026-07-28-omnivoice-kaldir.md.
 HIGGS_TTS_HOST = os.environ.get("HIGGS_TTS_HOST") or TTS_HOST
 HIGGS_TTS_PORT = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
 # Higgs chunked PCM akışı. AÇIK varsayılan: ilk ses 6.2 sn → 0.55 sn (uzun cümle,
@@ -300,23 +296,18 @@ async def entrypoint(ctx: JobContext):
 
     ctx.add_shutdown_callback(_finalize_memory)
 
-    # İki motorun yüzeyi AYNI (synthesize + reset_mood) → aşağıdaki session/mood
-    # kablolaması motordan bağımsız çalışır.
-    if TTS_ENGINE == "higgs":
-        tts_plugin = HiggsTTS(
-            host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM,
-            speed_control=SPEECH_SPEED,
-        )
-        # Hız kademesi TTS'te yaşıyor; DOĞRULUK DENETİMİ onu bilmek zorunda.
-        # "Hızlandırıyorum" diyen ama hızı değiştirmeyen (ya da tavanda olan) tur
-        # düzeltilsin diye brain tur BAŞINDA kademeyi buradan okur (bkz.
-        # truth_check.speed_line — canlı hata 27 Tem 18:33).
-        brain.set_speed_source(lambda: tts_plugin.speed)
-    else:
-        tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
+    tts_plugin = HiggsTTS(
+        host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM,
+        speed_control=SPEECH_SPEED,
+    )
+    # Hız kademesi TTS'te yaşıyor; DOĞRULUK DENETİMİ onu bilmek zorunda.
+    # "Hızlandırıyorum" diyen ama hızı değiştirmeyen (ya da tavanda olan) tur
+    # düzeltilsin diye brain tur BAŞINDA kademeyi buradan okur (bkz.
+    # truth_check.speed_line — canlı hata 27 Tem 18:33).
+    brain.set_speed_source(lambda: tts_plugin.speed)
     logging.getLogger("worker.agent").info(
-        "TTS motoru: %s (%s:%d)%s", TTS_ENGINE, tts_plugin._host, tts_plugin._port,
-        "" if TTS_ENGINE != "higgs" else f" akış={'açık' if HIGGS_STREAM else 'KAPALI'}",
+        "TTS motoru: higgs (%s:%d) akış=%s", tts_plugin._host, tts_plugin._port,
+        "açık" if HIGGS_STREAM else "KAPALI",
     )
 
     # ── SEMANTİK TUR-SONU (EOU) — cümle ortasındaki nefes turu BÖLMESİN ──────────

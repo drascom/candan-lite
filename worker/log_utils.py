@@ -161,7 +161,7 @@ def setup_file_logging() -> Path | None:
     AGENT_LOG_FILE: yol (göreli yol worker/ dizinine göre çözülür). Tanımsız →
     worker/logs/agent.log. Boş string ("") → dosyaya HİÇ yazma (handler takılmaz).
 
-    Root'a takılır → livekit.agents, worker.*, pi_brain, omnivoice_tts dahil TÜM
+    Root'a takılır → livekit.agents, worker.*, pi_brain, higgs_tts dahil TÜM
     logger'lar dosyaya düşer. Seviye ROOT'tan gelir (setup_logging WORKER_LOG_LEVEL'i
     root'a basar) → dosya terminalle BİREBİR aynı satırları görür. DedupeFilter
     logger'lara takılı (handler'a değil) → dosya da aynı seyreltilmiş akışı alır.

@@ -1,7 +1,9 @@
 """higgs_tts — livekit-agents TTS plugin over Higgs TTS 3 (4B).
 
-`omnivoice_tts.py`'nin YERİNE geçer; onu SİLMEZ. Motor seçimi `agent.py`'de
-`TTS_ENGINE` ile yapılır, geri dönüş tek satır (bkz. handoff notu).
+SİSTEMDEKİ TEK TTS MOTORU. 27 Tem'de OmniVoice'un (`omnivoice_tts.py`) yerine geçti,
+28 Tem'de OmniVoice sunucudan ve koddan TAMAMEN kaldırıldı → motor seçimi (`TTS_ENGINE`)
+ve geri dönüş kolu YOK. Kalıcı arıza hâlinde yol Piper'dır (ayrı iş, henüz yazılmadı).
+Ayrıntı: handoff/2026-07-28-omnivoice-kaldir.md
 
 İKİ YOL:
   • `POST /api/tts/stream` → chunked ham PCM. **VARSAYILAN.** Sunucu cümleyi
@@ -25,8 +27,8 @@ Streaming'de ilk ses cümle uzunluğundan neredeyse BAĞIMSIZ (467-546 ms).
 
 livekit zaten `streaming=False` ile CÜMLE BAŞINA `synthesize()` çağırıyor;
 `streaming` bayrağı GİRDİ (metin) akışıyla ilgili, ÇIKTI akışıyla değil.
-`AudioEmitter`'a parça parça `push()` etmek bu bayrakla ilgisiz ve
-`omnivoice_tts._run_ws` yıllardır aynısını yapıyor — pipeline bunu destekliyor.
+`AudioEmitter`'a parça parça `push()` etmek bu bayrakla ilgisiz — eski OmniVoice
+yolu (`_run_ws`) da aynısını yapıyordu, pipeline bunu destekliyor.
 
 OMNIVOICE'TAN AYNEN TAŞINAN KAZANIMLAR (hepsi ölçülmüş):
   • `normalize_tr()` (trnorm) — Higgs'te de WER 0.058 → 0.028 (29 cümle, ASR
@@ -38,13 +40,18 @@ OMNIVOICE'TAN AYNEN TAŞINAN KAZANIMLAR (hepsi ölçülmüş):
     push edilir. Hiç frame push edilmezse livekit "no audio frames were pushed"
     APIError'ı atıp turu öldürüyor.
 
-⚠️ CACHE ANAHTARI — MOTOR KİMLİĞİ ŞART. `tts_cache` anahtarı referans parmak izini
-içeriyor; ama Higgs ve OmniVoice AYNI referans wav'ını (`/opt/omnivoice/default-ref.wav`)
-ve aynı `ref_text`'i kullanıyor. Sadece referansa bakan bir anahtar iki motorda da
-AYNI çıkar → Higgs'e geçince eski OmniVoice cache'i YANLIŞ SESLE çalardı.
-Bu yüzden anahtara giren `ref` alanı `higgs-tts-3-4b:<parmak izi>` biçiminde,
-motor kimliğiyle ÖNEKLİ (bkz. `ref_fingerprint`). Ayrıca geçişte
-`worker/data/tts-cache/` bir kez TEMİZLENİR (handoff notundaki komut).
+⚠️ CACHE ANAHTARI — MOTOR KİMLİĞİ ŞART (ölçülmüş tuzak, 27 Tem). `tts_cache` anahtarı
+referans parmak izini içeriyor; Higgs ve OmniVoice AYNI referans wav'ını ve aynı
+`ref_text`'i kullandığı için sadece referansa bakan bir anahtar iki motorda da AYNI
+çıkıyordu → Higgs'e geçince eski OmniVoice cache'i YANLIŞ SESLE çalardı. Bu yüzden
+anahtara giren `ref` alanı `higgs-tts-3-4b:<parmak izi>` biçiminde, motor kimliğiyle
+ÖNEKLİ (bkz. `ref_fingerprint`). OmniVoice gitti ama önek KALSIN: bir sonraki motor
+(Piper) geldiğinde aynı tuzak aynen tekrar eder.
+
+REFERANS SES (Candan'ın kimliği): `assets/voice/default-ref.wav` → sunucuda
+`/opt/candan-lite/assets/voice/default-ref.wav`, `higgs.env`'deki `HIGGS_REF_AUDIO`
+oraya bakar. Çalışma anında `HIGGS_REF_CODES` (önceden hesaplanmış kodlar) varsa wav
+HİÇ okunmaz; kod dosyası silinirse wav'dan yeniden üretilir.
 
 ⚠️ ETİKET SÖZDİZİMİ — GEÇİŞİ BLOKE EDEN FARK. OmniVoice `[laughter]`, `[sigh]`,
 `[surprise-oh]`, `[question-en]`, `[confirmation-en]` etiketlerini SESLENDİRİYORDU;
@@ -81,13 +88,12 @@ mantığına DOKUNULMADI) ve ilk ses gecikmesi 517 ms → 517 ms.
 Kademe `reset_mood()` ile SIFIRLANMAZ: mood cümlelik bir renk, hız kalıcı ayar.
 Bayrak: `worker/.env` → `SPEECH_SPEED=0` (işaret yine silinir, tempo uygulanmaz).
 
-⚠️ OMNIVOICE'A GERİ DÖNÜŞ ARTIK İKİ ADIM. 27 Tem'de prompt'a Higgs'e ÖZGÜ etiketler
-eklendi (`[pause]`, `[long_pause]`, `[whisper]`, `[mood:*]` ondu, `[speed:X]`)
-— ölçüldüler, Higgs'te temizler. Ama `omnivoice_tts._MOOD_RE` yalnız `excited|sad`
-biliyor ve OmniVoice tanımadığı `[...]`'yi HARFİ HARFİNE OKUR. Motoru geri alırken:
-    1) `worker/.env` → `TTS_ENGINE=higgs` satırını sil
-    2) `git checkout <higgs öncesi> -- pi/AGENTS.md pi/personas/candan.md`
-İkincisi atlanırsa Candan "pause", "mood warm" diye konuşur.
+⚠️ PROMPT MOTORA BAĞLI — BİR SONRAKİ MOTORDA BUNU HATIRLA. 27 Tem'de prompt'a Higgs'e
+ÖZGÜ etiketler eklendi (`[pause]`, `[long_pause]`, `[whisper]`, `[mood:*]` ondu,
+`[speed:X]`) — ölçüldüler, Higgs'te temizler. Bu etiketleri TANIMAYAN bir motor
+`[...]`'yi HARFİ HARFİNE OKUR (OmniVoice öyle yapıyordu). Yani motor değişirse
+`pi/AGENTS.md` + `pi/personas/candan.md` de o motora göre güncellenmeli; yoksa Candan
+"pause", "mood warm" diye konuşur.
 """
 from __future__ import annotations
 
@@ -558,7 +564,7 @@ async def ref_fingerprint(host: str, port: int) -> Optional[str]:
 
 
 class HiggsTTS(tts.TTS):
-    """Higgs TTS 3 plugin. `OmniVoiceTTS` ile AYNI yüzey (reset_mood dahil)."""
+    """Higgs TTS 3 plugin — sistemdeki TEK TTS motoru (synthesize + reset_mood)."""
 
     def __init__(
         self,

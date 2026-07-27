@@ -331,7 +331,7 @@ def speed_line(said: str, before: Optional[str]) -> Optional[str]:
     İddia yoksa None → hiçbir müdahale yok; hız işareti koyup hiç konuşmamak da serbest.
     """
     if before is None:
-        return None                      # hız kolu bağlı değil (OmniVoice) → denetim yok
+        return None                      # hız kolu bağlı değil (test/CLI) → denetim yok
     claim = speed_claim(said)
     if claim is None:
         return None

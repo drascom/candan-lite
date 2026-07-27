@@ -3087,7 +3087,7 @@ if _HAS_LIVEKIT:
             # Tool çağrısı/sonucu olayları buradan odaya gider; hata konuşmayı BOZMAZ.
             self._tool_publisher: Optional[Callable[[dict], None]] = None
             # Konuşma hızı kademesini OKUYAN kaynak (agent.py TTS eklentisine bağlar).
-            # None → hız denetimi KAPALI (OmniVoice yolunda kol yok). Kademe burada
+            # None → hız denetimi KAPALI (agent.py bağlamadıysa; test/CLI). Kademe burada
             # TUTULMAZ, yalnız okunur: tek gerçek TTS'te (bkz. truth_check.speed_line).
             self._speed_source: Optional[Callable[[], Optional[str]]] = None
             self._tool_seen: set[str] = set()   # aynı olay iki kez yayınlanmasın
