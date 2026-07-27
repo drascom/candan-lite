@@ -116,6 +116,143 @@ PI_TURN_STALL_TIMEOUT = float(os.environ.get("PI_TURN_STALL_TIMEOUT", "12") or 1
 PI_FIRST_TURN_STALL_TIMEOUT = float(
     os.environ.get("PI_FIRST_TURN_STALL_TIMEOUT", "45") or 45
 )
+# ── PREFİLL FARKINDALIĞI: watchdog "beyin okuyor mu" diye SORAR ─────────────
+# ÖLÇÜLDÜ (27 Tem 22:05-22:27, `journalctl -u candan-brain`): 8 tur stall'ının
+# 7'sinde beyin O SIRADA sağlıklı çalışıyordu — prompt'u OKUYORDU:
+#   22:24:23  85 token'lık yabancı istek slotu aldı (kesme sınıflandırıcısı)
+#   22:24:23  slot LRU ile seçildi (ortak ön ek yok) → 15251 token BAŞTAN işleniyor
+#   22:24:36  worker: "12s ilerleme yok → tur kapatılıyor" (got_delta=False)
+#   22:24:37  kullanıcı: "Kusura bakma, bir an aklım dağıldı"
+# Yani turu düşüren MODEL değil, BİZİM SABRIMIZDI. Prefill hızı ölçüldü:
+# ~1120 token/s → 15-17 bin token'lık bağlam TEK BAŞINA 13-15 s prefill demek.
+#
+# Sabit eşiği büyütmek yanlış çözüm: gerçek takılmalar (WebSocket 1000, ~33-40 s)
+# o zaman da 45 s bekletirdi. Ayrım için llama-server'ın KENDİ sinyaline bakıyoruz:
+# `GET /slots` → `is_processing` + `n_prompt_tokens_processed` + `n_decoded`.
+# Bu üçlü iki yoklama arasında DEĞİŞTİYSE beyin ilerliyor demektir; sessizlik
+# sağlıklıdır, tur ÖLDÜRÜLMEZ. Beyin boştaysa (`is_processing=false`) ya da uç
+# erişilemezse davranış BUGÜNKÜNÜN AYNISI — tur eşikte kapanır.
+#
+# ⚠️ Bu ayarlar ÇAĞRI ANINDA `os.environ`'dan okunur (aşağıdaki yardımcılar).
+# Sebep: `agent.py` `load_dotenv()`'i import'lardan SONRA çağırıyor ve
+# `reload_settings()` kapsamı bilerek dar (bkz. oradaki not) — modül seviyesinde
+# okusaydık `.env` değerleri ETKİSİZ kalırdı (DEVİR §4 madde 6 tuzağı).
+#
+# PI_BRAIN_SLOTS_URL boşsa yargıcın ucundan (CLAIM_CHECK_URL) türetilir:
+#   http://192.168.0.25:8082/v1/chat/completions → http://192.168.0.25:8082/slots
+# PI_PREFILL_GRACE=0 → kapalı; watchdog bugünkü gibi sabit eşikle çalışır (geri dönüş).
+_PREFILL_GRACE_DEFAULT = "60"
+
+
+def brain_slots_url() -> str:
+    """llama-server `/slots` ucu ("" → yoklama yapılmaz)."""
+    explicit = (os.environ.get("PI_BRAIN_SLOTS_URL") or "").strip()
+    if explicit:
+        return explicit
+    base = (
+        os.environ.get("CLAIM_CHECK_URL")
+        or "http://192.168.0.25:8082/v1/chat/completions"
+    ).strip()
+    head, sep, _ = base.partition("/v1/")
+    if not sep:
+        return ""          # beklenmeyen biçim → sessizce kapalı
+    return head + "/slots"
+
+
+def prefill_grace() -> float:
+    """Prefill'e verilebilecek EN FAZLA ek süre (sn). 0 → kol kapalı."""
+    try:
+        return float(os.environ.get("PI_PREFILL_GRACE", _PREFILL_GRACE_DEFAULT) or 0)
+    except ValueError:
+        return float(_PREFILL_GRACE_DEFAULT)
+
+
+def brain_probe_timeout() -> float:
+    """`/slots` yoklamasının zaman aşımı (sn). Yoklama turu ASLA bloklamaz."""
+    try:
+        return float(os.environ.get("PI_BRAIN_PROBE_TIMEOUT", "0.8") or 0.8)
+    except ValueError:
+        return 0.8
+
+
+def slot_mark(slots: Any) -> Optional[tuple]:
+    """`/slots` cevabından "çalışan slotun ilerleme imzası". Boştaysa None.
+
+    İmza = (id_task, işlenen prompt token'ı, üretilen token). İki yoklama
+    arasında değişmesi = beyin ilerliyor."""
+    if not isinstance(slots, list):
+        return None
+    for s in slots:
+        if not isinstance(s, dict) or not s.get("is_processing"):
+            continue
+        nxt = s.get("next_token")
+        if isinstance(nxt, list) and nxt and isinstance(nxt[0], dict):
+            decoded = nxt[0].get("n_decoded")
+        elif isinstance(nxt, dict):
+            decoded = nxt.get("n_decoded")
+        else:
+            decoded = None
+        return (s.get("id_task"), s.get("n_prompt_tokens_processed"), decoded)
+    return None
+
+
+def _get_json_sync(url: str, timeout: float) -> Any:
+    import urllib.request                     # yerel import: modül yükü artmasın
+
+    with urllib.request.urlopen(url, timeout=timeout) as resp:  # noqa: S310 — sabit iç uç
+        return json.loads(resp.read().decode("utf-8", "replace"))
+
+
+class BrainPrefillProbe:
+    """"Beyin şu an prompt'u okuyor mu?" — watchdog turu öldürmeden ÖNCE sorar.
+
+    BEST-EFFORT: uç kapalı/yavaş/bozuk → False döner, yani bugünkü davranış.
+    Tur başına `reset()` çağrılır; verilen toplam ek süre `grace` ile SINIRLIDIR
+    (gerçek takılma sonsuza kadar yaşamasın)."""
+
+    def __init__(self) -> None:
+        self._mark: Optional[tuple] = None
+        self._granted = 0.0
+
+    def reset(self) -> None:
+        self._mark = None
+        self._granted = 0.0
+
+    @property
+    def granted(self) -> float:
+        return self._granted
+
+    async def _slots(self) -> Any:
+        url = brain_slots_url()
+        if not url:
+            return None
+        budget = brain_probe_timeout()
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(_get_json_sync, url, budget), timeout=budget + 0.2
+            )
+        except Exception:  # noqa: BLE001 — yoklama turu ASLA düşürmez
+            logger.info("beyin /slots yoklaması başarısız → prefill bilgisi yok")
+            return None
+
+    async def progressing(self, waited: float) -> bool:
+        """Beyin ilerliyor mu? True → bu sessizlik stall SAYILMAZ.
+
+        `waited`: bu eşik penceresinde beklenen süre; bütçeye eklenir."""
+        grace = prefill_grace()
+        if grace <= 0 or self._granted >= grace:
+            return False
+        mark = slot_mark(await self._slots())
+        if mark is None:               # beyin boşta → gerçekten takılmışız
+            self._mark = None
+            return False
+        moved = self._mark is None or mark != self._mark
+        self._mark = mark
+        if moved:
+            self._granted += max(0.0, waited)
+        return moved
+
+
 # Soğuk yükleme bu saniyeyi geçerse kullanıcıya TEK kısa cümle söyle (10+ sn sessiz
 # bekletmek kötü). 0 → hiç söyleme. Yalnız soğuk turda, tur başına EN FAZLA bir kez.
 PI_COLD_NOTICE_DELAY = float(os.environ.get("PI_COLD_NOTICE_DELAY", "5") or 0)
@@ -2385,6 +2522,10 @@ if _HAS_LIVEKIT:
                     # çağrıldığı anda okur.)
                     cold = not self._client.warmed_up
                     compacting = False   # compaction_start..end penceresi
+                    # Prefill kapısı: eşik dolduğunda beyne "okuyor musun" diye sor
+                    # (bkz. BrainPrefillProbe). Tur boyunca TEK nesne → verilen ek
+                    # süre birikir ve `PI_PREFILL_GRACE` ile sınırlanır.
+                    probe = BrainPrefillProbe()
 
                     def _budget() -> float:
                         # Compaction penceresi HER ŞEYİ ezer: bu sessizlik sağlıklı,
@@ -2403,6 +2544,7 @@ if _HAS_LIVEKIT:
                         await self._client.send({"type": "prompt", "message": text})
                         cold = not self._client.warmed_up
                         compacting = False
+                        probe.reset()          # her deneme kendi prefill bütçesiyle başlar
                         # Soğuk beklemede kullanıcıyı sessiz bırakma: tek kısa cümle söyle.
                         # notice_at None → ya kapalı ya da zaten söylendi/gerek kalmadı.
                         notice_at: Optional[float] = (
@@ -2434,9 +2576,23 @@ if _HAS_LIVEKIT:
                                     )
                                     _emit(PI_COLD_NOTICE_TEXT)
                                     continue
+                                # PREFİLL KAPISI — turu öldürmeden ÖNCE beyne sor.
+                                # Model prompt'u OKUYORSA bu sessizlik sağlıklıdır
+                                # (15 bin token = 13-15 s prefill, ölçüldü). Beyin
+                                # boşta / uç kapalı → aşağıya düşer: bugünkü davranış.
+                                waited = time.monotonic() - last_progress
+                                if await probe.progressing(waited):
+                                    logger.info(
+                                        "pi tur: beyin prompt'u İŞLİYOR (%.0fs sessiz, "
+                                        "toplam prefill payı %.0f/%.0fs) → stall SAYILMADI",
+                                        waited, probe.granted, prefill_grace(),
+                                    )
+                                    last_progress = time.monotonic()
+                                    continue
                                 logger.warning(
                                     "pi tur stall: %.0fs ilerleme yok → tur kapatılıyor "
-                                    "(got_delta=%s cold=%s)", _budget(), got_delta, cold,
+                                    "(got_delta=%s cold=%s prefill_payı=%.0fs)",
+                                    _budget(), got_delta, cold, probe.granted,
                                 )
                                 stalled = True
                                 break
