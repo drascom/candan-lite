@@ -147,24 +147,76 @@ ssh root@192.168.0.25 'printf "\nSPEAKER_ENROLL_WAIT_S=0\n" >> /opt/candan-lite/
 
 ---
 
-## 5. DEPLOY EDİLMEYEN — bilerek
+## 5. C maddesi (inkâr) — 27 Tem 23:42'de DEPLOY EDİLDİ
+
+> Bu bölüm önce "DEPLOY EDİLMEYEN — bilerek" idi. Kullanıcı onayıyla alındı.
 
 `da5d8b1`'in **C maddesi** (model elindeki aracı inkâr ediyordu) `pi/AGENTS.md`
-ve `pi/extensions/speaker-enroll/index.ts` içindeki PROMPT değişiklikleridir.
-Bunlar `pi-service` tarafına aittir ve bu turda **pi-service'e dokunulmaması**
-söylendi → git'te duruyor, canlıya **gitmedi**.
+("Elindeki yeteneği İNKÂR ETME" bölümü) ve
+`pi/extensions/speaker-enroll/index.ts` (`ENROLL_NOTE` açılışı) prompt
+değişiklikleridir. **23:42'de canlıya alındı — `candan-worker` HİÇ DÜŞMEDEN.**
 
-**Sonuç:** "beni kaydet" dendiğinde modelin "ses tanımayı doğrudan
-çalıştıramıyorum" deme ihtimali canlıda HÂLÂ VAR. Kayıt sırası düzeltmesi
-(A maddesi) modelin tool'u çağırdığı durumu düzeltir, çağırmadığı durumu değil —
-o durumda emniyet ağı (`SPEAKER_ENROLL_NET_TURNS`) devrede.
+### `restart` DEĞİL `reload` — kesinti 0 sn
 
-Gerekince tek adımda alınır:
+⚠️ `candan-worker.service` `pi-service`'e `Requires=` ile bağlı:
+`systemctl restart pi-service` worker'ı da düşürür ve **geri getirmez**
+(27 Tem 14:31'de 9 dk kesinti bu yüzden oldu). Restart'a **gerek yok**:
+
+`pi_broker.py --reload` (= `ExecReload`, `systemctl reload pi-service`) broker
+sürecini AYAKTA tutar, yalnız sıcak `pi` alt-süreçlerini öldürür ve yeniden
+prewarm eder. Systemd birimi hiç `inactive` olmadığı için `Requires=` tetiklenmez.
 
 ```bash
 scp pi/AGENTS.md root@192.168.0.25:/opt/candan-lite/pi/AGENTS.md
 scp pi/extensions/speaker-enroll/index.ts root@192.168.0.25:/opt/candan-lite/pi/extensions/speaker-enroll/index.ts
-ssh root@192.168.0.25 'systemctl restart pi-service'   # ⚠️ bu tur YASAKTI
+ssh root@192.168.0.25 'systemctl reload pi-service'   # restart DEĞİL
+```
+
+Ölçüldü: reload 1 sn sürdü; `candan-worker` `NRestarts=0`,
+`ActiveEnterTimestamp` 23:33:07'de **değişmeden** kaldı; dört servis de `active`.
+
+### Derleme gerekmiyor
+
+`speaker-enroll/tsconfig.json` → `"noEmit": true`. tsconfig yalnız tip kontrolü
+içindir; `dist/` yok, pi `.ts`'i `-e` ile **doğrudan** yükler. Deploy = dosyayı
+kopyala + reload.
+
+### ⚠️ Sıcak pi süreci prompt'u BAŞLANGIÇTA okur — bayatlar
+
+`pi/AGENTS.md` pi'ya `--append-system-prompt <yol>` ile **süreç doğarken**
+verilir. Yani dosyayı değiştirmek yetmez; **reload edilmezse sıcak süreç eski
+prompt'la yaşamaya devam eder.**
+
+Bu deploy'da yakalandı: canlı `pi` süreci 14:43'te doğmuştu, ama `AGENTS.md`
+22:07'de yazılmıştı → **22:07 duygu düzenlemeleri 23:42'ye kadar hiç etkin
+olmamıştı.** 22:24'teki "bunu doğrudan bir araç olarak çalıştıramıyorum"
+hatasının bir bileşeni de budur. **Kural: `pi/` altında prompt/extension
+değiştiren her deploy `systemctl reload pi-service` ile bitmeli.**
+
+### Etkin olduğu ÖLÇÜLDÜ (tahmin değil)
+
+1. Sunucudaki iki dosyanın md5'i deploy ÖNCESİ `721fc07^` ile birebir eşitti
+   → sürüklenme yoktu. Deploy SONRASI md5'ler `HEAD` ile birebir eşit.
+2. `_build_pi_args("candan","candan",…)` sunucuda çalıştırıldı; canlı argv'de
+   `--append-system-prompt /opt/candan-lite/pi/AGENTS.md` ve
+   `-e /opt/candan-lite/pi/extensions/speaker-enroll/index.ts` **var**.
+3. Yeni `pi` süreci 23:42:22'de doğdu; dosyalar 23:42:05/06'da yazılmıştı
+   → yeni içeriği okumak zorunda.
+4. **Doğrudan sorgu:** canlı argv'nin aynısıyla (yalnız session id atılık)
+   `pi -p` ile modele "sistem prompt'unda bu iki şey var mı" soruldu →
+   **`VAR` / `VAR`**. Atılık session dosyası silindi.
+
+`journalctl`: reload temiz (`pi broker reload tamamlandı (1 süreç)` →
+`pi açıldı … pid=123884`), dört serviste traceback YOK, worker 23:33:11'deki
+`registered worker` kaydını **korudu** (yeniden kaydolmadı = bağlantı hiç kopmadı).
+
+### Tek blok geri dönüş
+
+Yedek: `pi/AGENTS.md.bak-inkar-20260728`,
+`pi/extensions/speaker-enroll/index.ts.bak-inkar-20260728` (sunucuda).
+
+```bash
+ssh root@192.168.0.25 'cd /opt/candan-lite/pi && cp AGENTS.md.bak-inkar-20260728 AGENTS.md && cp extensions/speaker-enroll/index.ts.bak-inkar-20260728 extensions/speaker-enroll/index.ts && systemctl reload pi-service && systemctl is-active candan-worker pi-service higgs-tts candan-brain'
 ```
 
 ---
@@ -178,3 +230,7 @@ ssh root@192.168.0.25 'systemctl restart pi-service'   # ⚠️ bu tur YASAKTI
    satırı görülmeli: `journalctl -u candan-worker -f | grep -E "İŞLİYOR|tur stall"`.
 3. **Kayıt** — "beni kaydet" dendiğinde artık anında ret YOK; nötr cümle
    talimatı söylenip karar sonraki turda veriliyor (üst sınır 30 sn / 4 tur).
+4. **İnkâr (23:42 deploy'u)** — "ses tanımayı çalıştır" dendiğinde artık
+   "bunu doğrudan bir araç olarak çalıştıramıyorum" DENMEMELİ; kısa sihirbaz
+   yürümeli (adı tek kelime al → geri okuyup onaylat → `enroll_speaker`).
+   Bu cümle yine duyulursa: prompt canlı ve ölçüldü, sorun modelin kendisindedir.
