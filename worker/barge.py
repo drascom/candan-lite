@@ -80,6 +80,33 @@ NEAR_END_RATIO = _envfloat("BARGE_RESUME_NEAR_END_RATIO", 0.85)
 BARGE_CHECK_ENABLED = _envflag("BARGE_CHECK_ENABLED", True)
 BARGE_CHECK_TIMEOUT = _envfloat("BARGE_CHECK_TIMEOUT", 0.6)
 
+
+def reload_settings() -> None:
+    """`.env` YÜKLENDİKTEN SONRA ayarları tazele. `agent.py` bunu çağırır.
+
+    NEDEN (ÖLÇÜLDÜ, sunucuda 27 Tem 21:20): `candan-worker.service` `.env`'i
+    `EnvironmentFile=` ile YÜKLEMEZ (boşluklu değerler systemd ayrıştırıcısını
+    kırıyor, unit'te yazılı) — `agent.py` kendi `load_dotenv()`'ini çağırır ve o
+    çağrı **import blokundan SONRA**dır. Bu dosya modül seviyesinde `os.environ`
+    okuduğu için import anında `.env` HENÜZ YOKTUR:
+
+        import aninda RESUME_ENABLED : True
+        .env okundu, environ         : false
+        modul degeri                 : True   ← geri dönüş kolu ÇALIŞMIYOR
+
+    Yani `BARGE_RESUME_ENABLED=false` yazmak hiçbir şey yapmazdı. Kapsamı DAR
+    tutuyoruz: `load_dotenv`'i import'ların önüne almak TÜM modüllerin (pi_brain,
+    truth_check, higgs_tts…) bugünkü davranışını değiştirirdi — burada yalnız bu
+    dosyanın ayarları tazelenir, başka hiçbir şeye dokunulmaz."""
+    global RESUME_ENABLED, RESUME_TTL, NEAR_END_RATIO  # noqa: PLW0603 — bkz. yukarısı
+    global BARGE_CHECK_ENABLED, BARGE_CHECK_TIMEOUT    # noqa: PLW0603
+    RESUME_ENABLED = _envflag("BARGE_RESUME_ENABLED", True)
+    RESUME_TTL = _envfloat("BARGE_RESUME_TTL", 30.0)
+    NEAR_END_RATIO = _envfloat("BARGE_RESUME_NEAR_END_RATIO", 0.85)
+    BARGE_CHECK_ENABLED = _envflag("BARGE_CHECK_ENABLED", True)
+    BARGE_CHECK_TIMEOUT = _envfloat("BARGE_CHECK_TIMEOUT", 0.6)
+
+
 CHAT = "chat"          # sohbet/geri-bildirim → kaldığı yerden devam
 NEW = "new"            # yeni istek → kalan atılır, bugünkü davranış
 
@@ -311,7 +338,7 @@ def cut_index(full: str, spoken: str) -> int:
     return mask[heard - 1] + 1
 
 
-def resume_from(full: str, spoken: str, *, near_end_ratio: float = NEAR_END_RATIO) -> str:
+def resume_from(full: str, spoken: str, *, near_end_ratio: Optional[float] = None) -> str:
     """Kesilen cevabın DEVAMI: kaldığı cümlenin BAŞINDAN + kalan cümleler.
 
     Karar 1 (kullanıcının): yarım kalan cümle baştan söylenir. TEK istisna,
@@ -319,7 +346,13 @@ def resume_from(full: str, spoken: str, *, near_end_ratio: float = NEAR_END_RATI
     tekrar etmek yapay durur → sonraki cümleden devam edilir. Aynı kural "cümle
     zaten çok kısaydı, tamamı duyuldu" durumunu da kapatır.
 
-    Metin YENİDEN ÜRETİLMEZ: burada yalnız elde olan metin kırpılır."""
+    Metin YENİDEN ÜRETİLMEZ: burada yalnız elde olan metin kırpılır.
+
+    ⚠️ `near_end_ratio` VARSAYILAN DEĞER OLARAK yazılamaz: varsayılan argümanlar
+    TANIM anında bağlanır, `reload_settings()` ise `.env` okunduktan SONRA çalışır
+    → env'den gelen oran hiç kullanılmazdı."""
+    if near_end_ratio is None:
+        near_end_ratio = NEAR_END_RATIO
     if not full:
         return ""
     cut = cut_index(full, spoken)
@@ -366,8 +399,11 @@ class Pending:
     spoken: str
     at: float = field(default_factory=time.monotonic)
 
-    def expired(self, now: Optional[float] = None, ttl: float = RESUME_TTL) -> bool:
-        return ((now if now is not None else time.monotonic()) - self.at) > ttl
+    def expired(self, now: Optional[float] = None, ttl: Optional[float] = None) -> bool:
+        # `ttl` varsayılan DEĞER olarak yazılamaz: tanım anında bağlanır ve
+        # `reload_settings()`'in okuduğu env değeri hiç kullanılmazdı.
+        limit = RESUME_TTL if ttl is None else ttl
+        return ((now if now is not None else time.monotonic()) - self.at) > limit
 
     def resume(self) -> str:
         return resume_from(self.full, self.spoken)

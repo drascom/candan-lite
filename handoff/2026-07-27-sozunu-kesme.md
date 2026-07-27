@@ -1,10 +1,12 @@
 # SÖZÜNÜ KESME — yeni komut mu, sadece sohbet mi? (27 Temmuz 2026)
 
 Kod: `worker/barge.py` (yeni) · `worker/pi_brain.py` (tur akışı) · `worker/agent.py` (kanca)
-Test: `worker/tests/test_barge_resume.py` — **338 test geçiyor** (301 → +37)
+Test: `worker/tests/test_barge_resume.py` — **339 test geçiyor** (301 → +38)
 Bayrak: `BARGE_RESUME_ENABLED` (varsayılan **açık**) · geri dönüş §6, tek satır.
 
-⚠️ **DEPLOY EDİLMEDİ.** Sunucuya kullanıcı yazıyor; komutlar §5'te tek blok hazır.
+✅ **CANLIDA — 27 Tem 21:16.** Yedekler `*.bak-kesme-20260727`, md5 **3/3** eşleşti,
+traceback 0, worker `registered`, **yalnız `candan-worker` restart** (`higgs-tts`
+13:45:56 ve `pi-service` 14:43:43 başlangıç damgaları DEĞİŞMEDİ — dokunulmadı).
 
 ---
 
@@ -111,7 +113,33 @@ Duyulan kısım son 200 karakterle sınırlı (prefill yakmasın). Sohbet karar�
 EKLENMEZ: kalan gerçekten söyleneceği için geçmiş zaten doğrudur.
 `truth_check` ilkesinin aynısı: **harness NE OLDUĞUNU bilir, model tahmin etmez.**
 
-## 5. Deploy (kullanıcı çalıştıracak — TEK BLOK)
+## 4b. ⚠️ DEPLOY SIRASINDA BULUNAN TUZAK — geri dönüş kolu çalışmıyordu
+
+`candan-worker.service` `.env`'i **`EnvironmentFile=` ile YÜKLEMEZ** (unit'te yazılı:
+boşluklu değerler systemd ayrıştırıcısını kırıyor) — `agent.py` kendi `load_dotenv()`
+çağrısını yapar ve o çağrı **import blokundan SONRA**dır. Modül seviyesinde
+`os.environ` okuyan bir dosya import anında `.env`'i GÖREMEZ.
+
+**Sunucuda ölçüldü (21:20), restart'tan önce:**
+```
+import aninda RESUME_ENABLED : True
+.env okundu, environ         : false
+modul degeri                 : True    ← BARGE_RESUME_ENABLED=false ETKİSİZ
+```
+Yani §6'daki tek satırlık geri dönüş **hiçbir şey yapmayacaktı.**
+
+**Düzeltme (kapsam DAR):** `barge.reload_settings()` eklendi, `agent.py`
+`load_dotenv()`'den hemen sonra çağırıyor. `load_dotenv`'i import'ların önüne almak
+TÜM modüllerin (`pi_brain`, `truth_check`, `higgs_tts`…) bugünkü davranışını
+değiştirirdi — bilerek yapılmadı. Ayrıca `resume_from(near_end_ratio=…)` ve
+`Pending.expired(ttl=…)` varsayılan argümanları `None`'a çevrildi: varsayılanlar
+TANIM anında bağlanır, env'den gelen değer hiç kullanılmazdı.
+Regresyon kilidi: `EnvReloadTest.test_env_is_picked_up_after_reload`.
+
+⚠️ **Ders:** bu tuzak `truth_check`'in `CLAIM_CHECK_*` ayarları için de geçerli
+(aynı desen, ana süreçte `.env` görülmüyor). Bu turda DOKUNULMADI — ayrı iş.
+
+## 5. Deploy — YAPILDI (21:16). Komutlar (tekrarı için)
 
 ⚠️ Yalnız `candan-worker` restart. **`pi-service`'e ve `higgs-tts`'e DOKUNMA.**
 (`candan-worker`, `pi-service`'e `Requires=` ile bağlı — bkz. DEVİR §1.)

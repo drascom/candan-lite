@@ -36,6 +36,14 @@ from reminders import (                                 # proaktif ajan (hatırl
 
 # worker/.env (gitignored) — cwd'den bağımsız, dosya konumuna göre yükle.
 load_dotenv(Path(__file__).resolve().parent / ".env")
+# ⚠️ `.env` YUKARIDAKİ import'lardan SONRA yüklenir (systemd unit'i `EnvironmentFile=`
+# kullanmıyor: boşluklu değerler ayrıştırıcıyı kırıyor). Modül seviyesinde env okuyan
+# bir modül, import anında `.env`'i GÖREMEZ. Ölçüldü (27 Tem 21:20, sunucuda):
+# `BARGE_RESUME_ENABLED=false` yazılıyken modül değeri True kalıyordu → geri dönüş
+# kolu çalışmıyordu. Kapsamı DAR tutuyoruz: load_dotenv'i yukarı taşımak TÜM
+# modüllerin (pi_brain, truth_check, higgs_tts…) bugünkü davranışını değiştirirdi;
+# burada yalnız barge'ın ayarları tazelenir.
+barge.reload_settings()
 
 STT_HOST = os.environ.get("STT_HOST", "192.168.0.25")
 STT_PORT = int(os.environ.get("STT_PORT", "10300"))
