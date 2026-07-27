@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vurgu seti — hedef kelime öne çıkıyor mu?</title>
+<style>
+  :root { --bg:#12131a; --panel:#1b1d27; --line:#2c2f3d; --fg:#e8e9f0; --dim:#9a9db0;
+    --acc:#6ea8fe; --tok:#5ec98a; --warn:#e0a45e; --bad:#e2687a; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 20px 90px; background:var(--bg); color:var(--fg);
+    font:14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:18px; max-width:920px; }
+  details { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    margin-bottom:12px; }
+  summary { padding:12px 14px; cursor:pointer; font-size:15px; font-weight:600;
+    user-select:none; }
+  summary .note { color:var(--dim); font-size:12.5px; font-weight:400; }
+  .row { padding:11px 14px; border-top:1px solid var(--line); }
+  .hd { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .ad { color:var(--tok); font-weight:600; min-width:120px; }
+  .cumle { margin:5px 0 7px; font-size:15px; }
+  .hedef { background:#3a2f14; color:#ffd479; padding:0 5px; border-radius:4px;
+    font-weight:700; }
+  .ham { color:var(--dim); font-size:12px; word-break:break-word; margin-bottom:7px; }
+  .players { display:flex; gap:9px; flex-wrap:wrap; align-items:center; }
+  button { background:#262a38; color:var(--fg); border:1px solid var(--line);
+    border-radius:7px; padding:6px 12px; cursor:pointer; font-size:13px;
+    font-family:inherit; }
+  button:hover { border-color:var(--acc); }
+  button.playing { background:var(--acc); color:#0d1017; border-color:var(--acc); }
+  button.base { opacity:.7; }
+  code { background:#262a38; padding:1px 5px; border-radius:4px; font-size:12px; }
+  .rozet { font-size:11.5px; padding:1.5px 8px; border-radius:99px;
+    border:1px solid var(--line); color:var(--dim); }
+  .rozet.iyi { color:var(--tok); border-color:#2f6b48; }
+  .rozet.kotu { color:var(--bad); border-color:#6b2f3a; }
+  .rozet.taban { color:var(--warn); border-color:#6b5330; }
+  .dim { color:var(--dim); font-size:12.5px; }
+  .warn { color:var(--warn); }
+  .karar { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .karar button { padding:3px 11px; font-size:12.5px; }
+  .karar button.sec { background:var(--acc); color:#0d1017; border-color:var(--acc); }
+  .karar button.sec.kotu { background:var(--bad); border-color:var(--bad); }
+  .karar input { flex:1; min-width:190px; background:#161822; color:var(--fg);
+    border:1px solid var(--line); border-radius:7px; padding:5px 9px;
+    font:13px/1.5 inherit; }
+  .ornekler { display:flex; flex-direction:column; gap:5px; margin-top:2px; }
+  .ornek { display:flex; gap:7px; align-items:center; flex-wrap:wrap; }
+  .ornek > button:first-child { min-width:46px; }
+  .ornek .mini { padding:3px 10px; font-size:12.5px; }
+  .ornek .mini.sec { background:var(--acc); color:#0d1017; border-color:var(--acc); }
+  .ornek .mini.sec.kotu { background:var(--bad); border-color:var(--bad); }
+  .ornek .mini.sec.idare { background:var(--warn); color:#0d1017; border-color:var(--warn); }
+  .ozet { font-size:12px; padding:1.5px 9px; border-radius:99px;
+    border:1px solid var(--line); color:var(--dim); margin-left:auto; white-space:nowrap; }
+  .ozet.tam { color:var(--tok); border-color:#2f6b48; }
+  .ozet.kismi { color:var(--warn); border-color:#6b5330; }
+  .ozet.sifir { color:var(--bad); border-color:#6b2f3a; }
+  .row.isaretli { background:#1e2331; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#161822;
+    border-top:1px solid var(--line); padding:10px 20px; display:flex; gap:12px;
+    align-items:center; flex-wrap:wrap; }
+  .uyari { border:1px solid #6b5330; background:#221c12; border-radius:8px;
+    padding:9px 12px; margin:0 0 12px; color:var(--warn); font-size:13px;
+    max-width:920px; }
+  .sikayet { color:#ffd479; font-size:13px; font-weight:400; }
+</style>
+</head>
+<body>
+<h1>Vurgu seti — <span class="hedef">hedef kelime</span> öne çıkıyor mu?</h1>
+<div class="sub">
+  Duygu atlasında en çok tekrar eden şikâyet duygu değil <b>vurgu</b>ydu: beş satırda
+  "şu kelimede vurgu eksik". Higgs kataloğunda (43 etiket) kelime düzeyinde vurgu
+  etiketi <b>YOK</b> — uydurma <code>&lt;|prosody:emphasis|&gt;</code> ve SSML
+  <code>&lt;emphasis&gt;</code> denemeleri harfi harfine okunuyor
+  (<code>katalog_yoklama.py</code>). Bu sayfa dolaylı yolları dinletiyor.
+  Her satırda <b>aynı cümle</b>, aynı duygu etiketi; fark yalnız vurgu yolundan geliyor.
+  <b>Taban</b> = atlasta dinlediğin, "vurgu eksik" dediğin hâl.
+  Hepsi <b>canlı streaming ucundan</b> üretildi.
+  Sarı işaretli kelimeye odaklan. Her yolun <b>3 örneği</b> aynı ayarın üç ayrı
+  üretimi — aradaki fark modelin rastgeleliği, o yüzden <b>her örneği ayrı</b>
+  işaretle (geldi / az / gelmedi). Sağdaki özet ("2/3 geldi") kendiliğinden çıkar;
+  not alanı yol için. En altta "notları JSON kopyala".
+</div>
+<div class="uyari">
+  ⚠️ Sayılar <b>kontrast</b>: hedef kelimenin cümlenin GERİ KALANINA oranı, tabana
+  göre farkı. Cümlenin tamamını yükselten bir yol burada <b>0</b> çıkar — kulakta
+  "daha canlı" duyulsa bile hedef kelimeyi öne çıkarmıyor demektir. Karar senin.
+</div>
+<div id="list"></div>
+
+<div class="bar">
+  <button id="kopyala">📋 notları JSON kopyala</button>
+  <span class="dim" id="sayac"></span>
+  <span class="dim" style="margin-left:auto"></span>
+  <button id="sil">notları sil</button>
+</div>
+
+<script>
+const ANAHTAR = 'vurgu-seti-notlar-v2';   // örnek başına karar
+const ESKI_ANAHTAR = 'vurgu-seti-notlar-v1';  // yol başına tek karar — dokunulmuyor, yedek kalıyor
+// Sayfada gösterilecek yollar — ÖLÇÜM SONRASI seçildi. Boş bırakılırsa hepsi.
+// `buyuk` ve `virgul` elendi: büyük harf hiçbir ölçüde artı vermedi (perde
+// -0.88 yarım ton), `virgul` da `tire`nin zayıf kopyası. Ayrıntı: README.
+const SUNULAN = ['taban', 'pause', 'tire', 'expressive_high', 'kombo'];
+const ORNEK = 3;           // yol başına kaç örnek dinletilsin
+
+// Kayıt okuma + eski biçimden taşıma.
+// Eski biçim: { "affection/pause": { karar:"iyi", not:"...", ad:"..." } }  (yol başına TEK karar)
+// Yeni biçim: { "affection/pause": { kararlar:["iyi","iyi","iyi"], not:"...", ad:"..." } }
+// Taşıma kuralı: eski tek karar üç örneğe birden yazılır, not korunur.
+// v1 anahtarı SİLİNMİYOR — olduğu gibi yedek kalıyor.
+const oku = (a) => { try { return JSON.parse(localStorage.getItem(a) || '{}') || {}; }
+                     catch (e) { return {}; } };
+let notlar = {};
+let tasinan = 0;
+function yukle(nOrnek) {
+  const yeni = oku(ANAHTAR);
+  const eski = oku(ESKI_ANAHTAR);
+  notlar = yeni;
+  for (const [ad, v] of Object.entries(eski)) {
+    if (!v || typeof v !== 'object') continue;
+    const hedef = (notlar[ad] ||= { ad });
+    if (!Array.isArray(hedef.kararlar)) hedef.kararlar = [];
+    // Yeni biçimde bu yol için hiç karar yoksa eski kararı üç örneğe birden uygula.
+    const bosMu = !hedef.kararlar.some(x => x);
+    if (bosMu && v.karar) {
+      hedef.kararlar = Array.from({ length: nOrnek }, () => v.karar);
+      tasinan++;
+    }
+    if (!hedef.not && v.not) hedef.not = v.not;
+    hedef.ad = ad;
+  }
+  if (tasinan) localStorage.setItem(ANAHTAR, JSON.stringify(notlar));
+}
+const kaydet = () => { localStorage.setItem(ANAHTAR, JSON.stringify(notlar)); sayacYaz(); };
+const kararlariAl = (ad, n) => {
+  const k = (notlar[ad] ||= { ad });
+  if (!Array.isArray(k.kararlar)) k.kararlar = [];
+  while (k.kararlar.length < n) k.kararlar.push('');
+  return k.kararlar;
+};
+const ozetle = (kararlar) => {
+  const n = kararlar.length;
+  const c = (d) => kararlar.filter(x => x === d).length;
+  return { n, geldi: c('iyi'), az: c('idare'), gelmedi: c('kotu'),
+           bos: kararlar.filter(x => !x).length };
+};
+
+let cur = null;
+function play(btn, src) {
+  if (cur) { cur.a.pause(); cur.btn.classList.remove('playing'); }
+  const a = new Audio(src); btn.classList.add('playing'); cur = { a, btn };
+  a.onended = () => btn.classList.remove('playing');
+  a.play();
+}
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const isaretle = (cumle, hedef) =>
+  esc(cumle).replace(esc(hedef), `<span class="hedef">${esc(hedef)}</span>`);
+const say = (v, b, e) => (v === null || v === undefined) ? '—'
+  : (v > 0 ? '+' : '') + v.toFixed(b) + e;
+
+let toplam = 0;      // gösterilen örnek sayısı (yol × ORNEK)
+let toplamYol = 0;   // gösterilen yol (satır) sayısı
+function sayacYaz() {
+  let n = 0;
+  for (const v of Object.values(notlar))
+    if (v && Array.isArray(v.kararlar)) n += v.kararlar.filter(x => x).length;
+  document.getElementById('sayac').textContent =
+    `${n} / ${toplam} örnek işaretlendi (${toplamYol} yol)` +
+    (tasinan ? ` · eski biçimden ${tasinan} not taşındı` : '');
+}
+
+yukle(ORNEK);
+fetch('out/vurgu_eval.json').then(r => r.json()).then(d => {
+  const list = document.getElementById('list');
+  const ks = Object.values(d.kosullar);
+  const gruplar = {};
+  for (const k of ks) (gruplar[k.cumle_id] ||= []).push(k);
+
+  for (const [cid, satirlar] of Object.entries(gruplar)) {
+    const taban = satirlar.find(s => s.yol === 'taban');
+    const goster = satirlar.filter(s => !SUNULAN.length || SUNULAN.includes(s.yol));
+    toplamYol += goster.length;
+    for (const s of goster) toplam += Math.min(ORNEK, s.items.length);
+    const det = document.createElement('details');
+    det.open = true;
+    det.innerHTML = `<summary>${cid} <span class="note">— hedef: </span>` +
+      `<span class="hedef">${esc(taban ? taban.hedef : '')}</span> ` +
+      `<span class="sikayet">· “${esc(taban ? taban.sikayet : '')}”</span></summary>`;
+    for (const s of goster) det.appendChild(satirEl(s, taban));
+    list.appendChild(det);
+  }
+  sayacYaz();
+}).catch(e => {
+  document.getElementById('list').innerHTML =
+    `<details open><summary>out/vurgu_eval.json okunamadı (${esc(e.message)})</summary>` +
+    `<div class="row">Önce <code>python3 vurgu_probe.py</code>, sonra ` +
+    `<code>vurgu_eval.py</code>, sonra <code>./serve.sh</code>.</div></details>`;
+});
+
+function satirEl(s, taban) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  const d = (alan) => (taban && s[alan] !== null && taban[alan] !== null
+    && s[alan] !== undefined && taban[alan] !== undefined) ? s[alan] - taban[alan] : null;
+  const isTaban = s.yol === 'taban';
+  const rozet = isTaban
+    ? '<span class="rozet taban">atlasta dinlediğin hâl</span>'
+    : `<span class="rozet">${esc(s.yol_aciklama || '')}</span>`;
+  const werKotu = s.ort_wer > 0.25 || s.bas_yendi > 0 || s.hedef_bulundu < s.n;
+  el.innerHTML =
+    `<div class="hd"><span class="ad">${esc(s.yol)}</span>${rozet}` +
+    `<span class="ozet"></span></div>` +
+    `<div class="cumle">${isaretle(s.beklenen, s.hedef)}</div>` +
+    `<div class="ham">gönderilen: <code>${esc(s.metin)}</code></div>` +
+    `<div class="dim${werKotu ? ' warn' : ''}">` +
+    (isTaban ? 'kontrast (hedef ÷ geri kalan): ' : 'Δ tabana göre: ') +
+    `süre ${isTaban ? '×' + s.sure_orani : say(d('sure_orani'), 2, '')} · ` +
+    `enerji ${say(isTaban ? s.enerji_db : d('enerji_db'), 2, ' dB')} · ` +
+    `perde ${say(isTaban ? s.perde_st : d('perde_st'), 2, ' yarım ton')} · ` +
+    `WER ${s.ort_wer.toFixed(3)} · anlaşılan ${s.anlasilan}/${s.n}` +
+    (s.bas_yendi ? ` · <b>baş yendi ${s.bas_yendi}</b>` : '') +
+    (s.hedef_bulundu < s.n ? ` · <b>hedef bulunamadı ${s.n - s.hedef_bulundu}</b>` : '') +
+    `</div>`;
+
+  // Örnekler — her örnek AYRI dinlenip AYRI işaretlenir. Üç örnek aynı ayarın üç
+  // ayrı üretimi; aradaki fark modelin rastgeleliği, o tutarsızlık bulgunun kendisi.
+  // Kararlar yalnız tarayıcıda (localStorage), sunucuya/dosyaya yazılmıyor.
+  const gosterilen = s.items.slice(0, ORNEK);
+  const kararlar = kararlariAl(s.ad, gosterilen.length);
+  const ozetEl = el.querySelector('.ozet');
+  const ornekler = document.createElement('div');
+  ornekler.className = 'ornekler';
+
+  function ozetYaz() {
+    const o = ozetle(kararlar);
+    ozetEl.className = 'ozet ' + (o.geldi === o.n ? 'tam' : o.geldi ? 'kismi'
+      : (o.bos === o.n ? '' : 'sifir'));
+    const ek = [];
+    if (o.az) ek.push(`${o.az} az`);
+    if (o.gelmedi) ek.push(`${o.gelmedi} gelmedi`);
+    if (o.bos) ek.push(`${o.bos} boş`);
+    ozetEl.textContent = (o.bos === o.n) ? 'işaretlenmedi'
+      : `${o.geldi}/${o.n} geldi` + (ek.length ? ` · ${ek.join(' · ')}` : '');
+    el.classList.toggle('isaretli', o.bos < o.n);
+  }
+
+  gosterilen.forEach((it, i) => {
+    const satir = document.createElement('div');
+    satir.className = 'ornek';
+    const b = document.createElement('button');
+    if (isTaban) b.classList.add('base');
+    b.textContent = `▶ ${i + 1}`;
+    b.onclick = () => play(b, it.wav);
+    satir.appendChild(b);
+
+    const dugmeler = {};
+    for (const [deger, etiket, uzun] of [['iyi', 'geldi', 'vurgu geldi'],
+                                         ['idare', 'az', 'az geldi'],
+                                         ['kotu', 'gelmedi', 'gelmedi / bozuk']]) {
+      const d = document.createElement('button');
+      d.className = 'mini ' + deger;
+      d.textContent = etiket;
+      d.title = uzun;
+      if (kararlar[i] === deger) d.classList.add('sec');
+      d.onclick = () => {
+        kararlar[i] = (kararlar[i] === deger) ? '' : deger;
+        for (const [dv, db] of Object.entries(dugmeler))
+          db.classList.toggle('sec', dv === kararlar[i]);
+        notlar[s.ad].ad = s.ad;
+        ozetYaz();
+        kaydet();
+      };
+      dugmeler[deger] = d;
+      satir.appendChild(d);
+    }
+    ornekler.appendChild(satir);
+  });
+
+  const bilgi = document.createElement('span');
+  bilgi.className = 'dim';
+  bilgi.textContent = `ort. ${s.ort_sure_s}s · ${gosterilen.length} örnek`;
+  ornekler.appendChild(bilgi);
+  el.appendChild(ornekler);
+
+  // Serbest not — yol düzeyinde (örnek başına not yok, gürültü olur).
+  const k = document.createElement('div');
+  k.className = 'karar';
+  const inp = document.createElement('input');
+  inp.placeholder = 'not (serbest, yol için) — ör. "1 ve 3 geldi, 2 boğuk"';
+  inp.value = notlar[s.ad].not || '';
+  inp.oninput = () => { notlar[s.ad].not = inp.value; notlar[s.ad].ad = s.ad; kaydet(); };
+  k.appendChild(inp);
+  el.appendChild(k);
+  ozetYaz();
+  return el;
+}
+
+document.getElementById('kopyala').onclick = async () => {
+  const cikti = {};
+  for (const [ad, v] of Object.entries(notlar)) {
+    const kararlar = Array.isArray(v && v.kararlar) ? v.kararlar : [];
+    if (!kararlar.some(x => x) && !(v && v.not)) continue;
+    const o = ozetle(kararlar);
+    cikti[ad] = {
+      ad,
+      cumle_id: ad.split('/')[0],
+      yol: ad.split('/')[1],
+      kararlar,                                   // örnek başına: iyi | idare | kotu | ''
+      ozet: o.n ? `${o.geldi}/${o.n} geldi` : '—',
+      sayim: { geldi: o.geldi, az: o.az, gelmedi: o.gelmedi, bos: o.bos, toplam: o.n },
+      not: (v && v.not) || ''
+    };
+  }
+  const j = JSON.stringify({ tur: 2, biçim: 'örnek başına karar',
+    tarih: new Date().toISOString(), notlar: cikti }, null, 2);
+  try { await navigator.clipboard.writeText(j); alert('Notlar panoya kopyalandı.'); }
+  catch (e) { prompt('Kopyala:', j); }
+};
+document.getElementById('sil').onclick = () => {
+  if (!confirm('Tüm kulak notların silinsin mi? (eski v1 yedeği de silinir)')) return;
+  notlar = {};
+  localStorage.removeItem(ANAHTAR);
+  localStorage.removeItem(ESKI_ANAHTAR);
+  location.reload();
+};
+</script>
+</body>
+</html>
