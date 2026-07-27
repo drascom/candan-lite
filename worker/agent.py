@@ -48,6 +48,12 @@ TTS_PORT = int(os.environ.get("TTS_PORT", "8808"))
 TTS_ENGINE = (os.environ.get("TTS_ENGINE") or "omnivoice").strip().lower()
 HIGGS_TTS_HOST = os.environ.get("HIGGS_TTS_HOST") or TTS_HOST
 HIGGS_TTS_PORT = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
+# Higgs chunked PCM akışı. AÇIK varsayılan: ilk ses 6.2 sn → 0.55 sn (uzun cümle,
+# ölçüm higgs_tts.py başında). Sorun çıkarsa GERİ DÖNÜŞ TEK SATIR → worker/.env'e
+# `HIGGS_STREAM=0`; sunucudaki tam-WAV ucu (`POST /api/tts`) hâlâ duruyor.
+HIGGS_STREAM = (os.environ.get("HIGGS_STREAM") or "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
@@ -261,11 +267,14 @@ async def entrypoint(ctx: JobContext):
     # İki motorun yüzeyi AYNI (synthesize + reset_mood) → aşağıdaki session/mood
     # kablolaması motordan bağımsız çalışır.
     if TTS_ENGINE == "higgs":
-        tts_plugin = HiggsTTS(host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT)
+        tts_plugin = HiggsTTS(
+            host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM
+        )
     else:
         tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
     logging.getLogger("worker.agent").info(
-        "TTS motoru: %s (%s:%d)", TTS_ENGINE, tts_plugin._host, tts_plugin._port
+        "TTS motoru: %s (%s:%d)%s", TTS_ENGINE, tts_plugin._host, tts_plugin._port,
+        "" if TTS_ENGINE != "higgs" else f" akış={'açık' if HIGGS_STREAM else 'KAPALI'}",
     )
 
     # ── SEMANTİK TUR-SONU (EOU) — cümle ortasındaki nefes turu BÖLMESİN ──────────

@@ -3,10 +3,30 @@
 `omnivoice_tts.py`'nin YERİNE geçer; onu SİLMEZ. Motor seçimi `agent.py`'de
 `TTS_ENGINE` ile yapılır, geri dönüş tek satır (bkz. handoff notu).
 
-TEK YOL: `POST /api/tts` → WAV (24 kHz mono s16le). Higgs'te streaming YOK
-(ölçüm: cümle başına 1.6–4.1 s, RTF 0.516) — OmniVoice'un WS yolu gibi bir
-karşılığı olmadığı için tüm istekler tamponlanır. livekit zaten `streaming=False`
-ile CÜMLE BAŞINA `synthesize()` çağırıyor, yani bölünme cümle düzeyinde kalıyor.
+İKİ YOL:
+  • `POST /api/tts/stream` → chunked ham PCM. **VARSAYILAN.** Sunucu cümleyi
+    üretirken 320 ms'lik bloklar hâlinde akıtır; ilk ses ~0.5 sn'de başlar.
+  • `POST /api/tts` → tam WAV. GERİ DÖNÜŞ yolu (`HIGGS_STREAM=0`) ve bench.
+
+⚡ NEDEN STREAMING (27 Tem, canlı şikâyet: "konuşmalara geç başlıyor"):
+Ölçülen gecikme (kullanıcı sustu → Candan'ın sesi) kısa cevapta ~3 sn, uzun
+cevapta 8-10 sn'ydi ve UZUNLUKLA ARTIYORDU. Beyin darboğaz DEĞİLDİ (llama-server
+KV cache yeniden kullanımıyla ardışık çağrılar 0.67-0.79 sn). Darboğaz TTS'ti:
+tam WAV ucu cümlenin TAMAMINI üretip öyle dönüyor, o süre kullanıcı için
+sessizlik. Ölçüm (HTTP, 5 tekrar medyanı, ilk sese kadar):
+
+    cümle    tam WAV      streaming    kazanç
+    kısa      761 ms       467 ms      -0.29 sn
+    orta     2343 ms       510 ms      -1.83 sn
+    uzun     6207 ms       546 ms      -5.66 sn
+
+Toplam RTF ikisinde de ~0.50 — yani ses aynı hızda üretiliyor, sadece BEKLETMİYORUZ.
+Streaming'de ilk ses cümle uzunluğundan neredeyse BAĞIMSIZ (467-546 ms).
+
+livekit zaten `streaming=False` ile CÜMLE BAŞINA `synthesize()` çağırıyor;
+`streaming` bayrağı GİRDİ (metin) akışıyla ilgili, ÇIKTI akışıyla değil.
+`AudioEmitter`'a parça parça `push()` etmek bu bayrakla ilgisiz ve
+`omnivoice_tts._run_ws` yıllardır aynısını yapıyor — pipeline bunu destekliyor.
 
 OMNIVOICE'TAN AYNEN TAŞINAN KAZANIMLAR (hepsi ölçülmüş):
   • `normalize_tr()` (trnorm) — Higgs'te de WER 0.058 → 0.028 (29 cümle, ASR
@@ -81,6 +101,10 @@ _SHORT_TEXT_RETRIES = 1
 # birkaç parçaya bölünebilir. 90 s cömert ama sonsuz değil — asılı kalan istek turu
 # kilitlemesin.
 _SYNTH_TIMEOUT_S = 90.0
+# Streaming'de İKİ BLOK ARASI en uzun bekleme. Ölçülen en kötü ara 163 ms (blok=8);
+# 20 s astronomik bir pay ama "sunucu bloke oldu" hâlini toplam 90 s beklemeden
+# yakalar — tur erken kurtulsun.
+_STREAM_STALL_S = 20.0
 # `GET /api/default` (cache parmak izi) — kısa ve bağlayıcı olmayan.
 _REF_TIMEOUT_S = 2.0
 _REF_TTL_S = 300.0
@@ -233,6 +257,15 @@ def _ensure_final_punct(text: str) -> str:
     return stripped + "."
 
 
+def _header_int(raw: Optional[str], default: int) -> int:
+    """Sunucu başlığından tam sayı; bozuk/eksikse VARSAYILAN (başlık yüzünden tur ölmez)."""
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 def _silence_pcm() -> bytes:
     return b"\x00\x00" * int(DEFAULT_SAMPLE_RATE * NUM_CHANNELS * _SILENCE_MS / 1000)
 
@@ -306,8 +339,11 @@ class HiggsTTS(tts.TTS):
         port: int,
         voice: Optional[str] = None,
         token: Optional[str] = None,
+        stream: bool = True,
     ):
         super().__init__(
+            # `streaming=False` GİRDİ akışı içindir (SynthesizeStream yok, livekit
+            # cümle cümle çağırır). ÇIKTIYI parça parça push etmeye engel DEĞİL.
             capabilities=tts.TTSCapabilities(streaming=False),
             sample_rate=DEFAULT_SAMPLE_RATE,
             num_channels=NUM_CHANNELS,
@@ -317,6 +353,9 @@ class HiggsTTS(tts.TTS):
         self._voice = voice
         self._token = token
         self._current_mood: Optional[str] = None
+        # Chunked PCM ucu. Kapatınca tam-WAV yoluna dönülür (TEK SATIRLIK geri dönüş:
+        # worker/.env'e `HIGGS_STREAM=0`). Sunucu ikisini de sunmaya devam ediyor.
+        self._stream = stream
 
     def reset_mood(self) -> None:
         """Yeni tur başında nötr'e dön (agent.py agent_state 'thinking' hook'undan)."""
@@ -324,6 +363,9 @@ class HiggsTTS(tts.TTS):
 
     def _http_url(self) -> str:
         return f"http://{self._host}:{self._port}/api/tts"
+
+    def _stream_url(self) -> str:
+        return f"http://{self._host}:{self._port}/api/tts/stream"
 
     def synthesize(
         self,
@@ -383,6 +425,20 @@ class HiggsChunkedStream(tts.ChunkedStream):
         output_emitter.push(pcm)
         output_emitter.flush()
 
+    def _push_pcm(
+        self,
+        output_emitter: tts.AudioEmitter,
+        pcm: bytes,
+        *,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
+        num_channels: int = NUM_CHANNELS,
+    ) -> None:
+        """Parça push et, flush ETME (streaming: flush cümlenin SONUNDA bir kez)."""
+        self._ensure_emitter(
+            output_emitter, sample_rate=sample_rate, num_channels=num_channels
+        )
+        output_emitter.push(pcm)
+
     def _emit_silence(self, output_emitter: tts.AudioEmitter) -> None:
         """Turu KURTARAN sessizlik — sessiz kalmak kabul, çökmek DEĞİL."""
         try:
@@ -426,19 +482,34 @@ class HiggsChunkedStream(tts.ChunkedStream):
             self._emit_silence(output_emitter)
             return
 
+        pushed = 0
         try:
-            pcm, sample_rate, num_channels = await self._collect(sent, mood_key)
-            if not pcm:
+            async for pcm, sample_rate, num_channels in self._iter_pcm(sent, mood_key):
+                if not pcm:
+                    continue
+                self._push_pcm(
+                    output_emitter, pcm,
+                    sample_rate=sample_rate, num_channels=num_channels,
+                )
+                pushed += len(pcm)
+            if not pushed:
                 raise RuntimeError("Higgs: ses üretilmedi (boş yanıt)")
-            self._emit_pcm(
-                output_emitter, pcm, sample_rate=sample_rate, num_channels=num_channels
-            )
+            output_emitter.flush()
         except Exception as exc:  # noqa: BLE001 — TTS hatası turu ÖLDÜRMESİN
             logger.warning(
-                "TTS başarısız (%s: %s) → o cümle sessiz geçildi [%d karakter]",
-                type(exc).__name__, exc, len(text),
+                "TTS başarısız (%s: %s) → cümlenin kalanı sessiz geçildi "
+                "[%d karakter, %d bayt çalındı]",
+                type(exc).__name__, exc, len(text), pushed,
             )
-            self._emit_silence(output_emitter)
+            if pushed:
+                # YARIM ses zaten çıktı: sessizlik EKLEME (tur zaten kurtuldu),
+                # sadece parçayı kapat ki livekit segmenti bitmiş saysın.
+                try:
+                    output_emitter.flush()
+                except Exception:  # noqa: BLE001
+                    logger.warning("yarım akış flush edilemedi", exc_info=True)
+            else:
+                self._emit_silence(output_emitter)
 
     async def _run_short(
         self, output_emitter: tts.AudioEmitter, text: str, mood: Optional[str]
@@ -465,28 +536,57 @@ class HiggsChunkedStream(tts.ChunkedStream):
             self._emit_silence(output_emitter)
             return
 
+        # RETRY'İN ŞARTI: HİÇ ses push edilmemiş olmak. Streaming'de parçalar
+        # çıktıkça çalınıyor; yarısı çalınmış bir cümleyi baştan sentezlemek
+        # kullanıcıya cümleyi İKİ KEZ dinletir. O yüzden ses başladıktan sonra
+        # gelen hata retry ETMEZ, elde ne varsa onunla kapatılır.
+        pushed = 0
         for attempt in range(_SHORT_TEXT_RETRIES + 1):
+            parts: list[bytes] = []
+            sample_rate, num_channels = DEFAULT_SAMPLE_RATE, NUM_CHANNELS
             try:
-                pcm, sample_rate, num_channels = await self._collect(sent, mood)
+                async for pcm, sr, ch in self._iter_pcm(sent, mood):
+                    if not pcm:
+                        continue
+                    sample_rate, num_channels = sr, ch
+                    parts.append(pcm)
+                    self._push_pcm(
+                        output_emitter, pcm, sample_rate=sr, num_channels=ch
+                    )
+                    pushed += len(pcm)
             except Exception as exc:  # noqa: BLE001 — hata da retry'a değer
                 logger.warning(
                     "TTS kısa metin hatası (%s: %s) deneme %d/%d: %.40r",
                     type(exc).__name__, exc, attempt + 1, _SHORT_TEXT_RETRIES + 1, text,
                 )
+                if pushed:
+                    break              # yarım ses çıktı → tekrarlama
                 continue
 
-            if not pcm:
+            if not parts:
                 logger.warning(
                     "TTS boş çıktı, deneme %d/%d: %.40r",
                     attempt + 1, _SHORT_TEXT_RETRIES + 1, text,
                 )
                 continue
 
+            # CACHE streaming'de de YAZILIR: parçalar birleştirilince tam PCM.
+            # Bir sonraki turda cache HIT olur ve sentez HİÇ yapılmaz (streaming'e
+            # de gerek kalmaz — anında çalar).
             if key is not None:
-                tts_cache.store(key, pcm, sample_rate=sample_rate, channels=num_channels)
-            self._emit_pcm(
-                output_emitter, pcm, sample_rate=sample_rate, num_channels=num_channels
-            )
+                tts_cache.store(
+                    key, b"".join(parts),
+                    sample_rate=sample_rate, channels=num_channels,
+                )
+            output_emitter.flush()
+            return
+
+        if pushed:
+            # Yarım ses çalındı: tur kurtuldu, sessizlik EKLEME — sadece kapat.
+            try:
+                output_emitter.flush()
+            except Exception:  # noqa: BLE001
+                logger.warning("yarım akış flush edilemedi", exc_info=True)
             return
 
         logger.warning("TTS kısa metin üretilemedi → sessiz geçildi: %.40r", text)
@@ -503,6 +603,68 @@ class HiggsChunkedStream(tts.ChunkedStream):
         if not _has_speakable(_speakable_body(markup)):
             return None
         return _ensure_final_punct(markup)
+
+    async def _iter_pcm(self, text: str, mood: Optional[str]):
+        """PCM parçalarını (pcm, sample_rate, kanal) olarak akıtır — TEK GİRİŞ NOKTASI.
+
+        Streaming açıksa `/api/tts/stream`'i dinler; kapalıysa (`HIGGS_STREAM=0`)
+        tam WAV'ı çekip TEK parça verir. Çağıranlar (`_run`, `_run_short`) iki
+        durumu da aynı döngüyle işliyor, yani geri dönüş yolu ayrı kod değil.
+        """
+        if getattr(self._higgs, "_stream", True):
+            async for part in self._stream_pcm(text, mood):
+                yield part
+            return
+        yield await self._collect(text, mood)
+
+    async def _stream_pcm(self, text: str, mood: Optional[str]):
+        """`POST /api/tts/stream` → chunked ham PCM parçaları.
+
+        SES BAŞLAMADAN gelen HTTP hatası (400/500/502/503) exception'a döner;
+        çağıran sessizliğe düşer, tur ölmez. Ses BAŞLADIKTAN sonra sunucu
+        yarıda kalırsa aiohttp gövdeyi eksik görüp hata atar — o da exception'a
+        döner ama çağıran o ana kadarki sesi zaten çalmıştır.
+
+        ⚠️ TEK BAYT HİZALAMA: s16le'de bir örnek 2 bayt, ama TCP parçaları
+        keyfî sınırdan gelebilir. Tek sayılı kuyruk bir SONRAKİ parçaya devredilir;
+        aksi hâlde emitter'a yarım örnek gider ve ses kayar (çıtırtı).
+        """
+        payload = {"text": text}
+        if mood:
+            payload["mood"] = mood
+        if self._higgs._voice:
+            payload["voice"] = self._higgs._voice
+
+        timeout = aiohttp.ClientTimeout(
+            total=_SYNTH_TIMEOUT_S, sock_read=_STREAM_STALL_S
+        )
+        async with (
+            aiohttp.ClientSession(timeout=timeout) as sess,
+            sess.post(self._higgs._stream_url(), json=payload) as resp,
+        ):
+            if resp.status != 200:
+                detail = (await resp.text())[:200]
+                raise RuntimeError(f"Higgs HTTP {resp.status}: {detail}")
+
+            sample_rate = _header_int(
+                resp.headers.get("X-Higgs-Sample-Rate"), DEFAULT_SAMPLE_RATE
+            )
+            num_channels = _header_int(
+                resp.headers.get("X-Higgs-Channels"), NUM_CHANNELS
+            )
+
+            tail = b""
+            async for raw in resp.content.iter_any():
+                if not raw:
+                    continue
+                buf = tail + raw
+                cut = len(buf) - (len(buf) % 2)
+                tail = buf[cut:]
+                if cut:
+                    yield buf[:cut], sample_rate, num_channels
+            if tail:
+                # Yarım örnekle bitmek sunucu hatası olurdu; sessizce yutma.
+                logger.warning("Higgs akışı tek bayt artıkla bitti (%d) → atıldı", len(tail))
 
     async def _collect(self, text: str, mood: Optional[str]) -> tuple[bytes, int, int]:
         """`POST /api/tts` → (s16le PCM, sample_rate, kanal). WAV zaten s16le."""

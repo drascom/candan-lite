@@ -11,11 +11,29 @@ SÖZLEŞME (worker/higgs_tts.py bunu konuşur):
   POST /api/tts       → 200 audio/wav (24 kHz mono s16le) · JSON veya form gövde
                         {"text": "...", "mood": "excited|sad|null", "speed": 1.0,
                          "format": "wav|pcm"}
+  POST /api/tts/stream→ 200 audio/pcm, `Transfer-Encoding: chunked` — AYNI gövde,
+                        ek olarak {"block_frames": 10, "lookahead": 8} (bench için).
+
+⚡ NEDEN STREAMING UCU VAR: `/api/tts` tüm cümleyi ÜRETİP öyle dönüyordu; ölçüm
+(27 Tem): kısa 0.78 s, orta 2.71 s, uzun 3.43 s — ve bu sürenin TAMAMI kullanıcı
+için SESSİZLİK. Uzun cevaplarda konuşmaya 8-10 sn geç başlanıyordu. Model
+25 fps (40 ms/kare) kod üretiyor ve RTF 0.49, yani ses gerçek zamanın 2 katı
+hızda çıkıyor: ilk kareleri beklemeden akıtınca ilk ses ~0.5 sn'ye iniyor,
+kalanı çalarken üretiliyor. `/api/tts` GERİ DÖNÜŞ + bench için AYNEN duruyor.
+
+⚠️ NEDEN CHUNKED, WebSocket DEĞİL: bu servis saf stdlib (`BaseHTTPRequestHandler`,
+`protocol_version = "HTTP/1.1"`). Chunked yazmak 3 satır (`%x\r\n…`); RFC 6455
+çerçevelemesini elle yazmak yüzlerce satır ve yeni kırılma yüzeyi. Worker
+tarafında `aiohttp` zaten var, `iter_any()` doğrudan akıtıyor.
 
 HATA POLİTİKASI: sessizce boş ses DÖNMEZ.
   400 metin yok/boş · 503 model henüz hazır değil · 502 model ses üretmedi (0 frame)
   500 beklenmedik hata (gövdede JSON `{"error": ...}`)
 Boş ses 200 ile dönerse worker onu "başarılı ama sessiz" sanır ve sorun görünmez olur.
+Streaming ucunda yanıt başlıkları İLK BLOK HAZIR OLUNCA yazılır — böylece sesten
+ÖNCEKİ hatalar hâlâ düzgün HTTP koduyla döner. İlk bloktan SONRA hata çıkarsa
+kapanış chunk'ı (`0\r\n\r\n`) YAZILMAZ ve bağlantı kapatılır: istemci bunu
+"yarım gövde" olarak görür, "başarılı ama eksik" sanmaz.
 
 MOOD: bu turda BİLİNÇLİ OLARAK ses üzerinde etkisiz. Higgs'in inline prosody
 token'ları (`<|prosody:speed_fast|>` …) var ama doğrulanmadan metne token gömmek
@@ -80,6 +98,44 @@ GEN = {
 # Tek üretimde gidilecek en uzun metin. livekit zaten CÜMLE başına istek atıyor,
 # bu yalnız patolojik uzun girdiye karşı emniyet supabı (2048 kare ≈ 82 sn ses).
 MAX_CHARS = int(os.environ.get("HIGGS_MAX_CHARS", "400"))
+
+# ── Streaming ayarları (HEPSİ ÖLÇÜLDÜ — değiştirmeden önce aşağıyı oku) ────────
+# BLOCK_FRAMES: bir chunk'ta gönderilen kod karesi sayısı (1 kare = 40 ms ses).
+#   İlk ses gecikmesi ≈ prefill (~0.25 s) + (BLOCK_FRAMES + LOOKAHEAD) × 17.6 ms.
+#   Ölçüm (HTTP ucundan, 5 tekrar medyanı, ilk ses / RTF / bloklar arası en uzun ara):
+#       blok  kısa        orta        uzun        RTF(uzun)  en_uzun_ara  tampon
+#         6   398 ms      463 ms      509 ms      0.503      145 ms       240 ms
+#         8   467 ms      510 ms      546 ms      0.500      163 ms       320 ms   ← seçildi
+#        10   516 ms      542 ms      587 ms      0.501      206 ms       400 ms
+#        12   565 ms      580 ms      623 ms      0.501      249 ms       480 ms
+#   Taban (tam WAV, ilk ses = toplam): kısa 761 ms · orta 2343 ms · uzun 6207 ms.
+#   RTF blok boyutundan BAĞIMSIZ → küçük blok BEDAVA değil ama ucuz; sınır, bloğun
+#   çalma süresinin (blok × 40 ms) bloklar arası en uzun aradan BÜYÜK kalması.
+#   8 seçildi: 320 ms tampona karşı ölçülen en kötü ara 163 ms → 2× emniyet payı.
+#   6'ya inmek 45 ms kazandırır ama payı 1.65×'e düşürür; kazanç payı hak etmiyor.
+#   ALT SINIR NEDEN GÜVENLİ: üretim gerçek zamanın 2.3 katı hızında (17.6 ms /
+#   40 ms). Sabit blok boyutunda k'ıncı bloktan sonra elimizdeki ses payı
+#   blok × (22.4k + 17.6) ms — yani MONOTON BÜYÜR, açlık ancak ilk blokta olur.
+BLOCK_FRAMES = int(os.environ.get("HIGGS_STREAM_BLOCK_FRAMES", "8"))
+# LOOKAHEAD: bloğun SAĞINDAN kaç kare fazladan çözülüp atılacağı.
+#   ⚠️ BU OLMAZSA CIZIRTI OLUR. Kodek çözücüsü SOLA nedensel ama SAĞA bakıyor:
+#   `decode(kodlar[:60])` çıktısı tam çözümle son ~4 kareye kadar birebir aynı,
+#   son kareler BOZUK. Ölçüm 1 (blok=10, tam çözümle mutlak fark tepe / rms):
+#       R=0 → 0.53 / 0.029   R=2 → 0.15 / 0.0089   R=4 → 0.081 / 0.0035
+#       R=8 → 0.0052 / 0.00019            R=16 → 0.0015 / 0.00007
+#   Ölçüm 2 (CANLI uçtan, blok sınırındaki ardışık örnek sıçraması ÷ iç bölgedeki):
+#       R=0 → 1.49×  (sınır İÇ BÖLGEDEN sivri = tık sesi)
+#       R=4 → 1.08×
+#       R=8 → 0.33×  (sınır iç bölgeden DAHA yumuşak = dikiş yok)
+#   R=8 seçildi; bedeli ilk seste +8 kare ≈ 140 ms, karşılığı duyulur cızırtının
+#   TAMAMEN gitmesi. Küçültme.
+LOOKAHEAD = int(os.environ.get("HIGGS_STREAM_LOOKAHEAD", "8"))
+# LEFT_CTX: bloğun SOLUNDAN kaç kare bağlam verilip atılacağı. Çözücü sola nedensel
+#   olduğu için 4 kare bile doyuyor (rms 0.0239 → 0.0183); 16 bedava emniyet payı.
+LEFT_CTX = int(os.environ.get("HIGGS_STREAM_LEFT_CTX", "16"))
+# Bir kod karesi kaç ses örneği? 24000 / 25 fps = 960. Ölçümle doğrulandı; yine de
+# çözülen uzunluktan HESAPLANIR (model değişirse sabit yalan söylemesin).
+FALLBACK_SAMPLES_PER_FRAME = 960
 # Isıtma cümlesi: ilk çağrı CUDA çekirdek derlemesi içeriyor (ölçüm: ~+3 sn).
 # Süreç açılışında bir kez yapılır ki İLK GERÇEK istek yavaş olmasın.
 WARMUP_TEXT = os.environ.get("HIGGS_WARMUP_TEXT", "Merhaba, hazırım.")
@@ -105,6 +161,18 @@ _STATE: dict = {
 _MODEL = None
 _TOK = None
 _CODES = None
+
+# Streaming yolu modelin İÇ parçalarını kullanıyor (delay pattern + sampler durum
+# makinesi). Bunlar `trust_remote_code` ile indirilen DİNAMİK modülde yaşıyor;
+# import edilebilir bir paket yolu YOK → sınıfın modülünden alınır. `_load()`
+# hepsinin varlığını AÇILIŞTA doğruluyor, ilk istekte sürpriz olmasın.
+_STREAM_INTERNALS = (
+    "apply_delay_pattern", "reverse_delay_pattern", "_SamplerState", "_sampler_step",
+)
+
+
+def _model_module():
+    return sys.modules[type(_MODEL).__module__]
 
 
 # ── Model + referans yüklemesi (SÜREÇ BAŞINDA BİR KEZ) ───────────────────────
@@ -180,6 +248,10 @@ def _load() -> None:
                  REF_AUDIO, codes.shape[0], time.perf_counter() - t1, REF_CODES)
 
     _MODEL, _TOK, _CODES = model, tok, codes
+    missing = [n for n in _STREAM_INTERNALS if not hasattr(_model_module(), n)]
+    if missing:
+        raise RuntimeError(f"model modülünde {missing} yok — streaming kurulamaz")
+
     _STATE["sample_rate"] = int(getattr(model.config, "sample_rate", FALLBACK_SAMPLE_RATE))
     _STATE["ref_fingerprint"] = _fingerprint_codes(codes)
     _STATE["ref_frames"] = int(codes.shape[0])
@@ -187,10 +259,13 @@ def _load() -> None:
 
     t2 = time.perf_counter()
     pcm = _synthesize(WARMUP_TEXT)
+    # Streaming yolu AYRI çekirdek şekilleri kullanıyor (küçük pencereli kodek
+    # çözme). Onu da ısıtmazsak İLK canlı streaming isteği ~6 ms fazladan yer.
+    stream_bytes = sum(len(b) for b in _synthesize_stream(WARMUP_TEXT))
     _STATE["warmup_s"] = round(time.perf_counter() - t2, 2)
     _STATE["synth_count"] = 0          # ısıtma sayaca girmesin
-    log.info("ısıtma tamam (%.2f s, %d bayt) · referans %s",
-             _STATE["warmup_s"], len(pcm), _STATE["ref_fingerprint"])
+    log.info("ısıtma tamam (%.2f s · tam %d bayt · streaming %d bayt) · referans %s",
+             _STATE["warmup_s"], len(pcm), stream_bytes, _STATE["ref_fingerprint"])
     _STATE["ready"] = True
     log.info("HAZIR — http://%s:%d/health", HOST, PORT)
 
@@ -246,6 +321,111 @@ def _synthesize(text: str) -> bytes:
     return b"".join(parts)
 
 
+# ── Streaming sentez ──────────────────────────────────────────────────────────
+def _f32_to_pcm16(arr) -> bytes:
+    """float32 [-1,1] → s16le baytlar (tam WAV yoluyla AYNI dönüşüm)."""
+    import numpy as np
+
+    return (np.clip(arr, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
+
+
+def _decode_window(rows, start: int, end: int, num_codebooks: int):
+    """`rows` (gecikmeli satırlar) içinden [start,end) HAM karesini çöz → float32 dizi.
+
+    PENCERE MANTIĞI — üç parça, ikisi ATILIR:
+        [start-LEFT_CTX ....... start ==== end ....... end+LOOKAHEAD]
+         └── sol bağlam (at) ──┘└─ TUTULAN ─┘└── sağ bağlam (at) ──┘
+    Sağ bağlam ŞART (kodek sağa bakıyor, yoksa dikişte cızırtı); sol bağlam ucuz
+    emniyet. Sınırlar kırpılır: baştaki blokta sol, sondaki blokta sağ yoktur —
+    sondaki blokta sağ bağlamın OLMAMASI doğru, çünkü ses orada gerçekten bitiyor.
+    """
+    import torch
+
+    avail = len(rows) - (num_codebooks - 1)
+    lo = max(start - LEFT_CTX, 0)
+    hi = min(end + LOOKAHEAD, avail)
+    # `reverse_delay_pattern` [0,hi) ham karesi için ilk hi+N-1 gecikmeli satırı ister.
+    delayed = torch.stack(rows[: hi + num_codebooks - 1], dim=0)
+    raw = _model_module().reverse_delay_pattern(delayed)
+    wav = _MODEL._decode_codes(raw[lo:hi])
+    arr = wav.detach().to("cpu").to(torch.float32).numpy().reshape(-1)
+    spf = arr.size // max(hi - lo, 1) or FALLBACK_SAMPLES_PER_FRAME
+    a = (start - lo) * spf
+    b = a + (end - start) * spf
+    return arr[a:b]
+
+
+def _synthesize_stream(text: str, block_frames: Optional[int] = None,
+                       lookahead: Optional[int] = None):
+    """Metni ÜRETİLDİKÇE s16le PCM bloklarına çevirir. GPU işi — kilit çağıranda.
+
+    `generate_speech()`'in AR döngüsünün aynısı; tek farkı çözmeyi sona bırakmak
+    yerine biriken kareleri blok blok çözüp `yield` etmesi. Örnekleme (temperature/
+    top_k) ve durdurma koşulu BİREBİR aynı — ses kimliği/kalitesi değişmez.
+
+    Hiç ses üretilmezse HİÇ blok yield etmez (çağıran bunu 502'ye çevirir).
+    """
+    import torch
+
+    block = max(int(BLOCK_FRAMES if block_frames is None else block_frames), 1)
+    ahead = max(int(LOOKAHEAD if lookahead is None else lookahead), 0)
+    n_cb = _MODEL.num_codebooks
+    max_new = int(GEN["max_new_tokens"])
+
+    for chunk in _chunks(text):
+        with torch.inference_mode():
+            delayed_ref = _model_module().apply_delay_pattern(_CODES.to(torch.long))
+            prompt_ids = _MODEL._build_prompt_ids(
+                _TOK, chunk,
+                num_ref_tokens=delayed_ref.shape[0], reference_text=REF_TEXT,
+            )
+            embeds = _MODEL._prefill_embeds(prompt_ids, delayed_ref)
+            out = _MODEL.model(inputs_embeds=embeds, use_cache=True)
+            past = out.past_key_values
+            hidden = out.last_hidden_state[:, -1, :]
+            position = embeds.shape[1]
+
+            state = _model_module()._SamplerState(num_codebooks=n_cb)
+            rows: list = []
+            emitted = 0
+            for _ in range(max_new):
+                logits_NV = _MODEL.audio_head(hidden).to(torch.float32)[0]
+                codes_N = _model_module()._sampler_step(
+                    logits_NV, state,
+                    temperature=GEN["temperature"], top_p=None, top_k=GEN["top_k"],
+                )
+                if state.generation_done:
+                    break
+                rows.append(codes_N.cpu())
+
+                step_embed = _MODEL.audio_embedding(codes_N.unsqueeze(0)).unsqueeze(1)
+                out = _MODEL.model(
+                    inputs_embeds=step_embed.to(embeds.dtype),
+                    past_key_values=past,
+                    use_cache=True,
+                    cache_position=torch.tensor([position], device=_MODEL.device),
+                )
+                past = out.past_key_values
+                hidden = out.last_hidden_state[:, -1, :]
+                position += 1
+
+                # `ahead` kare GERİDEN yayınla: son karelerin sağ bağlamı henüz yok.
+                ready = len(rows) - (n_cb - 1) - ahead
+                while ready - emitted >= block:
+                    arr = _decode_window(rows, emitted, emitted + block, n_cb)
+                    emitted += block
+                    yield _f32_to_pcm16(arr)
+
+            # Kuyruk: kalan kareler. Burada sağ bağlam BEKLENMEZ — ses bitti,
+            # `_decode_window` zaten `avail` ile kırpıyor (tam çözümle aynı sonuç).
+            final = max(len(rows) - (n_cb - 1), 0)
+            while emitted < final:
+                end = min(emitted + block, final)
+                arr = _decode_window(rows, emitted, end, n_cb)
+                emitted = end
+                yield _f32_to_pcm16(arr)
+
+
 def _wav_bytes(pcm: bytes, sample_rate: int) -> bytes:
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
@@ -282,6 +462,27 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
                    "application/json; charset=utf-8")
 
+    # ── chunked yazma (streaming ucu) ────────────────────────────────────────
+    # `protocol_version = "HTTP/1.1"` olduğu için chunked YASAL ve stdlib'de elle
+    # yazmak üç satır. Kapanış chunk'ı (`0\r\n\r\n`) BİLEREK ayrı: yarıda kalan
+    # üretimde onu YAZMAYIP bağlantıyı kapatıyoruz, istemci eksikliği anlasın.
+    def _begin_chunked(self, ctype: str, extra: Optional[dict] = None) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Cache-Control", "no-store")
+        for k, v in (extra or {}).items():
+            self.send_header(k, str(v))
+        self.end_headers()
+
+    def _write_chunk(self, data: bytes) -> None:
+        if not data:
+            return                      # boş chunk = kapanış işareti, KAZA olmasın
+        self.wfile.write(b"%x\r\n" % len(data) + data + b"\r\n")
+
+    def _end_chunked(self) -> None:
+        self.wfile.write(b"0\r\n\r\n")
+
     def _body_params(self) -> dict:
         """Gövdeyi çöz: JSON veya application/x-www-form-urlencoded."""
         length = int(self.headers.get("Content-Length") or 0)
@@ -308,6 +509,11 @@ class Handler(BaseHTTPRequestHandler):
                 "synth_count": _STATE["synth_count"],
                 "fail_count": _STATE["fail_count"],
                 "last_synth": _STATE["last_synth"],
+                "stream": {
+                    "block_frames": BLOCK_FRAMES,
+                    "lookahead": LOOKAHEAD,
+                    "left_ctx": LEFT_CTX,
+                },
             }
             self._json(200 if _STATE["ready"] else 503, payload)
             return
@@ -332,7 +538,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
-        if path != "/api/tts":
+        if path not in ("/api/tts", "/api/tts/stream"):
             self._json(404, {"error": f"bilinmeyen uç: {path}"})
             return
 
@@ -348,6 +554,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not _STATE["ready"]:
             self._json(503, {"error": "model henüz hazır değil", "detail": _STATE["error"]})
+            return
+
+        if path == "/api/tts/stream":
+            self._do_stream(params, text)
             return
 
         mood = params.get("mood") or None
@@ -392,6 +602,92 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, pcm, "audio/pcm", headers)
         else:
             self._send(200, _wav_bytes(pcm, sr), "audio/wav", headers)
+
+    # ── streaming ucu ────────────────────────────────────────────────────────
+    def _do_stream(self, params: dict, text: str) -> None:
+        """`POST /api/tts/stream` → chunked ham PCM (24 kHz mono s16le).
+
+        SIRA KRİTİK: yanıt başlıkları İLK BLOK üretilene kadar YAZILMAZ. Sebep,
+        chunked'ın doğası: 200 gönderdikten sonra durum kodunu geri alamayız.
+        Başlığı geciktirerek "hiç ses üretemedim" (502) ve "sentez patladı" (500)
+        durumları hâlâ DÜZGÜN HTTP hatası olarak dönebiliyor — worker onları
+        zaten hata sayıp sessizliğe düşüyor, tur ölmüyor.
+
+        İlk bloktan SONRA patlarsa: kapanış chunk'ı yazılmaz + bağlantı kapatılır.
+        İstemci gövdeyi eksik görür (aiohttp `ClientPayloadError`) — o ana kadarki
+        ses zaten çalınmıştır, worker "yarım cümle" ile turu tamamlar.
+        """
+        mood = params.get("mood") or None
+        try:
+            block = params.get("block_frames")
+            block = int(block) if block not in (None, "") else None
+            ahead = params.get("lookahead")
+            ahead = int(ahead) if ahead not in (None, "") else None
+        except (TypeError, ValueError) as exc:
+            self._json(400, {"error": f"block_frames/lookahead sayı değil: {exc}"})
+            return
+
+        sr = _STATE["sample_rate"]
+        t0 = time.perf_counter()
+        started = False           # başlıklar yazıldı mı? (= geri dönüş noktası geçildi)
+        total = 0
+        first_s = None
+        blocks = 0
+        try:
+            with _SYNTH_LOCK:
+                for pcm in _synthesize_stream(text, block_frames=block, lookahead=ahead):
+                    if not pcm:
+                        continue
+                    if not started:
+                        first_s = time.perf_counter() - t0
+                        self._begin_chunked("audio/pcm", {
+                            "X-Higgs-Sample-Rate": str(sr),
+                            "X-Higgs-Channels": "1",
+                            "X-Higgs-Mood": mood or "",
+                            "X-Higgs-Ref": _STATE["ref_fingerprint"] or "",
+                            "X-Higgs-Block-Frames": str(block or BLOCK_FRAMES),
+                            "X-Higgs-Lookahead": str(LOOKAHEAD if ahead is None else ahead),
+                            "X-Higgs-First-Block-Ms": f"{first_s * 1000:.0f}",
+                        })
+                        started = True
+                    self._write_chunk(pcm)
+                    total += len(pcm)
+                    blocks += 1
+        except (BrokenPipeError, ConnectionResetError):
+            # İstemci turu iptal etti (barge-in) — hata DEĞİL, olağan son.
+            log.info("streaming: istemci kapattı (%d bayt sonra)", total)
+            self.close_connection = True
+            return
+        except Exception as exc:  # noqa: BLE001
+            _STATE["fail_count"] += 1
+            log.exception("streaming sentez hatası: %.60r", text)
+            if not started:
+                self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
+            else:
+                self.close_connection = True   # YARIM gövde — istemci anlasın
+            return
+
+        if not started:
+            # SESSİZ BAŞARI YOK (tam WAV ucuyla aynı politika).
+            _STATE["fail_count"] += 1
+            log.warning("streaming: model ses üretmedi: %.60r", text)
+            self._json(502, {"error": "model ses üretmedi (0 frame)"})
+            return
+
+        self._end_chunked()
+        wall = time.perf_counter() - t0
+        audio_s = total / (2 * sr)
+        _STATE["synth_count"] += 1
+        _STATE["last_synth"] = {
+            "chars": len(text), "audio_s": round(audio_s, 2),
+            "wall_s": round(wall, 2), "rtf": round(wall / audio_s, 3) if audio_s else None,
+            "first_block_s": round(first_s, 3) if first_s else None,
+            "blocks": blocks, "mood": mood, "stream": True, "at": round(time.time(), 1),
+        }
+        log.info("stream: %d karakter → %.2f s ses / %.2f s (RTF %.3f) "
+                 "ilk blok %.0f ms · %d blok",
+                 len(text), audio_s, wall, wall / audio_s if audio_s else 0.0,
+                 (first_s or 0) * 1000, blocks)
 
 
 def main() -> int:
