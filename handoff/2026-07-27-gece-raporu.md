@@ -53,19 +53,69 @@ Guard yalnız hata yolunda açılır → **normal turda tamponlama ve gecikme YO
 
 ---
 
-## 2. DOĞRULAYAMADIKLARIM — BUNLAR SENDE
+## 2a. UÇTAN UCA DOĞRULANDI (kullanıcı uyarısıyla — mikrofon gerekmiyormuş)
 
-Mikrofonum ve kulağım yok. Aşağıdakileri **hiç** test edemedim:
+Kullanıcı haklı olarak "STT'den gelmiş gibi metin gönderip deneyebilirsin" dedi. Testleri
+**gerçek pi süreci, gerçek uzantı, gerçek policy** ile koştum; hafıza izolasyonu için
+`MEM_DIR` geçici köke alındı (canlı veriye dokunulmadı, doğrulandı).
+
+### Hafıza kimliği — ortak oda (`e5bf57a`)
+```
+KİMLİK ayhan  → Candan: "Not ettim."                            + not YAZILDI      ✓
+KİMLİK guest  → Candan: "Kaydedemedim, hafızaya erişemiyorum."  + yazılmadı        ✓
+canlı hafıza  → hiç dokunulmadı                                                    ✓
+```
+Yani **normal modda not artık gerçekten kaydediliyor** ve tanınmayan sese karşı kapı kapalı.
+
+### `AGENTS.md` araç-gerçeği kuralı (`669ee8d`) — ÖLÇÜLDÜ
+Guest (hafıza kapalı) durumunda 6 tekrar:
+```
+6/6 DÜRÜST ("Kaydedemedim, hafızaya erişemiyorum.")   0/6 uydurma
+```
+**Doğru taban karşılaştırması** (`bench/12b/sonuclar.md` §4 — canlıdaki modelin AYNISI,
+gemma-4-12b; 26B tablosu farklı model, onunla kıyaslamak yanıltıcı olurdu):
+
+| | 12B taban (kuralsız) | kuralla (ölçtüm) |
+|---|---|---|
+| Hatayı kullanıcıya söyledi | **0/10** | **6/6** |
+| Uydurdu | 2/10 | 0/6 |
+| Sessizce tool'u yeniden çağırdı | 8/10 | — |
+
+Taban dokümanının *"AGENTS.md'deki delik kapanmadı"* dediği açık **kapandı**.
+
+### Mod anahtarı yönü (`bdd92e2`)
+```
+"Normal moda dön."                 → tool YOK, "Zaten normal moddayım."   ✓
+"Bu moddan çık, normal moda geç."  → tool YOK, "Zaten normal moddayım."   ✓
+"Geliştirme moduna geç."           → enter_dev_mode                       ✓
+```
+İkinci satır 26 Tem'de dev moduna GİRMENE sebep olan cümlenin birebir aynısı — düzeldi.
+
+### ⚠️ Bu testlerde YAPTIĞIM HATA (düzeltildi)
+İlk denemede izolasyonu `MEMORY_DIR` ile kurduğumu sandım; uzantı hafıza kökünü çalışma
+dizininden çözdüğü için **test notu senin gerçek hafızana yazıldı**
+(`users/ayhan/notes/2026-07.md` + `.index/mem.db`). Fark edip temizledim: not satırı
+kaldırıldı, FTS indeksinden ilgili satır silindi (`integrity_check: ok`, kalan 6 satırın
+hepsi senin gerçek verin), yedeklerim de silindi. **Şu an hafızada test izi yok** —
+doğrulandı. Sonraki testler `MEM_DIR` ile gerçekten izole koştu.
+
+---
+
+## 2b. HÂLÂ DOĞRULAYAMADIKLARIM — BUNLAR SENDE
+
+Aşağıdakiler ses yolundan geçtiği için metin enjeksiyonuyla test edilemedi:
 
 | Ne | Nasıl test edersin | Beklenen |
 |---|---|---|
-| **Not gerçekten kaydediliyor mu** | "Candan, şunu not et: ..." de, sonra "az önce ne not ettim?" diye sor | Kaydetmeli ve geri okumalı |
-| **Kaydedemezse dürüst mü** | Tanınmadığın bir durumda not aldır | *"Kaydedemedim, seni henüz tanımıyorum."* — "kaydettim" DEMEMELİ |
-| **Tanıma oranı** | Normal konuş | Deploy sonrası 8 turda 5 tanıma, "pencere yok" hatası sıfırlandı — ama örneklem küçük |
-| **Mod anahtarı** | "Dev moda geç" → sonra "normal moda dön" | İstediğin yöne gitmeli; ters yön no-op |
-| **Compaction** | Uzun konuş, sıkıştırma tetiklensin | Soru kaybolmamalı, cevap sıkıştırma bitince gelmeli |
-| **Ses kalitesi** | Dinle | Referans geri alındı, eski hızında olmalı |
-| **Tur bölünmesi** | Cümle ortasında dural | Bölmemeli |
+| **Konuşmacı tanıma oranı** | Normal konuş | Ses yolu gerekiyor. Deploy sonrası 8 turda 5 tanıma + "pencere yok" hatası sıfırlandı — örneklem küçük, asıl ölçüm sende |
+| **Compaction turu kurtarma** | Uzun konuş, sıkıştırma tetiklensin | Soru kaybolmamalı; sıkıştırma bitince cevap gelmeli. Birim testle kanıtlı ama canlıda görülmedi |
+| **Ses kalitesi / hız** | Dinle | Referans geri alındı, eski hızında olmalı ("kesik kesik" geçmiş olmalı) |
+| **Tur bölünmesi** | Cümle ortasında dural | Bölmemeli (26 Tem'de canlı kanıtlanmıştı, sonraki deploy'lar sonrası tekrar bakılmadı) |
+| **Uçtan uca gerçek akış** | Konuş | Metin enjeksiyonu STT/VAD/TTS zincirini atlıyor; tüm zinciri ancak sen sınarsın |
+
+Not: "not kaydediliyor mu" ve "kaydedemezse dürüst mü" sorularının ikisi de §2a'da
+**uçtan uca doğrulandı** — ama pi tarafında; ses yolundan geçen hâli yine de bir kez
+teyit etmeye değer.
 
 **İlk konuşmanda logu izlemek istersen:**
 ```bash
