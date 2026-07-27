@@ -170,10 +170,17 @@ HIGGS_TAG_MAP: dict[str, str] = {
     "laughter": "<|sfx:laughter|>Haha, ",
     "sigh": "<|sfx:sigh|>Haah, ",
     # şaşkınlık aileleri → tek emotion karşılığı (CÜMLE BAŞINA taşınır)
-    "surprise-ah": "<|emotion:surprise|>",
-    "surprise-oh": "<|emotion:surprise|>",
-    "surprise-wa": "<|emotion:surprise|>",
-    "surprise-yo": "<|emotion:surprise|>",
+    # ⚠️ 27 Tem: karşılık `surprise` DEĞİL `awe`. `surprise` ölçümde temizdi (12/12,
+    # WER 0.000) ama KULAKTA şaşkın DUYULMUYORDU — 21 emotion içinde en düşük Δsüre
+    # (-0.02 s), yani tabandan neredeyse farksız; kullanıcının ilk şikâyeti buydu.
+    # `awe` de ölçülü (12/12, WER 0.000, Δsüre +0.35 s) ve kullanıcı 8 aday arasından
+    # ünlemsiz cümlede KULAKLA seçti (`experiments/higgs-tts3/surprise_set.py`).
+    # `surprise`+`prosody:expressive_high` kombosu ünlemli cümlede beğenildi ama
+    # ÖLÇÜLMEDİ → alınmadı. Etiket adları (`[surprise-*]`) ve prompt DEĞİŞMEDİ.
+    "surprise-ah": "<|emotion:awe|>",
+    "surprise-oh": "<|emotion:awe|>",
+    "surprise-wa": "<|emotion:awe|>",
+    "surprise-yo": "<|emotion:awe|>",
     # SATIR İÇİ duraklama — duygu gerektirmez, konuşmanın RİTMİNİ düzeltir.
     # Ölçüm (24 örnek, cümle ortasında, bitişik): ikisi de 24/24 anlaşıldı,
     # `pause` +0.32 s, `long_pause` +0.51 s sessizlik ekliyor. Gerçekten duruyor.

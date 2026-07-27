@@ -166,6 +166,50 @@ Tanınmayan etiket ANLATILIYORSA yine siliniyor — uydurma karşılık yazılm�
   hâlde bırakıldı. Açmak için: `ssh root@192.168.0.25 'systemctl start candan-worker'`
   (yeni prompt ve eşleme ancak o zaman devreye girer).
 
+## 7b. KULAK TESTİ — `[surprise-*]` artık `<|emotion:awe|>` (15:11)
+
+§8/3'teki "duygunun doğru duyulduğu ölçülmedi" maddesinin şaşırma ayağı KAPANDI.
+
+**Sorun:** `<|emotion:surprise|>` ölçümde tertemizdi (12/12, WER 0.000) ama kulakta
+şaşkın DUYULMUYORDU. Ölçüm de aslında işaret ediyordu: Δsüre **-0.02 s**, 21 emotion
+içinde en düşük — yani tabandan neredeyse farksız. Kullanıcının ilk şikâyeti buydu.
+
+**Deney:** `experiments/higgs-tts3/surprise_set.py` → `out/surprise/`, `out/surprise.json`,
+dinleme sayfası `./serve.sh surprise.html`. İki cümle × 8 aday = 16 wav.
+* **A** ("Vay canına! Kargon bir gün erken gelmiş.") — ünlem VAR, kolay.
+* **B** ("Sınavdan tam not almışsın…") — ünlem YOK, şaşkınlığı yalnız ton taşır: ZOR sınav.
+
+**Kullanıcının kararı (kulakla):**
+
+| cümle | kazanan | süre | Δ |
+|---|---|---|---|
+| **B (zor, ünlemsiz)** | **`<|emotion:awe|>`** | 4.08 s | +0.64 s |
+| A (ünlemli) | `<|emotion:surprise|><|prosody:expressive_high|>` | 3.12 s | -0.04 s |
+
+**Canlıya giren: `awe`** — 27 Tem ölçümünde §2'de zaten var (12/12, WER 0.000,
+Δsüre +0.35 s), yani ölçülü. Kombo A'da beğenildi ama **ÖLÇÜLMEDİ → ALINMADI**
+(kural: ölçülmemiş token canlıya girmez).
+
+**Kayda geçsin:** `awe` A cümlesinde kullanıcıya "şuh / romantik, yumuşak" duyulmuş.
+Ünlemli şaşırma cümlelerinde bu ton rahatsız ederse kombo yeniden gündeme gelir —
+ama önce canlı yoldan ölçülmesi şartıyla.
+
+**Değişmeyenler:** etiket adları (`[surprise-ah/oh/wa/yo]`), `pi/AGENTS.md`,
+`pi/personas/candan.md`, `_READABLE` karşılığı ("şaşırma"). Prompt maliyeti artmadı;
+değişen TEK şey `HIGGS_TAG_MAP`'teki dört değer.
+
+**Doğrulama:** 243 test OK. Deploy: yedek `worker/higgs_tts.py.bak-sasirma-20260727`,
+md5 eşleşti (`d2bc1f6f…`), sunucuda import + dönüşüm doğrulandı, `candan-worker`
+restart (YALNIZ o — `pi-service`'e dokunulmadı), journalctl traceback 0, bayat
+TTS cache silindi (32 `.pcm`).
+
+Geri alma (tek blok):
+```bash
+ssh root@192.168.0.25 'cd /opt/candan-lite && \
+  cp worker/higgs_tts.py.bak-sasirma-20260727 worker/higgs_tts.py && \
+  rm -f worker/data/tts-cache/*.pcm && systemctl restart candan-worker'
+```
+
 ## 8. Bilinen sınır / açık kalan
 
 1. **OmniVoice'a geri dönüş artık İKİ adım.** Prompt'a Higgs'e özgü etiketler girdi;
@@ -179,6 +223,8 @@ Tanınmayan etiket ANLATILIYORSA yine siliniyor — uydurma karşılık yazılm�
    katman eklenmedi.
 3. **Duygunun DOĞRU duyulduğu ölçülmedi** — ölçüm "anlaşılıyor mu"yu söylüyor,
    "şefkatli mi duyuluyor"u söylemiyor. Kulak testi: `./serve.sh demo.html`.
+   ⚠️ **Şaşırma ayağı KAPANDI** (§7b): kullanıcı dinledi, `surprise` → `awe` oldu.
+   Diğerleri (`warm`, `proud`, `calm`, `confused`, `pause`) hâlâ kulakla teyit bekliyor.
 4. `speed_very_slow` 24'te 1 kez cümlenin önüne uydurma konuşma ekledi; eşlemeye
    ALINMADI. `style:singing` de 2 aşırı uzun örnek verdi (şarkı için normal olabilir,
    sohbette kullanılmıyor).
