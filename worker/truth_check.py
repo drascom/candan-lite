@@ -47,6 +47,8 @@ import urllib.error
 import urllib.request
 from typing import Any, Optional
 
+import speech_speed
+
 logger = logging.getLogger("truth_check")
 
 
@@ -233,6 +235,83 @@ def mode_claim(text: str) -> Optional[str]:
     return None
 
 
+# ── Katman 2 (hız): "hızlandırdım" da harness'ın bileceği bir şeydir ─────────
+# CANLI KANIT (27 Tem 18:21 ve 18:33), üç turda üst üste:
+#     Ayhan : Biraz daha hızlı konuşabilir misin?
+#     Candan: ...konuşma hızımı biraz daha artırıyorum.
+#     Ayhan : Hayır olmadı. İki birim daha arttır.
+#     Candan: ...hızımı iki birim daha artırıyorum.
+#     Ayhan : Hâlâ çok yavaş konuşuyorsun.
+# Tempo hiç değişmedi ve değişemezdi (hız kolu YOKTU); üstelik model olmayan bir
+# "birim" uydurdu. Artık kol VAR (`speech_speed`) ama iddia yine yanlış olabilir:
+# ya işareti hiç koymamıştır ya da TAVANDADIR. Kademe worker'ın DETERMİNİSTİK
+# olarak bildiği bir durum → LLM'e sorulmaz, KARŞILAŞTIRILIR (mod denetimiyle
+# birebir aynı ilke).
+_CLAIM_SPEED_FAST: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p) for p in (
+        # "hızlandırıyorum / hızlandırdım / hızlanıyorum"
+        r"\bhizlan(d[iı]r)?[iı]?(yorum|d[iı]m|acagim)\b",
+        # "hızımı (biraz daha / iki birim) artırıyorum / yükseltiyorum / yukarı çekiyorum"
+        r"\bh[iı]z\w*\b[^.!?]{0,40}\b(art[iı]r|artt[iı]r|yukselt)\w*(yorum|d[iı]m|acagim)\b",
+        r"\bh[iı]z\w*\b[^.!?]{0,40}\byukar[iı] cek(iyorum|tim)\b",
+        r"\bdaha h[iı]zl[iı] konus(uyorum|acagim|maya basl[iı]yorum)\b",
+        r"\btempo\w*\b[^.!?]{0,30}\b(art[iı]r|artt[iı]r|h[iı]zland[iı]r)\w*(yorum|d[iı]m)\b",
+    )
+)
+_CLAIM_SPEED_SLOW: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p) for p in (
+        r"\byavasl(at)?[iı]?(yorum|d[iı]m|t[iı]m|ayacagim)\b",
+        r"\bh[iı]z\w*\b[^.!?]{0,40}\b(dusur|azalt)\w*(uyorum|yorum|d[iı]m|acagim)\b",
+        r"\bdaha yavas konus(uyorum|acagim|maya basl[iı]yorum)\b",
+    )
+)
+# ⚠️ "-abilirim" hâlleri BİLEREK dışarıda: "istersen hızımı artırabilirim" bir TEKLİF,
+# iddia değil. Teklifi düzeltmek kullanıcıyı şaşırtırdı.
+
+SPEED_CEILING_LINE = "Aslında daha hızlı konuşamıyorum, bu en hızlı kademem."
+SPEED_FLOOR_LINE = "Aslında daha yavaş konuşamıyorum, bu en yavaş kademem."
+SPEED_UNCHANGED_LINE = "Aslında konuşma hızımı değiştiremedim."
+
+
+def speed_claim(text: str) -> Optional[str]:
+    """Metin hız DEĞİŞTİRDİĞİNİ iddia ediyor mu? 'faster' | 'slower' | None.
+
+    İkisi birden geçerse ('yavaşlatmıyorum, hızlandırıyorum') karar verilmez → None;
+    belirsiz bir cümleyi düzeltmek, düzeltmemekten kötüdür.
+    """
+    low = fold(text)
+    fast = any(p.search(low) for p in _CLAIM_SPEED_FAST)
+    slow = any(p.search(low) for p in _CLAIM_SPEED_SLOW)
+    if fast and not slow:
+        return "faster"
+    if slow and not fast:
+        return "slower"
+    return None
+
+
+def speed_line(said: str, before: Optional[str]) -> Optional[str]:
+    """Hız iddiası GERÇEKLEŞTİ mi? Gerçekleşmediyse harness'ın söyleyeceği cümle.
+
+    `before` = TUR BAŞINDAKİ kademe (tur sonunda okumak yanıltır: `[speed:X]` o ana
+    kadar zaten uygulanmış olur ve "değişmedi" sanılırdı).
+    İddia yoksa None → hiçbir müdahale yok; hız işareti koyup hiç konuşmamak da serbest.
+    """
+    if before is None:
+        return None                      # hız kolu bağlı değil (OmniVoice) → denetim yok
+    claim = speed_claim(said)
+    if claim is None:
+        return None
+    now = speech_speed.requested(said) or before
+    delta = speech_speed.index(now) - speech_speed.index(before)
+    if (claim == "faster" and delta > 0) or (claim == "slower" and delta < 0):
+        return None                      # iddia DOĞRU: kademe gerçekten değişti
+    if claim == "faster" and speech_speed.at_ceiling(now):
+        return SPEED_CEILING_LINE
+    if claim == "slower" and speech_speed.at_floor(now):
+        return SPEED_FLOOR_LINE
+    return SPEED_UNCHANGED_LINE
+
+
 # ── Kullanıcıya giden düzeltme cümleleri (Katman 2b / 3) ─────────────────────
 # Sesli asistan: KISA. Model zaten bir şey söyledi; buraya bir cümleden fazlası eklenmez.
 UNBACKED_LINE = "Aslında bunu kaydetmedim, kusura bakma."
@@ -341,15 +420,19 @@ class TurnLedger:
 
 # ── Karar: hangi katman devreye girsin ───────────────────────────────────────
 def decide(
-    ledger: TurnLedger, said: str, *, mode: Optional[str] = None
+    ledger: TurnLedger, said: str, *, mode: Optional[str] = None,
+    speed: Optional[str] = None,
 ) -> tuple[Optional[str], bool]:
     """(deterministik düzeltme cümlesi, sınıflandırıcı çalışsın mı).
 
-    `mode` = worker'ın bildiği GERÇEK mod ("normal"|"dev"); None → mod denetimi yok.
+    `mode`  = worker'ın bildiği GERÇEK mod ("normal"|"dev"); None → mod denetimi yok.
+    `speed` = TUR BAŞINDAKİ konuşma hızı kademesi; None → hız denetimi yok.
 
     Sıra ve MALİYET KAPISI:
       1. Kritik yazma hatası → Katman 2 devralır, cümleyi harness söyler. LLM YOK.
       2. Mod iddiası gerçekle çelişiyor → deterministik düzeltme. LLM YOK.
+      2b. Hız iddiası gerçekleşmedi (işaret yok ya da TAVANDA) → deterministik
+         düzeltme. LLM YOK. (Canlı hata: üç turda üst üste "hızlandırıyorum".)
       3. Kelime listesi "başarı iddiası" diyor ama turda onu DESTEKLEYEN başarılı
          bir araç YOK (kayıt iddiası → yazma aracı, eylem iddiası → herhangi bir
          araç). Deterministik düzeltme. LLM YOK.
@@ -366,6 +449,9 @@ def decide(
         claimed = mode_claim(said)
         if claimed is not None and claimed != mode:
             return _MODE_LINE[mode], False
+    hiz = speed_line(said, speed)
+    if hiz is not None:
+        return hiz, False
     kind = claim_kind(said)
     if kind == "record" and not ledger.ok_writes():
         return UNBACKED_LINE, False
@@ -464,6 +550,9 @@ async def claims_success(said: str, *, timeout: Optional[float] = None) -> Optio
 
 __all__ = [
     "CRITICAL_WRITE_TOOLS",
+    "SPEED_CEILING_LINE",
+    "SPEED_FLOOR_LINE",
+    "SPEED_UNCHANGED_LINE",
     "UNBACKED_LINE",
     "UNVERIFIED_LINE",
     "TurnLedger",
@@ -476,4 +565,6 @@ __all__ = [
     "has_claim_phrase",
     "mode_claim",
     "parse_verdict",
+    "speed_claim",
+    "speed_line",
 ]

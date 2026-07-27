@@ -60,12 +60,31 @@ her `[...]` kalıbını SİLER**. Garanti: sunucuya giden metinde köşeli paran
 Higgs'in yerleşim kuralı da korunur — emotion/style/prosody CÜMLE BAŞINA taşınır,
 `sfx` yerinde kalır (etiketin hemen ardından ses taklidi, arada boşluk YOK).
 
-SIRA (kritik): mood çıkarma → trnorm → etiket dönüşümü → gönderim.
+SIRA (kritik): mood çıkarma → hız çıkarma → trnorm → etiket dönüşümü → gönderim.
+
+🏃 KONUŞMA HIZI — `[speed:slow|normal|fast|very_fast]`, OTURUM ÖMÜRLÜ.
+Canlı şikâyet (27 Tem 18:21 ve 18:33): kullanıcı üç kez "biraz daha hızlı konuş"
+dedi, Candan üç kez "hızlandırıyorum" dedi, tempo DEĞİŞMEDİ — hız kolu yoktu.
+Ölçüm (`experiments/konusma-hizi/`, koşul başına 12 örnek, canlı streaming ucu,
+Whisper geri-dönüşü) üç adayı karşılaştırdı:
+
+    yol                              kelime/s kazancı   WER
+    <|prosody:speed_fast|> token'ı        +%5.9        0.030  ← REDDEDİLDİ
+    <|prosody:speed_very_fast|>           +%7.2        0.023  ← REDDEDİLDİ
+    motorun `speed` gövde parametresi     YOK (sunucu kodu onu hiç okumuyor)
+    WSOLA tempo (worker/tempo.py) 1.15   +%14.8        0.004  ← SEÇİLDİ
+    WSOLA tempo 1.30                     +%29.7        0.004  ← SEÇİLDİ
+
+Taban WER'i de 0.004: WSOLA anlaşılırlığı HİÇ bozmuyor, token yolu 4-7 katına
+çıkarıyor. Filtre streaming'in ÇIKIŞINDA duruyor (blok/lookahead/sol bağlam
+mantığına DOKUNULMADI) ve ilk ses gecikmesi 517 ms → 517 ms.
+Kademe `reset_mood()` ile SIFIRLANMAZ: mood cümlelik bir renk, hız kalıcı ayar.
+Bayrak: `worker/.env` → `SPEECH_SPEED=0` (işaret yine silinir, tempo uygulanmaz).
 
 ⚠️ OMNIVOICE'A GERİ DÖNÜŞ ARTIK İKİ ADIM. 27 Tem'de prompt'a Higgs'e ÖZGÜ etiketler
-eklendi (`[pause]`, `[long_pause]`, `[mood:warm|calm|proud|confused]`) — ölçüldüler,
-Higgs'te temizler. Ama `omnivoice_tts._MOOD_RE` yalnız `excited|sad` biliyor ve
-OmniVoice tanımadığı `[...]`'yi HARFİ HARFİNE OKUR. Motoru geri alırken:
+eklendi (`[pause]`, `[long_pause]`, `[mood:warm|calm|proud|confused]`, `[speed:X]`)
+— ölçüldüler, Higgs'te temizler. Ama `omnivoice_tts._MOOD_RE` yalnız `excited|sad`
+biliyor ve OmniVoice tanımadığı `[...]`'yi HARFİ HARFİNE OKUR. Motoru geri alırken:
     1) `worker/.env` → `TTS_ENGINE=higgs` satırını sil
     2) `git checkout <higgs öncesi> -- pi/AGENTS.md pi/personas/candan.md`
 İkincisi atlanırsa Candan "pause", "mood warm" diye konuşur.
@@ -86,6 +105,8 @@ import aiohttp
 from livekit.agents import tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 
+import speech_speed
+import tempo
 import tts_cache
 from log_utils import DedupeFilter
 from trnorm import normalize_tr
@@ -237,6 +258,10 @@ _READABLE: dict[str, str] = {
     "long_pause": "uzun duraklama",
     "mood:excited": "heyecanlı ton",
     "mood:sad": "üzgün ton",
+    "speed:slow": "yavaş tempo",
+    "speed:normal": "normal tempo",
+    "speed:fast": "hızlı tempo",
+    "speed:very_fast": "çok hızlı tempo",
 }
 
 
@@ -296,6 +321,35 @@ def _extract_mood(text: str) -> tuple[Optional[str], str]:
     if mood is None:
         return None, text
     return mood, re.sub(r"\s{2,}", " ", cleaned).strip()
+
+
+def _extract_speed(text: str) -> tuple[Optional[str], str]:
+    """Metinden `[speed:X]` KONTROL işaretini çıkar → (kademe | None, temiz metin).
+
+    `_extract_mood`'un ikizi ve AYNI mention korumasını kullanır: model etiketi
+    KULLANMIYOR da ANLATIYORSA ("[speed:fast] gibi bir işaretle hızlanabilirim")
+    işaret metinde BIRAKILIR, `_to_higgs_markup` onu okunur karşılığına çevirir —
+    aksi hâlde cümlede delik kalırdı (bkz. `_MENTION_AFTER_RE`).
+
+    Mood'dan TEK FARKI ömrü: mood tur sonunda sıfırlanır (`reset_mood`), hız
+    OTURUM BOYUNCA yaşar. Canlı şikâyet buydu: "sonraki cevapta eski tempoya döndü".
+    """
+    if not text or "[" not in text:
+        return None, text
+    level: Optional[str] = None
+
+    def _drop(m: re.Match) -> str:
+        nonlocal level
+        if _is_mention(text, m.start(), m.end()):
+            return m.group(0)          # anlatılıyor → DOKUNMA
+        if level is None:
+            level = m.group(1).lower()
+        return " "
+
+    cleaned = speech_speed.TAG_RE.sub(_drop, text)
+    if level is None:
+        return None, text
+    return level, re.sub(r"\s{2,}", " ", cleaned).strip()
 
 
 def _has_speakable(text: str) -> bool:
@@ -472,6 +526,7 @@ class HiggsTTS(tts.TTS):
         voice: Optional[str] = None,
         token: Optional[str] = None,
         stream: bool = True,
+        speed_control: bool = True,
     ):
         super().__init__(
             # `streaming=False` GİRDİ akışı içindir (SynthesizeStream yok, livekit
@@ -488,10 +543,44 @@ class HiggsTTS(tts.TTS):
         # Chunked PCM ucu. Kapatınca tam-WAV yoluna dönülür (TEK SATIRLIK geri dönüş:
         # worker/.env'e `HIGGS_STREAM=0`). Sunucu ikisini de sunmaya devam ediyor.
         self._stream = stream
+        # ── Konuşma hızı: OTURUM ÖMÜRLÜ ayar (mood gibi TUR ömürlü DEĞİL) ────
+        # Bayrak kapalıyken davranış BUGÜNKÜYLE bire bir aynı: `[speed:X]` işareti
+        # yine metinden silinir (asla seslendirilmez) ama tempo dönüşümü YAPILMAZ.
+        self._speed_control = speed_control
+        self._speed = speech_speed.DEFAULT
 
     def reset_mood(self) -> None:
-        """Yeni tur başında nötr'e dön (agent.py agent_state 'thinking' hook'undan)."""
+        """Yeni tur başında nötr'e dön (agent.py agent_state 'thinking' hook'undan).
+
+        ⚠️ HIZA DOKUNMAZ. Mood cümlelik bir renk, hız KALICI bir ayar; kullanıcının
+        canlı şikâyeti tam da hızın bir sonraki turda eski hâline dönmesiydi.
+        """
         self._current_mood = None
+
+    # ── Konuşma hızı ─────────────────────────────────────────────────────────
+    @property
+    def speed(self) -> str:
+        """Oturumun geçerli hız kademesi (`speech_speed.LEVELS`)."""
+        return self._speed
+
+    def set_speed(self, level: Optional[str]) -> bool:
+        """Kademeyi ayarla. DEĞİŞTİYSE True. Bilinmeyen kademe YOK SAYILIR.
+
+        Bayrak kapalıyken de kademe TUTULUR (yalnız tempo uygulanmaz): denetim
+        katmanı "istek karşılandı mı" sorusuna aynı cevabı versin, davranış
+        bayrağa göre iki türlü olmasın.
+        """
+        if not speech_speed.is_level(level) or level == self._speed:
+            return False
+        logger.info("TTS: konuşma hızı %s → %s (oran %.2f)",
+                    speech_speed.TR.get(self._speed), speech_speed.TR.get(level or ""),
+                    speech_speed.rate(level))
+        self._speed = level or speech_speed.DEFAULT
+        return True
+
+    def tempo_rate(self) -> float:
+        """Bu anda uygulanacak tempo oranı. Bayrak kapalı → 1.0 (hiç işlem yok)."""
+        return speech_speed.rate(self._speed) if self._speed_control else 1.0
 
     def _http_url(self) -> str:
         return f"http://{self._host}:{self._port}/api/tts"
@@ -523,6 +612,8 @@ class HiggsChunkedStream(tts.ChunkedStream):
         # Emitter `initialize()` edildi mi? KENDİMİZ takip ediyoruz: `pushed_duration()`
         # asenkron güncellenen bir sayaç, hemen ardından okumak güvenilmez.
         self._emitter_ready = False
+        # Bu turun tempo filtresi (WSOLA). `normal` hızda None → TEK BİR EK İŞLEM YOK.
+        self._tempo: Optional[tempo.TempoStream] = None
 
     # ── Emitter yardımcıları ─────────────────────────────────────────────────
     def _ensure_emitter(
@@ -543,6 +634,31 @@ class HiggsChunkedStream(tts.ChunkedStream):
         )
         self._emitter_ready = True
 
+    # ── Tempo (konuşma hızı) ─────────────────────────────────────────────────
+    # ⚠️ FİLTRE STREAMING'İN ÇIKIŞINDA. Blok (8 kare) / lookahead (8 kare) / sol
+    # bağlam (16 kare) mantığına DOKUNULMAZ — kodek ne çözdüyse o çözülür, biz
+    # yalnız çıkan PCM'in temposunu değiştiririz. Ölçüldü (`experiments/konusma-hizi`):
+    # ilk ses gecikmesi 517 ms → 517 ms (+1 ms), çünkü filtrenin istediği ~55 ms
+    # ilk bloğun 320 ms'i İÇİNDE soğuruluyor.
+    def _begin_tempo(self, sample_rate: int = DEFAULT_SAMPLE_RATE) -> None:
+        rate = self._higgs.tempo_rate()
+        self._tempo = tempo.TempoStream(rate, sample_rate) if rate != 1.0 else None
+
+    def _shape(self, pcm: bytes) -> bytes:
+        return self._tempo.feed(pcm) if self._tempo is not None else pcm
+
+    def _finish(self, output_emitter: tts.AudioEmitter) -> None:
+        """Tempo kuyruğunu boşalt ve segmenti kapat. Her başarı/yarım yolda ÇAĞRILIR.
+
+        Kuyruk atlanırsa cümlenin son ~50 ms'i düşerdi (son hece kırpılması).
+        """
+        if self._tempo is not None:
+            tail = self._tempo.flush()
+            if tail:
+                self._ensure_emitter(output_emitter)
+                output_emitter.push(tail)
+        output_emitter.flush()
+
     def _emit_pcm(
         self,
         output_emitter: tts.AudioEmitter,
@@ -551,11 +667,13 @@ class HiggsChunkedStream(tts.ChunkedStream):
         sample_rate: int = DEFAULT_SAMPLE_RATE,
         num_channels: int = NUM_CHANNELS,
     ) -> None:
-        self._ensure_emitter(
-            output_emitter, sample_rate=sample_rate, num_channels=num_channels
-        )
-        output_emitter.push(pcm)
-        output_emitter.flush()
+        shaped = self._shape(pcm)
+        if shaped:
+            self._ensure_emitter(
+                output_emitter, sample_rate=sample_rate, num_channels=num_channels
+            )
+            output_emitter.push(shaped)
+        self._finish(output_emitter)
 
     def _push_pcm(
         self,
@@ -566,10 +684,13 @@ class HiggsChunkedStream(tts.ChunkedStream):
         num_channels: int = NUM_CHANNELS,
     ) -> None:
         """Parça push et, flush ETME (streaming: flush cümlenin SONUNDA bir kez)."""
+        shaped = self._shape(pcm)
+        if not shaped:
+            return                     # filtre henüz kare doldurmadı — kayıp YOK
         self._ensure_emitter(
             output_emitter, sample_rate=sample_rate, num_channels=num_channels
         )
-        output_emitter.push(pcm)
+        output_emitter.push(shaped)
 
     def _emit_silence(self, output_emitter: tts.AudioEmitter) -> None:
         """Turu KURTARAN sessizlik — sessiz kalmak kabul, çökmek DEĞİL."""
@@ -591,6 +712,13 @@ class HiggsChunkedStream(tts.ChunkedStream):
         if mood is not None:
             self._higgs._current_mood = mood
         effective_mood = self._higgs._current_mood
+
+        # Konuşma hızı: `[speed:X]` OTURUM ayarını değiştirir ve BU cümleden itibaren
+        # geçerlidir. Sıra kritik — filtre metinden değil, kademeden kuruluyor.
+        level, text = _extract_speed(text)
+        if level is not None:
+            self._higgs.set_speed(level)
+        self._begin_tempo()
 
         # Türkçe normalizasyon — SIRA KRİTİK: mood İŞARETİ ÇIKARILDIKTAN SONRA,
         # gönderimden ÖNCE. Ölçüm (29 cümle, ASR geri-dönüş): WER 0.058 → 0.028.
@@ -626,7 +754,7 @@ class HiggsChunkedStream(tts.ChunkedStream):
                 pushed += len(pcm)
             if not pushed:
                 raise RuntimeError("Higgs: ses üretilmedi (boş yanıt)")
-            output_emitter.flush()
+            self._finish(output_emitter)
         except Exception as exc:  # noqa: BLE001 — TTS hatası turu ÖLDÜRMESİN
             logger.warning(
                 "TTS başarısız (%s: %s) → cümlenin kalanı sessiz geçildi "
@@ -637,7 +765,7 @@ class HiggsChunkedStream(tts.ChunkedStream):
                 # YARIM ses zaten çıktı: sessizlik EKLEME (tur zaten kurtuldu),
                 # sadece parçayı kapat ki livekit segmenti bitmiş saysın.
                 try:
-                    output_emitter.flush()
+                    self._finish(output_emitter)
                 except Exception:  # noqa: BLE001
                     logger.warning("yarım akış flush edilemedi", exc_info=True)
             else:
@@ -710,13 +838,13 @@ class HiggsChunkedStream(tts.ChunkedStream):
                     key, b"".join(parts),
                     sample_rate=sample_rate, channels=num_channels,
                 )
-            output_emitter.flush()
+            self._finish(output_emitter)
             return
 
         if pushed:
             # Yarım ses çalındı: tur kurtuldu, sessizlik EKLEME — sadece kapat.
             try:
-                output_emitter.flush()
+                self._finish(output_emitter)
             except Exception:  # noqa: BLE001
                 logger.warning("yarım akış flush edilemedi", exc_info=True)
             return

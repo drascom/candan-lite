@@ -2000,6 +2000,11 @@ if _HAS_LIVEKIT:
     class PiStream(llm.LLMStream):
         """Bir chat turu: prompt gönder, text_delta'ları ChatChunk olarak stream et."""
 
+        # TUR BAŞINDAKİ konuşma hızı kademesi (`_run` doldurur). SINIF düzeyinde:
+        # bu sınıf testlerde `__new__` ile de kuruluyor ve eksik öznitelik denetimi
+        # sessizce (geniş except) yutup DÜZELTMEYİ kaybettirirdi.
+        _speed_before: Optional[str] = None
+
         def __init__(self, pi_llm: "PiBrain", *, chat_ctx, tools, conn_options):
             super().__init__(
                 pi_llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options
@@ -2057,7 +2062,9 @@ if _HAS_LIVEKIT:
             # (_mode) geçerlidir. İkisi de worker'ın bildiği deterministik durum.
             mode = self._brain._pending_mode or self._brain._mode
             try:
-                line, ask_llm = truth_check.decide(ledger, said, mode=mode)
+                line, ask_llm = truth_check.decide(
+                    ledger, said, mode=mode, speed=self._speed_before,
+                )
                 # Kısa devre KAPININ kendisidir: ask_llm False iken yargıç ÇAĞRILMAZ.
                 if line is None and ask_llm and await truth_check.claims_success(said):
                     line = truth_check.UNVERIFIED_LINE
@@ -2086,6 +2093,10 @@ if _HAS_LIVEKIT:
             # Mod geçişinden SONRA, prompt'tan ÖNCE — ve turun geri kalanı scripted
             # yolla erken dönse bile kimlik yine tazelenmiş olur (bayat kimlik yok).
             self._brain._publish_turn_user()
+            # Hız kademesini TUR BAŞINDA dondur. Tur sonunda okumak yanıltırdı:
+            # `[speed:X]` işareti ilk cümleyle birlikte ZATEN uygulanmış olur ve
+            # "kademe değişmedi" gibi görünürdü (bkz. truth_check.speed_line).
+            self._speed_before = self._brain.current_speed()
             text = _last_user_text(self._chat_ctx)
             if not text:
                 return
@@ -2590,6 +2601,10 @@ if _HAS_LIVEKIT:
             # `mate.tool` yayıncısı (agent.py bağlar; None → yayın YOK, eski davranış).
             # Tool çağrısı/sonucu olayları buradan odaya gider; hata konuşmayı BOZMAZ.
             self._tool_publisher: Optional[Callable[[dict], None]] = None
+            # Konuşma hızı kademesini OKUYAN kaynak (agent.py TTS eklentisine bağlar).
+            # None → hız denetimi KAPALI (OmniVoice yolunda kol yok). Kademe burada
+            # TUTULMAZ, yalnız okunur: tek gerçek TTS'te (bkz. truth_check.speed_line).
+            self._speed_source: Optional[Callable[[], Optional[str]]] = None
             self._tool_seen: set[str] = set()   # aynı olay iki kez yayınlanmasın
             # Faz 3.1: sesli oto-enrollment bağımlılıkları. Üçü de varsa etkin;
             # yoksa (SPEAKER_ID_ENABLED kapalı vb.) enrollment TAMAMEN devre dışı.
@@ -2674,6 +2689,20 @@ if _HAS_LIVEKIT:
             """Tool olaylarını odaya basacak callback'i bağla (agent.py kurar; sync,
             içinde task açar). None → yayın yok (eski davranış)."""
             self._tool_publisher = cb
+
+        # ── Konuşma hızı (doğruluk denetimi için) ────────────────────────────
+        def set_speed_source(self, fn: Optional[Callable[[], Optional[str]]]) -> None:
+            """Geçerli hız kademesini okuyan işlevi bağla (agent.py kurar)."""
+            self._speed_source = fn
+
+        def current_speed(self) -> Optional[str]:
+            """Şu anki hız kademesi; kaynak yoksa/patlarsa None (denetim atlanır)."""
+            if self._speed_source is None:
+                return None
+            try:
+                return self._speed_source()
+            except Exception:  # noqa: BLE001 — denetim okuması ASLA turu düşürmez
+                return None
 
         def _publish_tool_msg(self, message: Any) -> None:
             """pi mesajındaki tool çağrısı/sonucunu web'e yayınla — BEST-EFFORT.

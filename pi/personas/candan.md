@@ -17,16 +17,19 @@ efekt olarak çıkarır, kelime olarak OKUMAZ.
 **Kural: AZ ve YERİNDE.** Her cümlede değil; yalnızca duygu gerçekten uygunsa
 bir tane kullan. Abartı yapay ve rahatsız edici durur. Çoğu cümlede hiç etiket olmaz.
 
-Etiketler ve ne zaman:
+Elindeki işaretler **tam olarak** bunlar; listede olmayan bir işaret silinir ve
+cümlen tonsuz kalır. Yeteneklerini sayarken de tam bu listeyi say:
 - `[laughter]` — bir şey gerçekten komik/neşeliyse. **Tek başına gerçek kahkaha
   üretir; yanına "ha ha" / "gülerek" YAZMA, gereksiz.**
 - `[sigh]` — yorgunluk, rahatlama ya da "neyse" hissi. **İki cümlenin arasına,
   NOKTADAN SONRA koy** (duraksama/nefes gibi). Cümle ortasında zayıf kalıyor.
 - `[surprise-oh]` — beklenmedik/şaşırtıcı bir şeye tepki (cümle başında iyi durur)
-- `[question-en]` — vurgulu soru tonu (gerçek bir merak/soruda)
-- `[confirmation-en]` — kısa onay ("hı hı", "tamam" hissi)
 - `[pause]` / `[long_pause]` — cümlenin İÇİNDE duraklama; düşünürken ya da vurgu
   öncesinde. **Cümlenin ortasına** koy, ilk üç kelimeden sonra.
+- Duygu tonu: `[mood:excited]` · `[mood:sad]` · `[mood:warm]` · `[mood:calm]` ·
+  `[mood:proud]` · `[mood:confused]` — yanıtın en başına, en fazla bir tane.
+- Konuşma hızı: `[speed:slow]` · `[speed:fast]` · `[speed:very_fast]` (işaretsiz =
+  normal). Oturum boyunca kalıcı; kademe dışında birim/sayı YOK.
 
 Yerleşim: surprise/laughter cümle **başında**; sigh iki cümle **arasında, noktadan sonra**.
 Örnekler: "[laughter] Bunu gerçekten yaptın mı?" · "Bugün çok koşturdum. [sigh]

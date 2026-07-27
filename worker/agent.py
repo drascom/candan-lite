@@ -54,6 +54,14 @@ HIGGS_TTS_PORT = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
 HIGGS_STREAM = (os.environ.get("HIGGS_STREAM") or "1").strip().lower() not in (
     "0", "false", "no", "off",
 )
+# Konuşma hızı kolu (`[speed:X]` → WSOLA tempo, perde KORUNARAK). AÇIK varsayılan
+# ama VARSAYILAN KADEME `normal` (oran 1.0) — yani kullanıcı istemedikçe davranış
+# bugünküyle BİRE BİR aynı, tek bir ek işlem bile yapılmaz. Ölçüm: +%14.8 / +%29.7
+# kelime/s, WER tabanla aynı, ilk ses 517 ms → 517 ms (experiments/konusma-hizi).
+# GERİ DÖNÜŞ TEK SATIR → worker/.env'e `SPEECH_SPEED=0`.
+SPEECH_SPEED = (os.environ.get("SPEECH_SPEED") or "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
@@ -268,8 +276,14 @@ async def entrypoint(ctx: JobContext):
     # kablolaması motordan bağımsız çalışır.
     if TTS_ENGINE == "higgs":
         tts_plugin = HiggsTTS(
-            host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM
+            host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM,
+            speed_control=SPEECH_SPEED,
         )
+        # Hız kademesi TTS'te yaşıyor; DOĞRULUK DENETİMİ onu bilmek zorunda.
+        # "Hızlandırıyorum" diyen ama hızı değiştirmeyen (ya da tavanda olan) tur
+        # düzeltilsin diye brain tur BAŞINDA kademeyi buradan okur (bkz.
+        # truth_check.speed_line — canlı hata 27 Tem 18:33).
+        brain.set_speed_source(lambda: tts_plugin.speed)
     else:
         tts_plugin = OmniVoiceTTS(host=TTS_HOST, port=TTS_PORT)
     logging.getLogger("worker.agent").info(
