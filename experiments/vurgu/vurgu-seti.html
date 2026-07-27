@@ -53,6 +53,8 @@
   .ornek .mini.sec { background:var(--acc); color:#0d1017; border-color:var(--acc); }
   .ornek .mini.sec.kotu { background:var(--bad); border-color:var(--bad); }
   .ornek .mini.sec.idare { background:var(--warn); color:#0d1017; border-color:var(--warn); }
+  .ornek .mini.bekle { margin-left:10px; }
+  .ornek .mini.bekle.sec { background:#7a4a19; color:#ffe0b0; border-color:var(--warn); }
   .ozet { font-size:12px; padding:1.5px 9px; border-radius:99px;
     border:1px solid var(--line); color:var(--dim); margin-left:auto; white-space:nowrap; }
   .ozet.tam { color:var(--tok); border-color:#2f6b48; }
@@ -66,28 +68,40 @@
     padding:9px 12px; margin:0 0 12px; color:var(--warn); font-size:13px;
     max-width:920px; }
   .sikayet { color:#ffd479; font-size:13px; font-weight:400; }
+  .bekleme { font-size:12.5px; color:var(--dim); margin-bottom:5px; }
+  .bekleme.ok { color:var(--tok); }
+  .bekleme.warn { color:var(--warn); }
+  .bekleme.bad { color:var(--bad); }
+  ul { margin:6px 0; }
 </style>
 </head>
 <body>
-<h1>Vurgu seti — <span class="hedef">hedef kelime</span> öne çıkıyor mu?</h1>
+<h1>Vurgu — 3. tur: <b>kelime sonrası bekleme</b> gitti mi?</h1>
 <div class="sub">
-  Duygu atlasında en çok tekrar eden şikâyet duygu değil <b>vurgu</b>ydu: beş satırda
-  "şu kelimede vurgu eksik". Higgs kataloğunda (43 etiket) kelime düzeyinde vurgu
-  etiketi <b>YOK</b> — uydurma <code>&lt;|prosody:emphasis|&gt;</code> ve SSML
-  <code>&lt;emphasis&gt;</code> denemeleri harfi harfine okunuyor
-  (<code>katalog_yoklama.py</code>). Bu sayfa dolaylı yolları dinletiyor.
-  Her satırda <b>aynı cümle</b>, aynı duygu etiketi; fark yalnız vurgu yolundan geliyor.
-  <b>Taban</b> = atlasta dinlediğin, "vurgu eksik" dediğin hâl.
-  Hepsi <b>canlı streaming ucundan</b> üretildi.
-  Sarı işaretli kelimeye odaklan. Her yolun <b>3 örneği</b> aynı ayarın üç ayrı
-  üretimi — aradaki fark modelin rastgeleliği, o yüzden <b>her örneği ayrı</b>
-  işaretle (geldi / az / gelmedi). Sağdaki özet ("2/3 geldi") kendiliğinden çıkar;
-  not alanı yol için. En altta "notları JSON kopyala".
+  2. turda <b>kombo</b> kazandı: 4 cümlenin 3'ünde "vurgu geldi" dedin. Ama altı ayrı
+  notta aynı şikâyet vardı — <b>"kelime sonrası uzun bekleme"</b>. Koda bakıldı:
+  tire hedef kelimenin <b>iki yanına</b> konuyordu; öndeki vurguyu getiriyor,
+  <b>arkadaki yalnız bekleme üretiyor</b>. Bu tur arkadaki işareti atıyor.
+  <ul style="margin:8px 0 0; padding-left:20px">
+    <li><code>kombo</code> — 2. turdaki hâl, <b>kıyas zemini</b> (arkada tire var)</li>
+    <li><code>kombo-on</code> — tire+duraklama yalnız <b>önde</b>, arkada hiçbir şey yok</li>
+    <li><code>tire-on</code> — yalnız öndeki tire, duraklama bile yok</li>
+    <li><code>kombo-on-dar</code> — <b>yalnız <i>awe</i></b>: sınır 2. turdaki yerinde
+      ("hem de"den sonra), ama arkada işaret yok</li>
+  </ul>
+  <b>Sarı işaretli kelimeye</b> ve <b>ondan sonraki boşluğa</b> odaklan. Her yolun
+  <b>3 örneği</b> aynı ayarın üç ayrı üretimi; <b>her örneği ayrı</b> işaretle.
+  2. tur notların ayrı yerde duruyor, silinmedi — <code>kombo</code> satırında
+  "2. tur: …" rozetiyle görünüyor.
 </div>
 <div class="uyari">
-  ⚠️ Sayılar <b>kontrast</b>: hedef kelimenin cümlenin GERİ KALANINA oranı, tabana
-  göre farkı. Cümlenin tamamını yükselten bir yol burada <b>0</b> çıkar — kulakta
-  "daha canlı" duyulsa bile hedef kelimeyi öne çıkarmıyor demektir. Karar senin.
+  ⚠️ <b>awe</b> cümlesinde ikinci bir kusur vardı: "vurgu hem de kelimesinde" dedin.
+  Sebep bulundu — sınır (tire+duraklama) <b>"hem de" ile "tek başına" arasına</b>
+  konuyordu; Türkçede sınırdan <b>önceki</b> kelime öne çıkar, o yüzden vurguyu
+  "hem de" aldı. <code>kombo-on</code> ve <code>tire-on</code> satırlarında sınır
+  artık <b>"hem de"nin önünde</b> ("hem de tek başına" tek öbek).
+  <code>kombo-on-dar</code> ise eski sınırı koruyor — ikisini kıyasla, hangisinde
+  vurgu <span class="hedef">tek başına</span>'ya biniyor?
 </div>
 <div id="list"></div>
 
@@ -99,49 +113,46 @@
 </div>
 
 <script>
-const ANAHTAR = 'vurgu-seti-notlar-v2';   // örnek başına karar
-const ESKI_ANAHTAR = 'vurgu-seti-notlar-v1';  // yol başına tek karar — dokunulmuyor, yedek kalıyor
-// Sayfada gösterilecek yollar — ÖLÇÜM SONRASI seçildi. Boş bırakılırsa hepsi.
-// `buyuk` ve `virgul` elendi: büyük harf hiçbir ölçüde artı vermedi (perde
-// -0.88 yarım ton), `virgul` da `tire`nin zayıf kopyası. Ayrıntı: README.
-const SUNULAN = ['taban', 'pause', 'tire', 'expressive_high', 'kombo'];
+const ANAHTAR = 'vurgu-seti-notlar-v3';       // 3. tur — kelime sonrası bekleme
+const TUR2_ANAHTAR = 'vurgu-seti-notlar-v2';  // 2. tur; SALT OKUNUR, rozette gösterilir
+// 'vurgu-seti-notlar-v1' (1. tur) hiç okunmuyor/yazılmıyor — olduğu gibi duruyor.
+const TUR = 3;
+// Sayfada gösterilecek yollar — SIRAYLA. `taban`, `pause`, `tire` ve
+// `expressive_high` bu tura ALINMADI: hepsini 2. turda dinledin (60 örnek),
+// `expressive_high` dört cümlede de sıfır çekti (ölü). Bu tur tek soruya bakıyor:
+// arkadaki işaret atılınca bekleme gidiyor mu, vurgu duruyor mu?
+const SUNULAN = ['kombo', 'kombo-on', 'tire-on', 'kombo-on-dar'];
 const ORNEK = 3;           // yol başına kaç örnek dinletilsin
 
-// Kayıt okuma + eski biçimden taşıma.
-// Eski biçim: { "affection/pause": { karar:"iyi", not:"...", ad:"..." } }  (yol başına TEK karar)
-// Yeni biçim: { "affection/pause": { kararlar:["iyi","iyi","iyi"], not:"...", ad:"..." } }
-// Taşıma kuralı: eski tek karar üç örneğe birden yazılır, not korunur.
-// v1 anahtarı SİLİNMİYOR — olduğu gibi yedek kalıyor.
+// Kayıt: her tur AYRI anahtar. 3. tur v2'den TAŞIMAZ ve v2'yi YAZMAZ —
+// yollar değişti (arkadaki işaret atıldı), eski karar yeni sese ait değil.
+// v2 yalnız OKUNUR: `kombo` satırında "2. tur: 3/3 geldi" rozeti olarak çıkar,
+// böylece neyle kıyasladığını görürsün. v1 ve v2 olduğu gibi duruyor.
 const oku = (a) => { try { return JSON.parse(localStorage.getItem(a) || '{}') || {}; }
                      catch (e) { return {}; } };
 let notlar = {};
-let tasinan = 0;
-function yukle(nOrnek) {
-  const yeni = oku(ANAHTAR);
-  const eski = oku(ESKI_ANAHTAR);
-  notlar = yeni;
-  for (const [ad, v] of Object.entries(eski)) {
-    if (!v || typeof v !== 'object') continue;
-    const hedef = (notlar[ad] ||= { ad });
-    if (!Array.isArray(hedef.kararlar)) hedef.kararlar = [];
-    // Yeni biçimde bu yol için hiç karar yoksa eski kararı üç örneğe birden uygula.
-    const bosMu = !hedef.kararlar.some(x => x);
-    if (bosMu && v.karar) {
-      hedef.kararlar = Array.from({ length: nOrnek }, () => v.karar);
-      tasinan++;
-    }
-    if (!hedef.not && v.not) hedef.not = v.not;
-    hedef.ad = ad;
-  }
-  if (tasinan) localStorage.setItem(ANAHTAR, JSON.stringify(notlar));
+const tur2 = oku(TUR2_ANAHTAR);
+function tur2Ozet(ad) {
+  const v = tur2[ad];
+  const k = (v && Array.isArray(v.kararlar)) ? v.kararlar.filter(x => x) : [];
+  if (!k.length) return (v && v.not) ? `2. tur notu: “${v.not}”` : '';
+  const geldi = k.filter(x => x === 'iyi').length;
+  return `2. tur: ${geldi}/${k.length} geldi` + ((v && v.not) ? ` · “${v.not}”` : '');
 }
 const kaydet = () => { localStorage.setItem(ANAHTAR, JSON.stringify(notlar)); sayacYaz(); };
-const kararlariAl = (ad, n) => {
+// İki AYRI dizi, ikisi de örnek başına:
+//   kararlar[i] — vurgu geldi mi?  'iyi' | 'idare' | 'kotu' | ''   (üçü birbirini iter)
+//   bekleme[i]  — kelime sonrası bekleme rahatsız etti mi?  true/false (bağımsız)
+// Bu turun sorusu iki başlı: vurgu DURUYOR mu, bekleme GİTTİ mi. Tek düğmeye
+// sıkıştırılırsa hangisi yüzünden "kötü" dediğin kaybolur.
+const dizi = (ad, alan, n, bos) => {
   const k = (notlar[ad] ||= { ad });
-  if (!Array.isArray(k.kararlar)) k.kararlar = [];
-  while (k.kararlar.length < n) k.kararlar.push('');
-  return k.kararlar;
+  if (!Array.isArray(k[alan])) k[alan] = [];
+  while (k[alan].length < n) k[alan].push(bos);
+  return k[alan];
 };
+const kararlariAl = (ad, n) => dizi(ad, 'kararlar', n, '');
+const beklemeAl = (ad, n) => dizi(ad, 'bekleme', n, false);
 const ozetle = (kararlar) => {
   const n = kararlar.length;
   const c = (d) => kararlar.filter(x => x === d).length;
@@ -169,11 +180,10 @@ function sayacYaz() {
   for (const v of Object.values(notlar))
     if (v && Array.isArray(v.kararlar)) n += v.kararlar.filter(x => x).length;
   document.getElementById('sayac').textContent =
-    `${n} / ${toplam} örnek işaretlendi (${toplamYol} yol)` +
-    (tasinan ? ` · eski biçimden ${tasinan} not taşındı` : '');
+    `${n} / ${toplam} örnek işaretlendi (${toplamYol} yol) · ${TUR}. tur`;
 }
 
-yukle(ORNEK);
+notlar = oku(ANAHTAR);
 fetch('out/vurgu_eval.json').then(r => r.json()).then(d => {
   const list = document.getElementById('list');
   const ks = Object.values(d.kosullar);
@@ -182,7 +192,9 @@ fetch('out/vurgu_eval.json').then(r => r.json()).then(d => {
 
   for (const [cid, satirlar] of Object.entries(gruplar)) {
     const taban = satirlar.find(s => s.yol === 'taban');
-    const goster = satirlar.filter(s => !SUNULAN.length || SUNULAN.includes(s.yol));
+    // SUNULAN sırasına göre diz: kıyas zemini (`kombo`) hep en üstte olsun.
+    const goster = satirlar.filter(s => !SUNULAN.length || SUNULAN.includes(s.yol))
+      .sort((a, b) => SUNULAN.indexOf(a.yol) - SUNULAN.indexOf(b.yol));
     toplamYol += goster.length;
     for (const s of goster) toplam += Math.min(ORNEK, s.items.length);
     const det = document.createElement('details');
@@ -211,11 +223,31 @@ function satirEl(s, taban) {
     ? '<span class="rozet taban">atlasta dinlediğin hâl</span>'
     : `<span class="rozet">${esc(s.yol_aciklama || '')}</span>`;
   const werKotu = s.ort_wer > 0.25 || s.bas_yendi > 0 || s.hedef_bulundu < s.n;
+  const t2 = tur2Ozet(s.ad);
+  // Bu turun ASIL sayısı: hedef kelimeden SONRAKİ sessizlik, MUTLAK saniye.
+  // Mutlak değer tek başına yanıltır: `affection`da hedeften sonra zaten VİRGÜL
+  // var, tabanda bile 0.49 s bekleniyor. O yüzden tabanın değeri de yazılır ve
+  // renk TABANA GÖRE FAZLASINA bakar — yolun eklediği bekleme budur.
+  const arka = s.arka_bosluk_s;
+  const arkaTaban = taban ? taban.arka_bosluk_s : null;
+  const fazla = (arka !== null && arka !== undefined
+                 && arkaTaban !== null && arkaTaban !== undefined)
+    ? arka - arkaTaban : null;
+  const arkaSinif = (arka === null || arka === undefined) ? ''
+    : (fazla === null ? '' : (fazla >= 0.15 ? 'bad' : (fazla >= 0.06 ? 'warn' : 'ok')));
   el.innerHTML =
     `<div class="hd"><span class="ad">${esc(s.yol)}</span>${rozet}` +
+    (t2 ? `<span class="rozet taban">${esc(t2)}</span>` : '') +
     `<span class="ozet"></span></div>` +
     `<div class="cumle">${isaretle(s.beklenen, s.hedef)}</div>` +
     `<div class="ham">gönderilen: <code>${esc(s.metin)}</code></div>` +
+    `<div class="bekleme ${arkaSinif}">kelime SONRASI bekleme: ` +
+    `<b>${arka === null || arka === undefined ? '—' : arka.toFixed(3) + ' s'}</b>` +
+    (fazla !== null ? ` (taban ${arkaTaban.toFixed(3)} s → ` +
+      `<b>${fazla >= 0 ? '+' : ''}${fazla.toFixed(3)} s</b> bu yolun eklediği)` : '') +
+    (s.on_bosluk_s !== null && s.on_bosluk_s !== undefined
+      ? `<span class="dim"> · kelime ÖNCESİ ${s.on_bosluk_s.toFixed(3)} s</span>` : '') +
+    `</div>` +
     `<div class="dim${werKotu ? ' warn' : ''}">` +
     (isTaban ? 'kontrast (hedef ÷ geri kalan): ' : 'Δ tabana göre: ') +
     `süre ${isTaban ? '×' + s.sure_orani : say(d('sure_orani'), 2, '')} · ` +
@@ -231,6 +263,7 @@ function satirEl(s, taban) {
   // Kararlar yalnız tarayıcıda (localStorage), sunucuya/dosyaya yazılmıyor.
   const gosterilen = s.items.slice(0, ORNEK);
   const kararlar = kararlariAl(s.ad, gosterilen.length);
+  const bekleme = beklemeAl(s.ad, gosterilen.length);
   const ozetEl = el.querySelector('.ozet');
   const ornekler = document.createElement('div');
   ornekler.className = 'ornekler';
@@ -242,10 +275,12 @@ function satirEl(s, taban) {
     const ek = [];
     if (o.az) ek.push(`${o.az} az`);
     if (o.gelmedi) ek.push(`${o.gelmedi} gelmedi`);
+    const bek = bekleme.filter(Boolean).length;
+    if (bek) ek.push(`${bek} bekleme`);
     if (o.bos) ek.push(`${o.bos} boş`);
-    ozetEl.textContent = (o.bos === o.n) ? 'işaretlenmedi'
+    ozetEl.textContent = (o.bos === o.n && !bek) ? 'işaretlenmedi'
       : `${o.geldi}/${o.n} geldi` + (ek.length ? ` · ${ek.join(' · ')}` : '');
-    el.classList.toggle('isaretli', o.bos < o.n);
+    el.classList.toggle('isaretli', o.bos < o.n || bek > 0);
   }
 
   gosterilen.forEach((it, i) => {
@@ -277,6 +312,23 @@ function satirEl(s, taban) {
       dugmeler[deger] = d;
       satir.appendChild(d);
     }
+
+    // BAĞIMSIZ ikinci soru: kelime bittikten sonraki boşluk rahatsız etti mi?
+    // Vurgu kararından ayrı tutuluyor — "vurgu geldi AMA bekleme bozdu" bu turun
+    // tam olarak çözmeye çalıştığı durum, tek düğmede kaybolur.
+    const bek = document.createElement('button');
+    bek.className = 'mini bekle';
+    bek.textContent = '⏱ bekleme';
+    bek.title = 'kelimeden sonra rahatsız edici boşluk var';
+    if (bekleme[i]) bek.classList.add('sec');
+    bek.onclick = () => {
+      bekleme[i] = !bekleme[i];
+      bek.classList.toggle('sec', bekleme[i]);
+      notlar[s.ad].ad = s.ad;
+      ozetYaz();
+      kaydet();
+    };
+    satir.appendChild(bek);
     ornekler.appendChild(satir);
   });
 
@@ -290,7 +342,7 @@ function satirEl(s, taban) {
   const k = document.createElement('div');
   k.className = 'karar';
   const inp = document.createElement('input');
-  inp.placeholder = 'not (serbest, yol için) — ör. "1 ve 3 geldi, 2 boğuk"';
+  inp.placeholder = 'not (serbest, yol için) — ör. "vurgu duruyor, bekleme gitti"';
   inp.value = notlar[s.ad].not || '';
   inp.oninput = () => { notlar[s.ad].not = inp.value; notlar[s.ad].ad = s.ad; kaydet(); };
   k.appendChild(inp);
@@ -303,28 +355,35 @@ document.getElementById('kopyala').onclick = async () => {
   const cikti = {};
   for (const [ad, v] of Object.entries(notlar)) {
     const kararlar = Array.isArray(v && v.kararlar) ? v.kararlar : [];
-    if (!kararlar.some(x => x) && !(v && v.not)) continue;
+    const bekleme = Array.isArray(v && v.bekleme) ? v.bekleme : [];
+    if (!kararlar.some(x => x) && !bekleme.some(Boolean) && !(v && v.not)) continue;
     const o = ozetle(kararlar);
+    const bek = bekleme.filter(Boolean).length;
     cikti[ad] = {
       ad,
       cumle_id: ad.split('/')[0],
       yol: ad.split('/')[1],
       kararlar,                                   // örnek başına: iyi | idare | kotu | ''
+      bekleme,                                    // örnek başına: true = sonrası boşluk bozdu
       ozet: o.n ? `${o.geldi}/${o.n} geldi` : '—',
-      sayim: { geldi: o.geldi, az: o.az, gelmedi: o.gelmedi, bos: o.bos, toplam: o.n },
+      bekleme_ozet: `${bek}/${bekleme.length || o.n} bekleme`,
+      sayim: { geldi: o.geldi, az: o.az, gelmedi: o.gelmedi, bos: o.bos,
+               bekleme: bek, toplam: o.n },
       not: (v && v.not) || ''
     };
   }
-  const j = JSON.stringify({ tur: 2, biçim: 'örnek başına karar',
+  const j = JSON.stringify({ tur: TUR,
+    biçim: 'örnek başına karar + bağımsız bekleme işareti',
+    soru: 'arkadaki işaret atılınca vurgu duruyor mu, bekleme gidiyor mu',
     tarih: new Date().toISOString(), notlar: cikti }, null, 2);
-  try { await navigator.clipboard.writeText(j); alert('Notlar panoya kopyalandı.'); }
+  try { await navigator.clipboard.writeText(j); alert('3. tur notları panoya kopyalandı.'); }
   catch (e) { prompt('Kopyala:', j); }
 };
 document.getElementById('sil').onclick = () => {
-  if (!confirm('Tüm kulak notların silinsin mi? (eski v1 yedeği de silinir)')) return;
+  // YALNIZ bu turun notlarını siler; 1. ve 2. tur yedekleri olduğu gibi kalır.
+  if (!confirm(`Yalnız ${TUR}. tur notların silinsin mi? (1. ve 2. tur yedekleri kalır)`)) return;
   notlar = {};
   localStorage.removeItem(ANAHTAR);
-  localStorage.removeItem(ESKI_ANAHTAR);
   location.reload();
 };
 </script>
