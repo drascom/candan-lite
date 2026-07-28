@@ -4574,10 +4574,18 @@ if _HAS_LIVEKIT:
             (notlar) açıp 'tanımıyorum' diyebiliyor — oysa ses tanıma (speaker-tap) o an
             kim olduğunu ZATEN biliyor; kimlik yalnız bağlantının ilk turunda (_maybe_greet)
             enjekte ediliyordu, sonraki turlarda kayboluyordu. İLKE: model KARŞILAŞTIRMAZ;
-            worker sonucu enjekte eder, model OKUR. Kapalı/wizard-ortası → dokunma."""
+            worker sonucu enjekte eder, model OKUR.
+
+            GUARD (28 Tem düzeltmesi): eskiden `_enroll_active` iken satır TAMAMEN
+            düşerdi. Kayıt latch'i SICAK kalıyor, ses eşleşmesi TUTMUŞ olsa bile
+            ("[Ayhan]" etiketi) "bu ses X ile eşleşti" sinyali modele HİÇ gitmiyordu;
+            isim taşıyan öbür yollar (_maybe_greet, _personal_memory_note) guard'sız
+            çalıştığı için context'te İSİM VAR ama "TANINDI" YOK → model tanıdığı
+            hâlde "seni tanıyamadım" diyordu (canlı 17:51). Artık susma koşulu
+            "kimlik gerçekten bilinmiyor + kayıt sihirbazı sürüyor"dur."""
             if not self._speaker_state:
                 return text
-            if self._enroll_active:
+            if self._enroll_active and getattr(self._speaker_state, "current", None) is None:
                 return text
             name = getattr(self._speaker_state, "current", None)
             roster = self._speaker_id.names() if self._speaker_id else []
@@ -4590,6 +4598,12 @@ if _HAS_LIVEKIT:
                     f"— konuşmacıyı onlarla KARIŞTIRMA. 'Beni tanıyor musun / ben kimim / "
                     f"adım ne' sorulursa cevap {name}."
                 )
+                if getattr(self, "_enroll_hinted", False):
+                    # Geçmişte kalan <enrollment> kopyası "Bu sesi TANIMIYORSUN"
+                    # diyor ve süreç sıcak olduğu için sonraki turlarda da orada
+                    # duruyordu → model çelişkiyi sürdürüyordu. Tek cümleyle iptal.
+                    note += (" Geçmişteki <enrollment> notu ('bu sesi TANIMIYORSUN')"
+                             " ARTIK GEÇERSİZ.")
             else:
                 note = (
                     "(Sistem — ses tanıma: şu an konuşanın sesi tanınmıyor/kayıtlı değil. "
