@@ -2541,10 +2541,7 @@ if _HAS_LIVEKIT:
             # cümlede isim UYDURULMAZ → speaker-ID'nin bu turdaki adayını veriyoruz
             # (aday yoksa None → genel soru).
             try:
-                state = self._brain._speaker_state
-                decision = getattr(state, "last_turn_decision", None) if state else None
-                truth_check.set_identity_candidate(
-                    getattr(decision, "candidate", None) if decision else None)
+                truth_check.set_identity_candidate(self._brain._publishable_candidate())
             except Exception:  # noqa: BLE001 — aday bulunamazsa genel soru sorulur
                 truth_check.set_identity_candidate(None)
             try:
@@ -4798,6 +4795,36 @@ if _HAS_LIVEKIT:
                 len(windows), decision.accepted, decision.total, decision.reason,
             )
             return f"Pardon, sesinden emin olamadım — sen {cand} {_misin(cand)}?"
+
+        def _publishable_candidate(self) -> Optional[str]:
+            """Dışarıya (truth_check → "X olarak mı kaydedeyim?") YAYINLANACAK isim.
+
+            CANLI (28 Tem 17:56): Ayhan konuşurken "Havi olarak mı kaydedeyim?"
+            soruldu — Havi odada bile değildi (ilk kez 17:59'da geldi). Ham
+            `decision.candidate` eşiksiz yayınlanıyordu. YANLIŞ aday önermek, aday
+            ÖNERMEMEKTEN kötüdür: dalgın bir "evet" notu yanlış kişiye yazar; aday
+            yoksa çağıran taraf zaten genel soruyu sorar.
+
+            Sıra: kesin kimlik (current) → yeterince güçlü aday → None."""
+            state = self._speaker_state
+            if state is None:
+                return None
+            name = getattr(state, "current", None)
+            if name:
+                return name
+            decision = getattr(state, "last_turn_decision", None)
+            cand = getattr(decision, "candidate", None) if decision else None
+            if not cand or cand in self._confirm_denied:
+                return None
+            ratio = float(getattr(decision, "candidate_ratio", 0.0) or 0.0)
+            windows = int(getattr(decision, "candidate_windows", 0) or 0)
+            if ratio < SPEAKER_CANDIDATE_MIN_RATIO or windows < SPEAKER_CANDIDATE_MIN_WINDOWS:
+                logger.info(
+                    "aday YAYINLANMADI: %s zayıf/çelişkili (oran=%.2f<%.2f ya da"
+                    " pencere=%d<%d) → isimsiz genel soru", cand, ratio,
+                    SPEAKER_CANDIDATE_MIN_RATIO, windows, SPEAKER_CANDIDATE_MIN_WINDOWS)
+                return None
+            return cand
 
         def _confirm_bind(self, name: str) -> None:
             """Onaylanan ismi OTURUMA bağla (kardeş yollar `_enroll_new` /
