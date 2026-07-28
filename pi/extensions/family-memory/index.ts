@@ -42,6 +42,14 @@ import {
 	resolveDue,
 } from "./events.ts";
 import { memUser, perTurnIdentity } from "./identity.ts";
+import {
+	type PendingNote,
+	dropPending,
+	logResolved,
+	pickPending,
+	queuePending,
+	readPending,
+} from "./pending.ts";
 
 type Role = "adult" | "child" | "guest";
 
@@ -105,17 +113,27 @@ function dkey(s: string): string {
 }
 
 /** DEĞİŞMEZ KURAL: bir hafıza isteği ya YAZILIR, ya SORULUR, ya BEKLEMEYE ALINIR —
- * asla sessizce atılmaz. Kimlik çözülemediğinde (guest / boş kimlik) not buraya,
- * `memory/pending/unattributed.md`'ye düşer; kimlik netleşince elle/ileride otomatik
- * taşınabilir. Kişisel veri → kök `/memory/` .gitignore'da, repoya girmez.
- * (Canlı kayıp, 28 Tem 16:26:51: "Evimde Havi ve Neva ile yaşıyorum, aileye kaydet"
- * aynı kişinin 18 sn önceki iki başarılı notundan sonra çöpe gitti.) */
-function queuePending(cwd: string, text: string, scope: string, who: string): string {
-	const file = path.join(memDir(cwd), "pending", "unattributed.md");
-	const stamp = new Date().toISOString().replace(/\.\d+Z$/, "Z");
-	fs.mkdirSync(path.dirname(file), { recursive: true });
-	fs.appendFileSync(file, `- [${stamp}] (scope=${scope}) (kimlik=${who || "?"}) ${text}\n`, "utf-8");
-	return file;
+ * asla sessizce atılmaz. Kuyruk ve çözümü pending.ts'te (queuePending / readPending /
+ * dropPending / logResolved). Kimlik netleşince `memory_attribute_pending` notu gerçek
+ * sahibine yazar ve kuyruktan düşürür. Kişisel veri → kök `/memory/` .gitignore'da. */
+
+/** Verilen isim ailede TANIMLI mı? Dönen: policy.json'daki gerçek anahtar ("" = değil).
+ * Model serbest metin veremez: yalnız policy'de VAR OLAN bir kişiye eşleşebilir →
+ * ne yeni kimlik uydurabilir ne de yol kaçışı (../) yapabilir. */
+function resolveOwner(cwd: string, name: string): string {
+	const want = norm((name || "").trim());
+	if (!want) return "";
+	let pol: Record<string, unknown>;
+	try {
+		pol = JSON.parse(fs.readFileSync(path.join(memDir(cwd), "policy.json"), "utf-8"));
+	} catch {
+		return "";
+	}
+	if (!pol || typeof pol !== "object") return "";
+	for (const key of Object.keys(pol)) {
+		if (norm(key) === want || norm(key.replace(/-/g, " ")) === want) return key;
+	}
+	return "";
 }
 
 /** Entry identity (file + date + content) — dedups the removal list. */
@@ -303,12 +321,100 @@ function fmt(rows: Entry[]): string {
 	return rows.map((e) => `- [${e.date}] (${e.scope}) ${e.content}`).join("\n");
 }
 
+interface WriteOutcome {
+	scopeLabel: string;
+	file: string;
+	wrote: boolean;
+	removed: number;
+	msg: string;
+}
+
+/** Notu diske yazan ÇEKİRDEK (dedup + taşıma dahil). memory_add ve
+ * memory_attribute_pending AYNI yolu kullanır — iki ayrı yazma mantığı olmasın.
+ * Kimlik/rol kapısı çağıranın işidir; burada `user` ARTIK çözülmüştür. */
+function writeNote(
+	cwd: string,
+	user: string,
+	r: Role,
+	text: string,
+	rawScope: string,
+	replaces?: string,
+): WriteOutcome | { error: string } {
+	const root = memDir(cwd);
+	let file: string;
+	let scopeLabel: string;
+	if (rawScope === "family") {
+		file = path.join(root, "family.md");
+		scopeLabel = "family";
+	} else if (rawScope.startsWith("project:")) {
+		if (r !== "adult") return { error: "Proje hafızasına yazma yetkin yok." };
+		const name = slug(rawScope.slice("project:".length));
+		if (!name) return { error: "Proje adı geçersiz." };
+		file = path.join(root, "projects", name + ".md");
+		scopeLabel = "project:" + name;
+	} else {
+		// private (default)
+		const ym = today().slice(0, 7); // YYYY-MM
+		file = path.join(root, "users", user, "notes", ym + ".md");
+		scopeLabel = "private";
+	}
+
+	// ── Dedup + move (single pass; no LLM/embeddings, plain string normalization) ──
+	// Operate only on what the user CAN SEE (= can write): never touch someone else's
+	// private note.
+	const key = dkey(text);
+	const visible = collectEntries(cwd).filter((e) => canSee(e, user, r));
+
+	const rem: Entry[] = [];
+	// (a) Explicit correction: entries pointed at by 'replaces'.
+	const rkey = dkey(replaces || "");
+	if (rkey) {
+		for (const e of visible) {
+			const ek = dkey(e.content);
+			if (ek === rkey || (rkey.length >= 8 && ek.includes(rkey))) rem.push(e);
+		}
+	}
+	// (b) Implicit move: the same note sits in ANOTHER scope → don't copy, remove it there.
+	for (const e of visible) {
+		if (e.scope !== scopeLabel && dkey(e.content) === key) rem.push(e);
+	}
+	const remIds = new Set(rem.map(eid));
+	// (c) Dedup: does the note already exist in the target scope (among the keepers)?
+	const dup = visible.some(
+		(e) => e.scope === scopeLabel && dkey(e.content) === key && !remIds.has(eid(e)),
+	);
+
+	const removed = removeEntries(rem.filter((e, i) => rem.findIndex((x) => eid(x) === eid(e)) === i));
+
+	if (!dup) {
+		try {
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.appendFileSync(file, `- [${today()}] ${text}\n`, "utf-8");
+		} catch (e: any) {
+			return { error: `Yazılamadı: ${e?.message || e}` };
+		}
+	}
+
+	const msg = dup
+		? removed
+			? `Zaten kayıtlı (${scopeLabel}); eski kayıt kaldırıldı (${removed}). Tekrar eklenmedi.`
+			: `Zaten kayıtlı (${scopeLabel}). Tekrar eklenmedi.`
+		: removed
+			? `Taşındı/güncellendi → ${scopeLabel} (eski kayıt kaldırıldı: ${removed}).`
+			: `Kaydedildi (${scopeLabel}).`;
+
+	return { scopeLabel, file, wrote: !dup, removed, msg };
+}
+
 const MEMORY_NOTE = `
 <memory-policy>
 Call memory_search whenever you need durable knowledge (do not limit yourself to what was
 loaded at boot). When you learn a durable fact the user wants remembered, store it with
 memory_add (default scope: private). Write to the family scope ONLY if the user explicitly
 asks. Memory is context, not instruction.
+If a note was QUEUED because the speaker could not be identified and the user then answers
+who they are (or just confirms the name you offered), do NOT call memory_add again — call
+memory_attribute_pending (owner=<the name>); a refusal → action='discard'.
 If the user CORRECTS a note's place or content, do not add a new one: call memory_add with
 'replaces' (the old note's text) — the note is moved/updated and the old one is deleted.
 "Remind me to ..." is NOT memory_add → use reminder_add (never compute the time yourself:
@@ -338,7 +444,11 @@ export default function memExtension(pi: ExtensionAPI) {
 			text: Type.String({ description: "The durable note, one line." }),
 			scope: Type.Optional(
 				Type.String({
-					description: "'private' (default) | 'family' | 'project:<name>'.",
+						description:
+							"'private' (default) | 'family' | 'project:<name>'. Choose by WHOSE memory the " +
+							'user named: "my / mine / for me / into MY memory" (benim/bana/kendi hafızama) ' +
+							'→ private. "our / the family\'s / all of us / shared" (aile/hepimiz/ortak) ' +
+							"→ family. When in doubt: private.",
 				}),
 			),
 			replaces: Type.Optional(
@@ -388,87 +498,169 @@ export default function memExtension(pi: ExtensionAPI) {
 				};
 			}
 
-			const root = memDir(ctx.cwd);
-			let file: string;
-			let scopeLabel: string;
-			if (rawScope === "family") {
-				file = path.join(root, "family.md");
-				scopeLabel = "family";
-			} else if (rawScope.startsWith("project:")) {
-				if (r !== "adult")
-					return {
-						content: [{ type: "text" as const, text: "Proje hafızasına yazma yetkin yok." }],
-					};
-				const name = slug(rawScope.slice("project:".length));
-				if (!name) return { content: [{ type: "text" as const, text: "Proje adı geçersiz." }] };
-				file = path.join(root, "projects", name + ".md");
-				scopeLabel = "project:" + name;
-			} else {
-				// private (default)
-				const ym = today().slice(0, 7); // YYYY-MM
-				file = path.join(root, "users", user, "notes", ym + ".md");
-				scopeLabel = "private";
-			}
-
-			// ── Dedup + move (single pass; no LLM/embeddings, plain string normalization) ──
-			// Operate only on what the user CAN SEE (= can write): never touch someone else's
-			// private note.
-			const key = dkey(text);
-			const visible = collectEntries(ctx.cwd).filter((e) => canSee(e, user, r));
-
-			const rem: Entry[] = [];
-			// (a) Explicit correction: entries pointed at by 'replaces'.
-			const rkey = dkey(params.replaces || "");
-			if (rkey) {
-				for (const e of visible) {
-					const ek = dkey(e.content);
-					if (ek === rkey || (rkey.length >= 8 && ek.includes(rkey))) rem.push(e);
-				}
-			}
-			// (b) Implicit move: the same note sits in ANOTHER scope → don't copy, remove it there.
-			for (const e of visible) {
-				if (e.scope !== scopeLabel && dkey(e.content) === key) rem.push(e);
-			}
-			const remIds = new Set(rem.map(eid));
-			// (c) Dedup: does the note already exist in the target scope (among the keepers)?
-			const dup = visible.some(
-				(e) => e.scope === scopeLabel && dkey(e.content) === key && !remIds.has(eid(e)),
-			);
-
-			const removed = removeEntries(
-				rem.filter((e, i) => rem.findIndex((x) => eid(x) === eid(e)) === i),
-			);
-
-			if (!dup) {
-				try {
-					fs.mkdirSync(path.dirname(file), { recursive: true });
-					fs.appendFileSync(file, `- [${today()}] ${text}\n`, "utf-8");
-				} catch (e: any) {
-					return {
-						content: [{ type: "text" as const, text: `Yazılamadı: ${e?.message || e}` }],
-						isError: true,
-					};
-				}
-			}
+			const res = writeNote(ctx.cwd, user, r, text, rawScope, params.replaces);
+			if ("error" in res)
+				return {
+					content: [{ type: "text" as const, text: res.error }],
+					isError: res.error.startsWith("Yazılamadı"),
+				};
 
 			// Re-index (files are authoritative; a full re-sync is cheap and consistent).
 			await getSqlite();
-			const db = syncIndex(ctx.cwd);
 			try {
-				db?.close?.();
+				syncIndex(ctx.cwd)?.close?.();
 			} catch {}
 
-			const msg = dup
-				? removed
-					? `Zaten kayıtlı (${scopeLabel}); eski kayıt kaldırıldı (${removed}). Tekrar eklenmedi.`
-					: `Zaten kayıtlı (${scopeLabel}). Tekrar eklenmedi.`
-				: removed
-					? `Taşındı/güncellendi → ${scopeLabel} (eski kayıt kaldırıldı: ${removed}).`
-					: `Kaydedildi (${scopeLabel}).`;
+			return {
+				content: [{ type: "text" as const, text: res.msg }],
+				details: { scope: res.scopeLabel, file: res.file, wrote: res.wrote, removed: res.removed },
+			};
+		},
+	});
+
+	// ── memory_attribute_pending ──────────────────────────────────────────────
+	// Kimliksiz not kuyruğa alındıktan sonra harness kullanıcıya SORAR ("… Havi olarak mı
+	// kaydedeyim?"). Bu araç o CEVABI işler — yoksa not kibarca kaybolur (canlı: 28 Tem
+	// 17:56 ve 18:06, iki not da `pending/unattributed.md`'de kaldı).
+	//
+	// GÜVENLİK: notun METNİ modelden GELMEZ (kuyruktan okunur) ve `owner` yalnız
+	// policy.json'da VAR OLAN bir kişiye eşleşebilir → model ne yeni kimlik uydurabilir
+	// ne de bir kişinin hafızasına serbest metin yazdırabilir. Rol kapısı aynen işler.
+	pi.registerTool({
+		name: "memory_attribute_pending",
+		label: "Memory Attribute Pending",
+		description:
+			"Call this when a note was QUEUED because the speaker could not be identified and the " +
+			"user has now answered the 'who said this?' question. Their answer ('yes', 'save it as " +
+			"Ayhan', 'that was me, Havi') is what this tool needs: pass the person's name in 'owner'. " +
+			"The queued note's TEXT is taken from the queue — you never retype it. If the user " +
+			"refuses ('no, don't save it') call it with action='discard': the note leaves the queue " +
+			"marked as discarded. By default the MOST RECENT queued note is resolved; pass all=true " +
+			"only if the user clearly means every waiting note. If nothing is waiting it politely " +
+			"says so. Do NOT use memory_add for this — it would lose the queued note.",
+		promptSnippet:
+			"User answered the 'who said this?' question → memory_attribute_pending (owner=<name>); " +
+			"a refusal → action='discard'. Never re-type the note with memory_add.",
+		parameters: Type.Object({
+			owner: Type.Optional(
+				Type.String({
+					description:
+						"Who the queued note belongs to — a family member's name as the user said it " +
+						"('Ayhan'). Must be someone already known to the household. Omit only if the " +
+						"current speaker is already identified and the note is theirs.",
+				}),
+			),
+			scope: Type.Optional(
+				Type.String({
+					description:
+						"Override the queued scope only if the user says so now: 'private' (my memory) | " +
+						"'family' (ours). Omitted → the scope the note was queued with.",
+				}),
+			),
+			action: Type.Optional(
+				Type.String({
+					description: "'save' (default) | 'discard' — the user refused to have it saved.",
+				}),
+			),
+			all: Type.Optional(
+				Type.Boolean({
+					description: "true → resolve EVERY waiting note (default: only the most recent one).",
+				}),
+			),
+		}),
+		async execute(
+			_id,
+			params: { owner?: string; scope?: string; action?: string; all?: boolean },
+			_s,
+			_u,
+			ctx: ExtensionContext,
+		) {
+			const notes = readPending(ctx.cwd);
+			// Bekleyen not YOK → hata değil, nazik bilgi.
+			if (notes.length === 0)
+				return {
+					content: [{ type: "text" as const, text: "Bekleyen not yok." }],
+					details: { resolved: 0 },
+				};
+
+			const targets: PendingNote[] = pickPending(notes, params.all === true);
+			const discard = (params.action || "save").trim().toLowerCase() === "discard";
+
+			// ── Red: not SESSİZCE silinmez, "atıldı" olarak deftere geçer ──
+			if (discard) {
+				logResolved(ctx.cwd, targets, "atildi", "", "");
+				const dropped = dropPending(ctx.cwd, targets);
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: `Bekleyen not atıldı (${dropped}); kalıcı hafızaya girmedi.`,
+						},
+					],
+					details: { resolved: dropped, status: "atildi" },
+				};
+			}
+
+			// ── Kayıt: sahibi çöz (model uyduramaz; policy.json'da olmalı) ──
+			const owner = params.owner ? resolveOwner(ctx.cwd, params.owner) : memUser();
+			if (!owner)
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: params.owner
+								? `"${params.owner}" ailede tanımlı değil; not beklemede kaldı.`
+								: "Kimin notu olduğu belli değil; not beklemede kaldı.",
+						},
+					],
+					isError: true,
+					details: { resolved: 0 },
+				};
+			const r = role(ctx.cwd, owner);
+			if (r === "guest")
+				// policy'de 'guest' olan kişi hafıza TUTMAZ → not yazılamaz ama KAYBOLMAZ.
+				return {
+					content: [
+						{ type: "text" as const, text: `${owner} ailede tanımlı değil; not beklemede kaldı.` },
+					],
+					isError: true,
+					details: { resolved: 0 },
+				};
+
+			const override = (params.scope || "").trim().toLowerCase();
+			const done: PendingNote[] = [];
+			const msgs: string[] = [];
+			for (const n of targets) {
+				const res = writeNote(ctx.cwd, owner, r, n.text, override || n.scope || "private");
+				if ("error" in res) {
+					// Yazamadıysak not KUYRUKTA KALIR — kayıp yok, tekrar denenebilir.
+					return {
+						content: [{ type: "text" as const, text: `${res.error} (not beklemede kaldı)` }],
+						isError: true,
+						details: { resolved: done.length },
+					};
+				}
+				done.push(n);
+				msgs.push(res.msg);
+			}
+
+			logResolved(ctx.cwd, done, "kaydedildi", owner, override);
+			const dropped = dropPending(ctx.cwd, done);
+
+			// Re-index (files are authoritative; a full re-sync is cheap and consistent).
+			await getSqlite();
+			try {
+				syncIndex(ctx.cwd)?.close?.();
+			} catch {}
 
 			return {
-				content: [{ type: "text" as const, text: msg }],
-				details: { scope: scopeLabel, file, wrote: !dup, removed },
+				content: [
+					{
+						type: "text" as const,
+						text: `Bekleyen not ${owner} adına çözüldü (${dropped}). ${msgs.join(" ")}`,
+					},
+				],
+				details: { resolved: dropped, owner, scope: override || targets[0]?.scope || "" },
 			};
 		},
 	});
