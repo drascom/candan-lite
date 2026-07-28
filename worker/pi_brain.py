@@ -2454,6 +2454,16 @@ if _HAS_LIVEKIT:
             # (_pending_mode) — "geçtim" demesi doğrudur. Çağrılmadıysa aktif mod
             # (_mode) geçerlidir. İkisi de worker'ın bildiği deterministik durum.
             mode = self._brain._pending_mode or self._brain._mode
+            # Kimlik çözülemeden gelen not BEKLEMEYE alınır; harness'ın soracağı
+            # cümlede isim UYDURULMAZ → speaker-ID'nin bu turdaki adayını veriyoruz
+            # (aday yoksa None → genel soru).
+            try:
+                state = self._brain._speaker_state
+                decision = getattr(state, "last_turn_decision", None) if state else None
+                truth_check.set_identity_candidate(
+                    getattr(decision, "candidate", None) if decision else None)
+            except Exception:  # noqa: BLE001 — aday bulunamazsa genel soru sorulur
+                truth_check.set_identity_candidate(None)
             try:
                 line, ask_llm = truth_check.decide(
                     ledger, said, mode=mode, speed=self._speed_before,

@@ -94,6 +94,11 @@ _FAIL_VERB_DEFAULT = "Bunu yapamadım"
 # "Zaten kayıtlı (private). Tekrar eklenmedi." dönebilir: listede "eklenmedi" YOK,
 # olmamalı. Aynı şekilde "Kaydedildi (private)." ile "kaydedilmedi" alt-dize olarak
 # eşleşmez. Yeni işaret eklerken bunu koru.
+#
+# ÖNCELİK: "beklemeye alindi" (kimlik çözülemedi → not KUYRUĞA alındı) tablodan ÖNCE
+# bakılır; gerekçesi sabit değil, eldeki adaya göre üretilir (bkz. `_pending_reason`).
+_PENDING_MARKER = "beklemeye alindi"
+
 _FAIL_MARKERS: tuple[tuple[str, str], ...] = (
     ("guest:", "seni henüz tanımıyorum"),
     ("kaydedilmedi", "hafızaya erişemiyorum"),
@@ -116,6 +121,28 @@ _FAIL_MARKERS: tuple[tuple[str, str], ...] = (
 )
 _FAIL_REASON_DEFAULT = "bir hata oldu"
 
+# Kimlik çözülemeden gelen notun ADAYI (speaker-ID'nin o turdaki adayı). Worker
+# `set_identity_candidate()` ile tazeler; model bu kanala DOKUNAMAZ. İsim UYDURULMAZ:
+# aday yoksa cümle genel sorar.
+_identity_candidate: Optional[str] = None
+
+
+def set_identity_candidate(name: Optional[str]) -> None:
+    """Bu turun kimlik ADAYI (varsa). Boş/None → genel soru."""
+    global _identity_candidate  # noqa: PLW0603 — modül-düzeyi ayar (reload_settings deseni)
+    _identity_candidate = (name or "").strip() or None
+
+
+def _pending_reason() -> str:
+    """Not atılmadı, beklemede — kullanıcıya SORULAN gerekçe cümlesi.
+
+    "Kaydedemedim, seni henüz tanımıyorum." bir ÇIKMAZDI: kullanıcı ne yapacağını
+    bilemiyordu. Not artık kuyrukta; tek eksik kimlik → onu SORUYORUZ."""
+    cand = _identity_candidate
+    if cand:
+        return f"bunu kimin söylediğini çıkaramadım — {cand} olarak mı kaydedeyim?"
+    return "bunu kimin söylediğini çıkaramadım — kim olduğunu söyler misin?"
+
 
 def fail_reason(result: str, is_error: bool) -> Optional[str]:
     """Sonuç bir BAŞARISIZLIK mı? Öyleyse kullanıcıya söylenecek kısa gerekçe.
@@ -124,6 +151,8 @@ def fail_reason(result: str, is_error: bool) -> Optional[str]:
     işaretleri okunur çünkü extension'lar bazı retleri `isError`'SIZ döner
     (canlı vaka: `memory_add` → "guest: hafıza yok, kaydedilmedi.")."""
     low = fold(result)
+    if _PENDING_MARKER in low:
+        return _pending_reason()
     for marker, reason in _FAIL_MARKERS:
         if marker in low:
             return reason
@@ -133,8 +162,12 @@ def fail_reason(result: str, is_error: bool) -> Optional[str]:
 
 
 def failure_line(name: str, reason: str) -> str:
-    """Harness'ın SÖYLEYECEĞİ tek cümle. Sesli asistan → KISA."""
-    return f"{_FAIL_VERB.get(name, _FAIL_VERB_DEFAULT)}, {reason}."
+    """Harness'ın SÖYLEYECEĞİ tek cümle. Sesli asistan → KISA.
+
+    Gerekçe zaten noktalamayla bitiyorsa (kimlik SORUSU '?' ile biter) nokta
+    eklenmez — "…kaydedeyim?." olmaz."""
+    line = f"{_FAIL_VERB.get(name, _FAIL_VERB_DEFAULT)}, {reason}"
+    return line if line.endswith((".", "?", "!")) else line + "."
 
 
 # ── Kelime listesi: "başarıyla yaptım" iddiası (deterministik, bedava) ───────
@@ -641,6 +674,7 @@ __all__ = [
     "has_claim_phrase",
     "mode_claim",
     "parse_verdict",
+    "set_identity_candidate",
     "soft_record_claim",
     "speed_claim",
     "speed_line",

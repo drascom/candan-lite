@@ -104,6 +104,20 @@ function dkey(s: string): string {
 		.trim();
 }
 
+/** DEĞİŞMEZ KURAL: bir hafıza isteği ya YAZILIR, ya SORULUR, ya BEKLEMEYE ALINIR —
+ * asla sessizce atılmaz. Kimlik çözülemediğinde (guest / boş kimlik) not buraya,
+ * `memory/pending/unattributed.md`'ye düşer; kimlik netleşince elle/ileride otomatik
+ * taşınabilir. Kişisel veri → kök `/memory/` .gitignore'da, repoya girmez.
+ * (Canlı kayıp, 28 Tem 16:26:51: "Evimde Havi ve Neva ile yaşıyorum, aileye kaydet"
+ * aynı kişinin 18 sn önceki iki başarılı notundan sonra çöpe gitti.) */
+function queuePending(cwd: string, text: string, scope: string, who: string): string {
+	const file = path.join(memDir(cwd), "pending", "unattributed.md");
+	const stamp = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	fs.appendFileSync(file, `- [${stamp}] (scope=${scope}) (kimlik=${who || "?"}) ${text}\n`, "utf-8");
+	return file;
+}
+
 /** Entry identity (file + date + content) — dedups the removal list. */
 function eid(e: Entry): string {
 	return `${e.mpath}|${e.date}|${e.content}`;
@@ -344,13 +358,36 @@ export default function memExtension(pi: ExtensionAPI) {
 		) {
 			const user = memUser();
 			const r = role(ctx.cwd, user);
-			if (!user || r === "guest")
-				return { content: [{ type: "text" as const, text: "guest: hafıza yok, kaydedilmedi." }] };
 
 			const text = (params.text || "").trim().replace(/\s+/g, " ");
 			if (!text) return { content: [{ type: "text" as const, text: "Boş not yazılmadı." }] };
 
 			const rawScope = (params.scope || "private").trim().toLowerCase();
+
+			// Kimlik yok/guest → NOTU ATMA: beklemeye al (bkz. queuePending). Harness
+			// (truth_check) bu sonucu görünce kullanıcıya kimliği SORAN cümleyi söyler.
+			if (!user || r === "guest") {
+				try {
+					queuePending(ctx.cwd, text, rawScope, user);
+				} catch (e: any) {
+					return {
+						content: [
+							{ type: "text" as const, text: `Beklemeye alınamadı: ${e?.message || e}` },
+						],
+						isError: true,
+					};
+				}
+				return {
+					content: [
+						{
+							type: "text" as const,
+							text: "Kimlik çözülemedi: not beklemeye alındı (pending/unattributed.md).",
+						},
+					],
+					isError: true,
+				};
+			}
+
 			const root = memDir(ctx.cwd);
 			let file: string;
 			let scopeLabel: string;
