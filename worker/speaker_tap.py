@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 from livekit import rtc
 
+import prosody
 from speaker_id import SpeakerID, emb_to_bytes, pcm_to_f32
 from log_utils import DedupeFilter
 
@@ -92,7 +93,15 @@ class SessionEmbLog:
     ⚠️ BİYOMETRİK: embedding biyometrik veridir, depo PUBLIC. Dosyalar
     `worker/data/` altına yazılır (`.gitignore`'da), log'a/transkripte ASLA
     embedding basılmaz ve TTL süresi dolan dosyalar açılışta silinir.
+
+    ŞEMA 2 (28 Tem): akış alanları eklendi. `t_rel` (pencerenin tur başına ofseti),
+    `track_id`, `capture_ok`, tur kararı (`turn_final_name/reason`) ve `prosody.py`
+    öznitelikleri. Bunların hiçbiri ham ses SAKLANMADAN sonradan üretilemez;
+    eklenmezse bugüne kadar toplanan veri akış analizi için ölüdür. Eski dosyalar
+    bu alanları içermez → okuma tarafı `schema_version`'a bakmalıdır.
     """
+
+    SCHEMA_VERSION = 2
 
     def __init__(self) -> None:
         # DİKKAT (DEVIR §7, `c9d0d27`): env modül seviyesinde okunursa `.env`
@@ -108,6 +117,9 @@ class SessionEmbLog:
         self.session_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
         self.path = self.dir / f"{self.session_id}.npz"
         self._rows: list[tuple] = []
+        # tur numarası → (karar adı, gerekçe). Pencereler tur BİTMEDEN yazıldığı
+        # için karar sonradan eşlenir (bkz. `_write`). Sözlük tur başına tek satır.
+        self._turn_decisions: dict[int, tuple[str, str]] = {}
         self._dim: int | None = None
         self._pending = 0  # henüz diske yazılmamış satır sayısı
         self._swept = False
@@ -119,6 +131,23 @@ class SessionEmbLog:
     def pending(self) -> int:
         return self._pending
 
+    def note_turn_decision(self, turn: int, decision) -> None:
+        """Bir turun NİHAİ kararını eşle. Salt gözlem; kararı okur, üretmez.
+
+        `resolve_turn()` sonrası çağrılır. Bu iki alan olmadan "%70.5 Bilinmeyen"
+        metriği toplanan veriden offline ÜRETİLEMEZ — pencere satırlarında turun
+        nasıl bittiği yazmıyordu.
+        """
+        if not self.enabled:
+            return
+        try:
+            row = (str(getattr(decision, "name", None) or ""), str(getattr(decision, "reason", "")))
+            if self._turn_decisions.get(int(turn)) != row:
+                self._turn_decisions[int(turn)] = row
+                self._pending += 1  # dosya yeniden yazılsın
+        except Exception as e:  # noqa: BLE001 — ölçüm ASLA akışı bozmasın
+            log.debug("gölge tur kararı atlandı: %s", e)
+
     def add(
         self,
         *,
@@ -128,6 +157,10 @@ class SessionEmbLog:
         ranking: list[tuple[str, float]],
         window_seconds: float,
         rms: float,
+        t_rel: float = float("nan"),
+        track_id: int = -1,
+        capture_ok: int = -1,
+        features: dict | None = None,
     ) -> None:
         """Bir pencereyi tampona ekle. ASLA yükselmez, ASLA disk'e dokunmaz."""
         if not self.enabled:
@@ -151,6 +184,8 @@ class SessionEmbLog:
                 str(best_name), float(best_score),
                 str(second_name), float(second_score),
                 float(window_seconds), float(rms), str(decided or ""),
+                float(t_rel), int(track_id), int(capture_ok),
+                features if isinstance(features, dict) else {},
             ))
             self._pending += 1
         except Exception as e:  # noqa: BLE001 — ölçüm ASLA akışı bozmasın
@@ -161,35 +196,54 @@ class SessionEmbLog:
         if not self.enabled or self._pending <= 0:
             return
         rows = list(self._rows)  # anlık görüntü: `add` paralel ekleyebilir
+        decisions = dict(self._turn_decisions)
         self._pending = 0
         try:
-            await asyncio.to_thread(self._write, rows)
+            await asyncio.to_thread(self._write, rows, decisions)
         except Exception as e:  # noqa: BLE001
             log.debug("gölge embedding yazımı başarısız: %s", e)
 
-    def _write(self, rows: list[tuple]) -> None:
+    def _write(self, rows: list[tuple], decisions: dict[int, tuple[str, str]] | None = None) -> None:
         """Thread içinde çalışır. Atomik: geçici dosya + `os.replace`."""
         if not rows:
             return
+        decisions = decisions or {}
         self.dir.mkdir(parents=True, exist_ok=True)
         if not self._swept:
             self._swept = True
             self._sweep()
+        empty: dict = {}
+        cols = {
+            "schema_version": np.array(self.SCHEMA_VERSION, dtype=np.int16),
+            "ts": np.array([r[0] for r in rows], dtype=np.float64),
+            "turn": np.array([r[1] for r in rows], dtype=np.int32),
+            "emb": np.stack([r[2] for r in rows]),
+            "best_name": np.array([r[3] for r in rows]),
+            "best_score": np.array([r[4] for r in rows], dtype=np.float32),
+            "second_name": np.array([r[5] for r in rows]),
+            "second_score": np.array([r[6] for r in rows], dtype=np.float32),
+            "window_seconds": np.array([r[7] for r in rows], dtype=np.float32),
+            "rms": np.array([r[8] for r in rows], dtype=np.float32),
+            "decided": np.array([r[9] for r in rows]),
+            # AKIŞ: `t_rel` olmadan pencereler tur içinde sırasız bir yığın olur.
+            "t_rel": np.array([r[10] for r in rows], dtype=np.float32),
+            "track_id": np.array([r[11] for r in rows], dtype=np.int16),
+            "capture_ok": np.array([r[12] for r in rows], dtype=np.int8),
+            "turn_final_name": np.array([decisions.get(r[1], ("", ""))[0] for r in rows]),
+            "turn_final_reason": np.array([decisions.get(r[1], ("", ""))[1] for r in rows]),
+        }
+        for name in prosody.SCALAR_FIELDS:
+            cols[name] = np.array(
+                [float((r[13] or empty).get(name, np.nan)) for r in rows], dtype=np.float16
+            )
+        for name, size in prosody.VECTOR_FIELDS.items():
+            cols[name] = np.stack([
+                np.asarray((r[13] or empty).get(name, np.full(size, np.nan)), dtype=np.float16)
+                for r in rows
+            ])
         tmp = self.dir / f".{self.session_id}.tmp.npz"
         with open(tmp, "wb") as f:
-            np.savez(
-                f,
-                ts=np.array([r[0] for r in rows], dtype=np.float64),
-                turn=np.array([r[1] for r in rows], dtype=np.int32),
-                emb=np.stack([r[2] for r in rows]),
-                best_name=np.array([r[3] for r in rows]),
-                best_score=np.array([r[4] for r in rows], dtype=np.float32),
-                second_name=np.array([r[5] for r in rows]),
-                second_score=np.array([r[6] for r in rows], dtype=np.float32),
-                window_seconds=np.array([r[7] for r in rows], dtype=np.float32),
-                rms=np.array([r[8] for r in rows], dtype=np.float32),
-                decided=np.array([r[9] for r in rows]),
-            )
+            np.savez(f, **cols)
         os.replace(tmp, self.path)
 
     def _sweep(self) -> None:
@@ -349,6 +403,14 @@ class SpeakerState:
     def turn_active(self) -> bool:
         """Whether a user turn is currently collecting speaker evidence."""
         return self._turn_active
+
+    @property
+    def turn_started_at(self) -> float:
+        """Aktif turun `time.monotonic()` başlangıcı — gölge kaydın `t_rel`'i için.
+
+        Salt okuma; karar mantığı bu değeri yalnız `resolve_turn()` içinde kullanır.
+        """
+        return self._turn_started_at
 
     @property
     def turn_generation(self) -> int:
@@ -578,6 +640,12 @@ class SpeakerTap:
         # Turlar arası akış hiç oluşmazsa (arka arkaya konuşma) tamponu boşaltacak
         # emniyet valfi. 1 pencere/sn ile bu ~8 dk kesintisiz tek tur demektir.
         self._emb_log_max_pending = _i("SPEAKER_EMB_LOG_FLUSH_EVERY", 512)
+        # Prozodi hesabı ayrı kolla kapatılabilir (varsayılan AÇIK). Ölçüldü:
+        # 1.5 sn'lik pencerede ~1.0 ms — embed'in (20-40 ms) yanında görünmez.
+        self._prosody_enabled = _b("SPEAKER_EMB_LOG_PROSODY", True)
+        # Çok mikrofonlu odada pencereleri ayırmak için track başına küçük sayı.
+        # Sonradan TÜRETİLEMEZ: npz'de track kimliği hiç yoktu.
+        self._track_ids: dict[str, int] = {}
 
     async def _maybe_learn(self, name: str, emb) -> None:
         """Güvenli tanımada örnek ekle (kapalıysa / kota dolduysa no-op).
@@ -655,6 +723,8 @@ class SpeakerTap:
         buf = bytearray()
         bytes_since_window = 0
         seen_turn_generation = self._state.turn_generation
+        track_id = self._track_ids.setdefault(key, len(self._track_ids))
+        noted_turn = -1
         log.info("speaker-tap: track dinleniyor (%s)", key)
         try:
             async for event in stream:
@@ -671,6 +741,14 @@ class SpeakerTap:
                 if not self._state.turn_active:
                     # TURLAR ARASI = yazım için doğru an: kanıt toplanmıyor,
                     # gecikmesi konuşmaya yansıyacak hiçbir iş yok.
+                    # Tur burada KAPALI olduğuna göre `resolve_turn()` çalışmış ve
+                    # `last_turn_decision` bu üretim numarasına aittir — kararı
+                    # pencerelere eşlemek için tek ihtiyacımız olan an bu.
+                    if turn_generation != noted_turn:
+                        noted_turn = turn_generation
+                        self._emb_log.note_turn_decision(
+                            turn_generation, self._state.last_turn_decision
+                        )
                     await self._emb_log.maybe_flush()
                     continue
                 buf.extend(payload)
@@ -690,6 +768,9 @@ class SpeakerTap:
                     if rms < self._vad_rms:
                         log.debug("speaker-tap: sessiz pencere atlandı (rms=%.4f)", rms)
                         continue
+                    # AKIŞ: pencerenin turun başlangıcına göre ofseti. EMBED'DEN
+                    # ÖNCE alınır — embed'in 20-40 ms'i ofsete karışmasın.
+                    window_at = time.monotonic()
                     emb = await asyncio.to_thread(
                         self._sp.embed_samples, samples, TAP_RATE
                     )
@@ -715,19 +796,6 @@ class SpeakerTap:
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)
                     continue
-                # GÖLGE KAYIT — salt gözlem. Reddedilen (name=None) pencereler de
-                # yazılır; hızlı yolun ürettiği vektör TEKRAR EMBED EDİLMEDEN
-                # kullanılır ve bu satır diske dokunmaz (yalnız RAM tamponu).
-                self._emb_log.add(
-                    turn=self._state.turn_generation,
-                    embedding=emb,
-                    decided=name,
-                    ranking=ranking,
-                    window_seconds=len(chunk) / 2.0 / TAP_RATE,
-                    rms=rms,
-                )
-                if self._emb_log.pending >= self._emb_log_max_pending:
-                    await self._emb_log.maybe_flush()
                 # Artımlı öğrenme (default kapalı): yüksek güvenli tanımada centroid'i besle.
                 if name is not None and score >= self._learn_min:
                     await self._maybe_learn(name, emb)
@@ -739,6 +807,32 @@ class SpeakerTap:
                     capture_ok=self._state.last_embedding_capture_ok is not False,
                     embedding=emb,
                 )
+                # `observe`'un GÖRDÜĞÜ değer (arada await yok) — gölge kayda aynısı.
+                capture_ok_flag = self._state.last_embedding_capture_ok
+                # GÖLGE KAYIT — salt gözlem, KARARDAN SONRA. Reddedilen (name=None)
+                # pencereler de yazılır; hızlı yolun ürettiği vektör TEKRAR EMBED
+                # EDİLMEDEN kullanılır ve bu satır diske dokunmaz (yalnız RAM).
+                # Prozodi `to_thread`'de: olay döngüsü ~1 ms bile bloklanmasın ve
+                # `observe()`'un zaman damgası bu hesaptan ETKİLENMESİN.
+                features = None
+                if self._prosody_enabled and self._emb_log.enabled:
+                    features = await asyncio.to_thread(
+                        prosody.window_features, samples, TAP_RATE
+                    )
+                self._emb_log.add(
+                    turn=self._state.turn_generation,
+                    embedding=emb,
+                    decided=name,
+                    ranking=ranking,
+                    window_seconds=len(chunk) / 2.0 / TAP_RATE,
+                    rms=rms,
+                    t_rel=window_at - self._state.turn_started_at,
+                    track_id=track_id,
+                    capture_ok=-1 if capture_ok_flag is None else int(bool(capture_ok_flag)),
+                    features=features,
+                )
+                if self._emb_log.pending >= self._emb_log_max_pending:
+                    await self._emb_log.maybe_flush()
         except asyncio.CancelledError:
             raise
         except Exception as e:  # noqa: BLE001
@@ -750,4 +844,10 @@ class SpeakerTap:
         for t in self._tasks.values():
             t.cancel()
         self._tasks.clear()
+        # Son turun kararı turlar-arası akış hiç gelmeden kapanışa denk gelebilir.
+        # Tur HÂLÂ açıksa karar yok demektir — yarım karar yazmayız.
+        if not self._state.turn_active:
+            self._emb_log.note_turn_decision(
+                self._state.turn_generation, self._state.last_turn_decision
+            )
         await self._emb_log.maybe_flush()  # oturumun son pencereleri kaybolmasın
