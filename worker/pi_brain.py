@@ -721,6 +721,36 @@ SPEAKER_CONFIRM_MIN_WINDOWS = int(
 # "Evet" cevabında profile eklenecek EN FAZLA pencere (en iyi skorlular).
 SPEAKER_LEARN_MAX_PER_TURN = int(
     os.environ.get("SPEAKER_LEARN_MAX_PER_TURN", "3") or 3)
+# ── Onayın GEÇERLİLİĞİ: "evet" NE ZAMAN onaydır? ────────────────────────────
+# CANLI ZEHİRLENME (28 Tem 18:06): kullanıcı "Neden ayırt edemiyor sesi?" diye
+# YAKINIRKEN harness "sen Havi misin?" diye sordu; 1 sn sonra gelen "Evet. Evet."
+# (soru daha seslendirilmeden söylenmiş kendi sözü) ONAY sayıldı → Havi profiline
+# 2 yabancı örnek yazıldı, oturum yanlış kimliğe bağlandı. Üç kapı:
+#   1) cevap KISA olmalı — içinde "evet" geçen serbest cümle/yakınma onay DEĞİLDİR,
+#   2) soru sorulduktan en az MIN_LAG sonra gelmeli (soruyu duymadan verilen
+#      cevap, cevap değildir),
+#   3) TTL içinde kalmalı — bekleyen onay bağlamının ÖMRÜ var (tek tur + TTL).
+SPEAKER_CONFIRM_ANSWER_TTL_S = float(
+    os.environ.get("SPEAKER_CONFIRM_ANSWER_TTL_S", "45") or 45)
+SPEAKER_CONFIRM_ANSWER_MIN_LAG_S = float(
+    os.environ.get("SPEAKER_CONFIRM_ANSWER_MIN_LAG_S", "1.5") or 1.5)
+SPEAKER_CONFIRM_ANSWER_MAX_WORDS = int(
+    os.environ.get("SPEAKER_CONFIRM_ANSWER_MAX_WORDS", "6") or 6)
+# ÖĞRENME KAPISI ONAY KAPISINDAN AYRI ve DAHA SIKIdır: kimliği bağlamak oturumluk
+# ve geri alınabilir, profile örnek yazmak KALICIdır. Onay gelse bile o turun ses
+# kanıtı zayıfsa profile YAZILMAZ (kimlik yine de bağlanır).
+SPEAKER_CONFIRM_LEARN_MIN_RATIO = float(
+    os.environ.get("SPEAKER_CONFIRM_LEARN_MIN_RATIO", "0.8") or 0.8)
+SPEAKER_CONFIRM_LEARN_MIN_WINDOWS = int(
+    os.environ.get("SPEAKER_CONFIRM_LEARN_MIN_WINDOWS", "3") or 3)
+# ── Aday YAYINLAMA eşiği (truth_check → "X olarak mı kaydedeyim?") ──────────
+# CANLI (28 Tem 17:56): Ayhan konuşurken sistem "Havi olarak mı kaydedeyim?" diye
+# sordu; Havi odada bile değildi. Yanlış aday önermek, aday önermemekten KÖTÜDÜR:
+# dalgın bir "evet" notu yanlış kişiye yazar. Zayıf/çelişkili adayı YAYINLAMAYIZ.
+SPEAKER_CANDIDATE_MIN_RATIO = float(
+    os.environ.get("SPEAKER_CANDIDATE_MIN_RATIO", "0.8") or 0.8)
+SPEAKER_CANDIDATE_MIN_WINDOWS = int(
+    os.environ.get("SPEAKER_CANDIDATE_MIN_WINDOWS", "2") or 2)
 # "Hayır" çoğu zaman "ben senin bildiğin kimse değilim" demektir (canlı Çiğdem
 # vakası: profili olmayan üçüncü kişi en yakın profile yapıştı). Bir kez tanışma
 # teklif edilir; reddedilirse o oturumda bir daha açılmaz.
@@ -854,6 +884,10 @@ def reload_settings() -> None:
     global SPEAKER_CONFIRM_ASK_ENABLED, SPEAKER_CONFIRM_MIN_RATIO  # noqa: PLW0603
     global SPEAKER_CONFIRM_COOLDOWN_S, SPEAKER_CONFIRM_MIN_WINDOWS  # noqa: PLW0603
     global SPEAKER_LEARN_MAX_PER_TURN, SPEAKER_OFFER_ENROLL_ON_DENY  # noqa: PLW0603
+    global SPEAKER_CONFIRM_ANSWER_TTL_S, SPEAKER_CONFIRM_ANSWER_MIN_LAG_S  # noqa: PLW0603
+    global SPEAKER_CONFIRM_ANSWER_MAX_WORDS, SPEAKER_CONFIRM_LEARN_MIN_RATIO  # noqa: PLW0603
+    global SPEAKER_CONFIRM_LEARN_MIN_WINDOWS  # noqa: PLW0603
+    global SPEAKER_CANDIDATE_MIN_RATIO, SPEAKER_CANDIDATE_MIN_WINDOWS  # noqa: PLW0603
     global SPEAKER_CONFIRM_LOG, SPEAKER_EXPRESSION_CAPTURE_ENABLED  # noqa: PLW0603
     global SPEAKER_EXPRESSION_DIR, RESET_ENABLED, RESET_PHRASES  # noqa: PLW0603
     global RESET_ACK, RESET_FAIL, RESET_CONFIRM_ASK, RESET_CONFIRM_NO  # noqa: PLW0603
@@ -882,6 +916,20 @@ def reload_settings() -> None:
     SPEAKER_CONFIRM_MIN_WINDOWS = int(os.environ.get("SPEAKER_CONFIRM_MIN_WINDOWS", "2") or 2)
     SPEAKER_LEARN_MAX_PER_TURN = int(os.environ.get("SPEAKER_LEARN_MAX_PER_TURN", "3") or 3)
     SPEAKER_OFFER_ENROLL_ON_DENY = _envflag("SPEAKER_OFFER_ENROLL_ON_DENY", True)
+    SPEAKER_CONFIRM_ANSWER_TTL_S = float(
+        os.environ.get("SPEAKER_CONFIRM_ANSWER_TTL_S", "45") or 45)
+    SPEAKER_CONFIRM_ANSWER_MIN_LAG_S = float(
+        os.environ.get("SPEAKER_CONFIRM_ANSWER_MIN_LAG_S", "1.5") or 1.5)
+    SPEAKER_CONFIRM_ANSWER_MAX_WORDS = int(
+        os.environ.get("SPEAKER_CONFIRM_ANSWER_MAX_WORDS", "6") or 6)
+    SPEAKER_CONFIRM_LEARN_MIN_RATIO = float(
+        os.environ.get("SPEAKER_CONFIRM_LEARN_MIN_RATIO", "0.8") or 0.8)
+    SPEAKER_CONFIRM_LEARN_MIN_WINDOWS = int(
+        os.environ.get("SPEAKER_CONFIRM_LEARN_MIN_WINDOWS", "3") or 3)
+    SPEAKER_CANDIDATE_MIN_RATIO = float(
+        os.environ.get("SPEAKER_CANDIDATE_MIN_RATIO", "0.8") or 0.8)
+    SPEAKER_CANDIDATE_MIN_WINDOWS = int(
+        os.environ.get("SPEAKER_CANDIDATE_MIN_WINDOWS", "2") or 2)
     SPEAKER_CONFIRM_LOG = Path(os.environ.get(
         "SPEAKER_CONFIRM_LOG",
         str(Path(__file__).resolve().parent / "data" / "speaker_confirm_log.jsonl"),
@@ -942,6 +990,41 @@ def _parse_correction_name(text: str) -> Optional[str]:
     """Onay sorusuna gelen sözden DÜZELTİLMİŞ ismi çıkar ("hayır, Havi" → Havi).
     Olumsuzlama yoksa düz isim ayrıştırması yapar ("Havi" → Havi)."""
     return parse_spoken_name(_ENROLL_NEG_PREFIX_RE.sub("", text or "", count=1))
+
+
+# Kullanıcının SORUSU/YAKINMASI olan turu kimlik sorusuyla gasp etmeyiz: onay
+# sorusu turu tamamen ele geçirir (pi'ya hiç gidilmez) → kullanıcının sorusu
+# CEVAPSIZ kalır ve hemen ardından gelen kendi sözü "evet" sanılır (28 Tem 18:06).
+_QUESTION_WORDS = frozenset({
+    "neden", "niye", "niçin", "nicin", "nasıl", "nasil", "nerede", "nereye",
+    "nerde", "kim", "kimsin", "hangi", "kaç", "kac", "ne", "niye?",
+})
+
+
+def _is_user_question(text: str) -> bool:
+    """Bu tur kullanıcının SORUSU/yakınması mı? (soru işareti ya da soru sözcüğü)"""
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    if "?" in raw:
+        return True
+    words = set(re.findall(r"[a-zçğıöşü]+", raw.casefold()))
+    return bool(words & _QUESTION_WORDS)
+
+
+def _is_confirm_yes(text: str) -> bool:
+    """Bu söz, SORDUĞUMUZ kimlik sorusuna verilmiş KISA bir "evet" mi?
+
+    `is_affirmative_reply` tek kelime arar; serbest cümlede geçen "evet" de ona
+    olumlu görünür. Kimlik onayı KALICI sonuç doğurduğu için burada dar kapı var:
+    kısa olmalı (≤ MAX_WORDS kelime) ve soru cümlesi olmamalı. "Evet ama neden
+    sesimi ayırt edemiyorsun?" bir YAKINMADIR — onay değildir."""
+    raw = (text or "").strip()
+    if not raw or "?" in raw:
+        return False
+    if len(raw.split()) > SPEAKER_CONFIRM_ANSWER_MAX_WORDS:
+        return False
+    return is_affirmative_reply(raw)
 
 
 def _misin(name: str) -> str:
@@ -2592,7 +2675,8 @@ if _HAS_LIVEKIT:
 
             # Belirsiz tur + güçlü aday + soğuma doldu → TEK deterministik soru.
             # En SONDA: komutlar ve kayıt akışı öncelikli, soru üstüne soru yok.
-            scripted = self._brain._confirm_ask_line()
+            # Metin de verilir: kullanıcının SORDUĞU turu gasp etmeyiz.
+            scripted = self._brain._confirm_ask_line(text)
             if scripted is not None:
                 _emit(scripted)
                 return
@@ -4571,7 +4655,7 @@ if _HAS_LIVEKIT:
                 self._confirm_offer_pending = False
                 declined = _is_decline_enroll(text) or bool(
                     _ENROLL_NEG_PREFIX_RE.match(text or ""))
-                if not declined and is_affirmative_reply(text):
+                if not declined and _is_confirm_yes(text):
                     # MEVCUT açık kayıt akışı başlar (yeni profil). Var olan bir
                     # profile örnek EKLENMEZ — bu ses tanınmayan biri.
                     self._enroll_active = True
@@ -4583,15 +4667,34 @@ if _HAS_LIVEKIT:
             pending, self._confirm_pending = self._confirm_pending, None
             if pending is None:
                 return None
+            # Onay bağlamının ÖMRÜ var: bekleyen soru zaten TEK sonraki turda
+            # tüketilir (yukarıda pop edildi), ayrıca duvar-saati penceresi de
+            # tutmalı. Erken gelen söz (soru daha seslendirilmeden) CEVAP DEĞİLDİR.
+            age = time.time() - float(pending.get("asked_at") or 0.0)
+            if age < SPEAKER_CONFIRM_ANSWER_MIN_LAG_S or age > SPEAKER_CONFIRM_ANSWER_TTL_S:
+                logger.info(
+                    "kimlik onayı: cevap penceresi DIŞINDA (aday=%s, yaş=%.1fs,"
+                    " pencere=%.1f-%.0fs) → onay sayılmadı, yazma YOK",
+                    pending.get("name"), age, SPEAKER_CONFIRM_ANSWER_MIN_LAG_S,
+                    SPEAKER_CONFIRM_ANSWER_TTL_S,
+                )
+                self._confirm_log(pending, "pencere-disi", 0, text)
+                return None
             return await self._confirm_answer(pending, text)
 
         async def _confirm_answer(self, pending: dict, text: str) -> Optional[str]:
-            """Evet → öğren; hayır → HİÇBİR ŞEY yazma; başka isim → merge YOK."""
+            """Evet → kimliği bağla (+ kanıt güçlüyse öğren); hayır → HİÇBİR ŞEY
+            yazma; başka isim → merge YOK."""
             name = pending.get("name") or ""
             negated = _is_decline_enroll(text) or bool(
                 _ENROLL_NEG_PREFIX_RE.match(text or ""))
-            if not negated and is_affirmative_reply(text):
-                added = await self._confirm_learn(name, pending.get("windows") or [])
+            if not negated and _is_confirm_yes(text):
+                # KİMLİK BAĞLAMA ile PROFİLE YAZMA ayrı kararlardır: ilki oturumluk
+                # ve geri alınabilir, ikincisi kalıcı. Onay ikisini de hak eder ama
+                # yazma ayrıca KANIT ister (bkz. _confirm_learn).
+                self._confirm_bind(name)
+                added = await self._confirm_learn(name, pending.get("windows") or [],
+                                                  ratio=pending.get("ratio"))
                 self._confirm_log(pending, "evet", added, text)
                 if added:
                     return "Tamam, artık sesini daha iyi tanıyacağım."
@@ -4620,7 +4723,7 @@ if _HAS_LIVEKIT:
             self._confirm_log(pending, "belirsiz", 0, text)
             return None
 
-        def _confirm_ask_line(self) -> Optional[str]:
+        def _confirm_ask_line(self, text: Optional[str] = None) -> Optional[str]:
             """Bu turda kimlik onayı SORULSUN mu? Soru deterministiktir, modele
             bırakılmaz (truth_check ilkesi: model NE YAPILACAĞINA, harness NE
             OLDUĞUNA karar verir).
@@ -4628,8 +4731,12 @@ if _HAS_LIVEKIT:
             Hepsi sağlanmadan sorulmaz — şüphede SORMAYIZ:
               tur kararı Bilinmeyen · aday var · oran >= eşik · >= 2 güncel pencere
               · soğuma doldu · aday daha önce reddedilmemiş · kullanıcı zaten bir
-              soruya cevap vermiyor (kayıt sihirbazı / sıfırlama / bekleyen onay)."""
+              soruya cevap vermiyor (kayıt sihirbazı / sıfırlama / bekleyen onay)
+              · KULLANICI BİR ŞEY SORMUYOR (turu gasp etmeyiz)."""
             if not SPEAKER_CONFIRM_ASK_ENABLED or not self._enroll_ok:
+                return None
+            if _is_user_question(text or ""):
+                logger.debug("kimlik onayı: kullanıcı soru/yakınma turu → soru YOK")
                 return None
             if (self._enroll_active or self._enroll_stage is not None
                     or self._reset_pending or self._confirm_pending is not None
@@ -4678,15 +4785,47 @@ if _HAS_LIVEKIT:
             )
             return f"Pardon, sesinden emin olamadım — sen {cand} {_misin(cand)}?"
 
-        async def _confirm_learn(self, name: str, windows: list) -> int:
+        def _confirm_bind(self, name: str) -> None:
+            """Onaylanan ismi OTURUMA bağla (kardeş yollar `_enroll_new` /
+            `_merge_into` ile aynı iki satır: `current` + `_greeted`).
+
+            Örnek YAZMAKTAN ayrıdır: bağlama oturumluk ve geri alınabilir, yazma
+            kalıcıdır. Eskiden bu iki iş `_confirm_learn` içinde birbirine
+            bağlıydı → zayıf kanıtta ya ikisi de olurdu ya hiçbiri."""
+            if not name or self._speaker_state is None:
+                return
+            self._speaker_state.current = name
+            self._greeted.add(name)
+
+        async def _confirm_learn(self, name: str, windows: list,
+                                 *, ratio: Optional[float] = None) -> int:
             """Onaylanan kimliğe O TURUN en iyi pencerelerini yaz (`confirmed-learn`).
 
             Pasif öğrenme AÇILMIYOR (`SPEAKER_LEARN_ENABLED` false kalır); öğrenme
             YALNIZ açık onaydan sonra olur. Etiket ayrı olduğu için tek komutla
             geri alınabilir:
               DELETE FROM speaker_samples WHERE source='confirmed-learn';
-            Pencere süresi tap tarafında >= SPEAKER_MIN_SECONDS garantidir."""
+            Pencere süresi tap tarafında >= SPEAKER_MIN_SECONDS garantidir.
+
+            KANIT KAPISI: "evet" tek başına yetmez. Onayın geldiği turun ses kanıtı
+            (oran + güncel pencere sayısı) SORMA eşiğinden daha sıkı olmalı; değilse
+            profile HİÇBİR ŞEY yazılmaz (kimlik yine de bağlanmıştır). 28 Tem'de
+            Havi profiline yazılan iki yabancı örnek tam bu kapıdan geçemezdi."""
             if not self._enroll_ok or not name:
+                return 0
+            fresh = len(windows)
+            r = float(ratio) if ratio is not None else 0.0
+            if ratio is not None and r < SPEAKER_CONFIRM_LEARN_MIN_RATIO:
+                logger.info(
+                    "kimlik onayı ÖĞRENME YOK: %r için oran zayıf (%.2f < %.2f)"
+                    " → kimlik bağlandı, profile YAZILMADI", name, r,
+                    SPEAKER_CONFIRM_LEARN_MIN_RATIO)
+                return 0
+            if fresh < SPEAKER_CONFIRM_LEARN_MIN_WINDOWS:
+                logger.info(
+                    "kimlik onayı ÖĞRENME YOK: %r için güncel pencere az (%d < %d)"
+                    " → kimlik bağlandı, profile YAZILMADI", name, fresh,
+                    SPEAKER_CONFIRM_LEARN_MIN_WINDOWS)
                 return 0
             from speaker_id import emb_to_bytes
 
@@ -4715,12 +4854,9 @@ if _HAS_LIVEKIT:
                         await self._speaker_store.all_speaker_embeddings())
                 except Exception as e:  # noqa: BLE001
                     logger.warning("kimlik onayı: centroid yenilenemedi (%s)", e)
-                # Onay = kimlik KANITI. Kardeş yollar (_enroll_new, _merge_into)
-                # burada current'ı set eder; bu yol atlanmıştı → kullanıcı "evet ben
-                # Ayhan'ım" dedikten sonra da guest kalıyor, hafızası yazılmıyordu
+                # Kimlik bağlama artık ÇAĞIRANIN işi (_confirm_bind): yazma
+                # olmasa da kullanıcı "evet ben Ayhan'ım" dediyse guest kalmamalı
                 # (canlı hata 28 Tem 16:25).
-                self._speaker_state.current = name
-                self._greeted.add(name)
             logger.info(
                 "kimlik onayı ÖĞRENME: %r için %d/%d örnek yazıldı"
                 " (kaynak=confirmed-learn, skorlar=%s)",
