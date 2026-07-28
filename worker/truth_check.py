@@ -71,6 +71,7 @@ def fold(s: str) -> str:
 # hatası kullanıcıya yanlış bir "kaydettim" olarak dönmez.
 CRITICAL_WRITE_TOOLS: frozenset[str] = frozenset({
     "memory_add",
+    "memory_attribute_pending",
     "soul_add",
     "reminder_add",
     "reminder_cancel",
@@ -80,6 +81,7 @@ CRITICAL_WRITE_TOOLS: frozenset[str] = frozenset({
 # Araç → harness'ın kullanacağı FİİL (hata hâlinde).
 _FAIL_VERB: dict[str, str] = {
     "memory_add": "Kaydedemedim",
+    "memory_attribute_pending": "Kaydedemedim",
     "soul_add": "Bunu kalıcı olarak kaydedemedim",
     "reminder_add": "Hatırlatmayı kuramadım",
     "reminder_cancel": "Hatırlatmayı iptal edemedim",
@@ -111,6 +113,11 @@ _FAIL_MARKERS: tuple[tuple[str, str], ...] = (
     ("hafiza yok", "seni henüz tanımıyorum"),
     ("ruh kaydi yok", "seni henüz tanımıyorum"),
     ("gecersiz", "verdiğin bilgi geçersiz"),
+    # memory_attribute_pending: bekleyen not ÇÖZÜLEMEDİ (not kuyrukta KALDI).
+    # "Bekleyen not yok." bir hata değil ama BAŞARI da değil — model "kaydettim"
+    # demesin diye harness gerçeği söyler.
+    ("bekleyen not yok", "bekleyen bir not bulamadım"),
+    ("ailede tanimli degil", "o ismi ailede tanımıyorum"),
     ("eslesen bekleyen hatirlatma yok", "eşleşen bir hatırlatma yok"),
     # events.ts resolveDue hataları (İngilizce, isError=true ile gelir)
     ("no time given", "saati anlayamadım"),
