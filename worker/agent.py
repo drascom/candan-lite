@@ -13,7 +13,7 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from livekit.agents import Agent, AgentSession, JobContext, WorkerOptions, cli
+from livekit.agents import Agent, AgentSession, JobContext, JobProcess, WorkerOptions, cli
 from livekit.plugins import silero
 # Semantik tur-sonu (EOU) modeli. NOT: bu paketi import etmek `livekit.plugins.
 # turn_detector.__init__`'i çalıştırır → hem `en` hem `multilingual` runner'ı
@@ -218,6 +218,41 @@ def _install_user_transcript_context(
 TOOL_TOPIC = "mate.tool"
 
 
+# ── PREWARM: ağır model yükleri job YOLUNDAN çıkarılır ───────────────────────
+# silero VAD + çok dilli EOU + campplus.onnx job başlarken yükleniyordu; yani
+# kullanıcı bağlandıktan SONRA, o beklerken (~2-2.7 sn). `prewarm_fnc` bunları
+# BOŞTAKİ süreçte, iş gelmeden önce yükler. Maliyet: boşta birkaç yüz MB RAM
+# (süreç başına). Geri dönüş: WorkerOptions'tan `prewarm_fnc` satırını sil.
+_MISSING = object()
+
+
+def prewarm(proc: JobProcess) -> None:
+    """Boştaki job sürecinde ağır modelleri önceden yükle.
+
+    Her yük AYRI korumalı: biri patlarsa diğerleri yine önden yüklenir ve
+    entrypoint o parçayı bugünkü gibi kendi yükler (davranış BOZULMAZ)."""
+    log = logging.getLogger("worker.agent")
+    for name, factory in (
+        ("vad", silero.VAD.load),
+        ("eou", MultilingualModel),
+        # campplus.onnx (sherpa-onnx embedding çıkarıcı). speakers.db'ye DOKUNMAZ —
+        # veritabanını (SpeakerStore) job açar, burada yalnız model ağırlığı yüklenir.
+        ("speaker_id", build_speaker_id),
+    ):
+        try:
+            proc.userdata[name] = factory()
+        except Exception:  # noqa: BLE001 — prewarm hatası worker'ı düşürmesin
+            log.warning("prewarm yüklenemedi: %s — job içinde yüklenecek", name, exc_info=True)
+
+
+def _prewarmed(ctx: JobContext, name: str):
+    """Prewarm'ın yüklediğini al; yoksa `_MISSING` (çağıran kendi yükler)."""
+    userdata = getattr(getattr(ctx, "proc", None), "userdata", None)
+    if not isinstance(userdata, dict):
+        return _MISSING
+    return userdata.get(name, _MISSING)
+
+
 def _brain_choice(ctx: JobContext) -> str | None:
     """Oturum başı beyin seçimi — agent DISPATCH METADATA'sından ({"brain":"local"}).
 
@@ -250,7 +285,9 @@ async def entrypoint(ctx: JobContext):
     # --- Faz 3: speaker-ID (opsiyonel, additive) ---
     # SPEAKER_ID_ENABLED kapalı / model yok / sherpa-onnx yok ise sp=None kalır ve
     # davranış Faz 2 ile AYNI olur (tek persona candan, tek warm süreç).
-    sp = build_speaker_id()
+    sp = _prewarmed(ctx, "speaker_id")
+    if sp is _MISSING:
+        sp = build_speaker_id()
     speaker_state: SpeakerState | None = None
     tap: SpeakerTap | None = None
     store: SpeakerStore | None = None
@@ -331,17 +368,26 @@ async def entrypoint(ctx: JobContext):
     # `_STREAMING_ENDPOINTING_DEFAULTS` (min 0.3 / max 2.5) yerine
     # `_ENDPOINTING_DEFAULTS` (min 0.5 / max 3.0) olur — bu detektör tipi için
     # framework'ün kendi tuned değeri (voice/turn.py:298 `_resolve_endpointing`).
-    try:
-        turn_detection = MultilingualModel()
-    except Exception:  # noqa: BLE001 — model yoksa oturum yine de AÇILSIN
-        logging.getLogger("worker.agent").warning(
-            "EOU turn-detector yüklenemedi → VAD tabanlı tur tespitine düşülüyor. "
-            "Model indir: python -m livekit.agents download-files", exc_info=True
-        )
-        turn_detection = None
+    #
+    # Yük artık `prewarm` içinde, boştaki süreçte yapılır; buradaki yol prewarm
+    # atlandığında/patladığında bugünkü davranışı BİRE BİR sürdürür.
+    turn_detection = _prewarmed(ctx, "eou")
+    if turn_detection is _MISSING:
+        try:
+            turn_detection = MultilingualModel()
+        except Exception:  # noqa: BLE001 — model yoksa oturum yine de AÇILSIN
+            logging.getLogger("worker.agent").warning(
+                "EOU turn-detector yüklenemedi → VAD tabanlı tur tespitine düşülüyor. "
+                "Model indir: python -m livekit.agents download-files", exc_info=True
+            )
+            turn_detection = None
+
+    vad = _prewarmed(ctx, "vad")
+    if vad is _MISSING:
+        vad = silero.VAD.load()
 
     session = AgentSession(
-        vad=silero.VAD.load(),
+        vad=vad,
         stt=WhisperWyomingSTT(host=STT_HOST, port=STT_PORT, language=LANG),
         # Faz 3.1: sesli oto-enrollment — bilinmeyen ses gelince PiBrain isim sorar,
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
@@ -758,10 +804,19 @@ if __name__ == "__main__":
         # cli.run_app henüz logging'i kurmadı (handler'ımız root'ta ama seviye NOTSET)
         # → normal log çağrısı görünmeyebilir; kullanıcıya doğrudan söyle.
         print(f"[worker] loglar şu dosyaya da yazılıyor: {_log_path}")
+    # Boşta bekletilecek job süreci sayısı. VERİLMEZSE framework'ün kendi
+    # varsayılanı kalır (prod 3 / dev 0) — burada bir sayı UYDURMAK gerileme
+    # olurdu. Sıcak süreç başına birkaç yüz MB RAM: kullanıcı isterse kısar.
+    _idle = os.environ.get("WORKER_IDLE_PROCESSES", "").strip()
+    _extra = {"num_idle_processes": int(_idle)} if _idle.isdigit() else {}
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            # Ağır modeller (VAD/EOU/campplus) boştaki süreçte yüklensin; job
+            # başlarken kullanıcı beklemesin (~2-2.7 sn job yolundan çıkar).
+            prewarm_fnc=prewarm,
             agent_name=AGENT_NAME,  # explicit dispatch — web token'ı bu adı çağırır
             log_level=WORKER_LOG_LEVEL,
+            **_extra,
         )
     )
