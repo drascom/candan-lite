@@ -253,6 +253,21 @@ class SpeakerState:
                         best_run = list(run)
                 else:
                     run = []
+            # TAVAN = KAYAN PENCERE (28 Tem canlı bulgusu). Eskiden onay grubunun
+            # ilk-son aralığı `turn_max_seconds`'ı aşarsa TÜM kanıt çöpe gidiyordu:
+            # 16:25:05'te 15 pencerenin HEPSİ Ayhan (ort. 5.69) olduğu hâlde karar
+            # `Bilinmeyen` çıktı, çünkü run 15 sn > 8 sn. Ölçüm bunu desen olarak
+            # doğruladı: ≥7 pencereli turlarda başarı %84'ten %43'e düşüyordu —
+            # yani UZUN konuşmak tanınma şansını azaltıyordu.
+            # Tavanın ASIL amacı korunuyor: "ardışık onay" sayılan pencereler
+            # birbirine zaman olarak YAKIN olmalı (aradaki uzun sessizlikte yeni
+            # pencere üretilmediği için t=0 ve t=20'deki iki gözlem "ardışık"
+            # görünebilir; o iki gözlem tek bir tur kanıtı sayılmamalı).
+            # Yeni kural: grubu atmak yerine SON `turn_max_seconds`'lık dilime
+            # kırp. Kırpılmış grup her zaman eskisinin bir ALT KÜMESİ, dolayısıyla
+            # eşik ASLA gevşemez; yalnız içinde nitelikli, sıkı bir alt grup
+            # barındırdığı hâlde tümden atılan turlar kurtulur.
+            best_run = self._within_ceiling(best_run)
             if len(best_run) < self.turn_confirm_hits:
                 elapsed = finished_at - self._last_confirmed_at
                 if (
@@ -266,8 +281,6 @@ class SpeakerState:
                     reason = "son doğrulamayla uyumlu tek güncel pencere"
                 else:
                     reason = f"yetersiz ardışık onay ({len(best_run)}/{self.turn_confirm_hits})"
-            elif best_run[-1][0] - best_run[0][0] > self.turn_max_seconds:
-                reason = "onay pencereleri zaman sınırını aştı"
             elif finished_at - best_run[-1][0] > self.turn_max_seconds:
                 # Dönüş artık VAD parçasına göre değil final transkripte göre
                 # kapanıyor; teorik olarak açık kalmış çok uzun bir dönüşte kanıt
@@ -298,6 +311,20 @@ class SpeakerState:
             candidate_windows=cand_windows,
         )
         return self.last_turn_decision
+
+    def _within_ceiling(
+        self, run: list[tuple[float, str | None, float, object | None]]
+    ) -> list[tuple[float, str | None, float, object | None]]:
+        """Onay grubunun yalnız SON `turn_max_seconds` saniyelik dilimini döndür.
+
+        Amaç: "ardışık onay" pencerelerinin zamanda da bitişik olmasını zorlamak.
+        Grubu tümden ELEMEZ — en yeni uçtan kırpar; sonuç daima girdinin alt
+        kümesidir, bu yüzden karar eşiği gevşemez (bkz. `resolve_turn`).
+        """
+        if not run:
+            return run
+        newest = run[-1][0]
+        return [item for item in run if newest - item[0] <= self.turn_max_seconds]
 
     def _candidate_of(
         self,
