@@ -4705,6 +4705,12 @@ if _HAS_LIVEKIT:
                         await self._speaker_store.all_speaker_embeddings())
                 except Exception as e:  # noqa: BLE001
                     logger.warning("kimlik onayı: centroid yenilenemedi (%s)", e)
+                # Onay = kimlik KANITI. Kardeş yollar (_enroll_new, _merge_into)
+                # burada current'ı set eder; bu yol atlanmıştı → kullanıcı "evet ben
+                # Ayhan'ım" dedikten sonra da guest kalıyor, hafızası yazılmıyordu
+                # (canlı hata 28 Tem 16:25).
+                self._speaker_state.current = name
+                self._greeted.add(name)
             logger.info(
                 "kimlik onayı ÖĞRENME: %r için %d/%d örnek yazıldı"
                 " (kaynak=confirmed-learn, skorlar=%s)",
