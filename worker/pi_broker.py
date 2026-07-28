@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -36,8 +37,11 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 from pi_brain import (
     DEV_WORKTREE,
     PI_BROKER_SOCKET,
+    PI_SESSION_DIR,
     REPO_ROOT,
     _build_pi_args,
+    _envflag,
+    _find_session_file,
     pi_mem_env,
     resolve_brain,
 )
@@ -45,6 +49,113 @@ from pi_brain import (
 
 log = logging.getLogger("pi_broker")
 _SAFE_PART = re.compile(r"^[A-Za-z0-9_.-]{1,96}$")
+
+# ── ISITMA (warm-up) ─────────────────────────────────────────────────────────
+# Prewarm süreci doğuruyordu ama prompt GÖNDERMİYORDU: pi ayakta, slot ayrık,
+# fakat `candan-brain`'in (llama-server, --parallel 1 = TEK slot) KV önbelleği
+# BOŞ. İlk gerçek tur 15-30 bin token'lık sistem prompt'u + oturum geçmişini
+# sıfırdan prefill ediyor → 9-17 sn (~1120 tok/s ölçüldü, bkz. DEVIR §4).
+#
+# Isıtma = SICAK sürece kısa bir prompt yollamak. Aynı süreç olmak ZORUNDA:
+# önbellek ön eki tam olarak o oturumun geçmişidir; başka bir oturumla ısıtmak
+# tek slotu YANLIŞ ön ekle doldurup işi kötüleştirirdi.
+#
+# ⚠️ Isıtma turu pi'nın geçmişine SIZAMAZ. pi'da "turu geri al" RPC'si yok →
+# tur bittikten sonra süreç ÖLDÜRÜLÜR, oturum jsonl'i ısıtma öncesi bayt
+# uzunluğuna geri alınır, süreç TEMİZ geçmişle yeniden doğar. llama-server'ın
+# KV önbelleği bu sırada dokunulmadan kalır: ısıtılmış ön ek (geçmiş) orada,
+# ısıtma kuyruğu (birkaç on token) sıradaki gerçek turda sadece uyuşmayan
+# son parça olur. Kazanç ön ekte, kirlilik diskte SIFIR.
+_WARMUP_PROMPT_DEFAULT = (
+    "Isınma kontrolü. Araç çağırma, hiçbir şey kaydetme; tek kelimeyle yanıtla: tamam."
+)
+
+
+def _warmup_enabled() -> bool:
+    return _envflag("PI_BROKER_WARMUP", True)
+
+
+def _warmup_prompt() -> str:
+    return os.environ.get("PI_BROKER_WARMUP_PROMPT") or _WARMUP_PROMPT_DEFAULT
+
+
+def _warmup_timeout() -> float:
+    return float(os.environ.get("PI_BROKER_WARMUP_TIMEOUT") or 60)
+
+
+def _warmup_interval() -> float:
+    """Periyodik ısıtma aralığı (sn). 0/negatif → keepalive KAPALI.
+
+    llama-server KV'yi ZAMANLA düşürmez; önbelleği yabancı bir istek EZER
+    (compaction, sınıflandırıcı — DEVIR §4). Yani süre ölçülebilir bir sabit
+    değil, emniyet ağı: muhafazakâr TAHMİN olarak 15 dk."""
+    raw = os.environ.get("PI_BROKER_WARMUP_INTERVAL")
+    return float(raw) if raw not in (None, "") else 900.0
+
+
+def _session_dir() -> Path:
+    """Normal (dev olmayan) oturumların jsonl dizini — `_build_pi_args` ile aynı kural."""
+    path = Path(PI_SESSION_DIR)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+@dataclass(frozen=True)
+class HistorySnapshot:
+    """Isıtma öncesi oturum dosyasının parmak izi (bayt uzunluğu + sha256)."""
+
+    path: Optional[Path]
+    size: int
+    digest: str
+
+    @property
+    def existed(self) -> bool:
+        return self.path is not None
+
+
+def snapshot_history(session_id: str, session_dir: Optional[Path] = None) -> HistorySnapshot:
+    directory = session_dir or _session_dir()
+    path = _find_session_file(session_id, directory)
+    if path is None or not path.is_file():
+        return HistorySnapshot(None, 0, "")
+    data = path.read_bytes()
+    return HistorySnapshot(path, len(data), hashlib.sha256(data).hexdigest())
+
+
+def restore_history(
+    session_id: str, snap: HistorySnapshot, session_dir: Optional[Path] = None
+) -> bool:
+    """Isıtma turunun geçmişe yazdığını geri al. Döner: geçmiş ısıtma ÖNCESİ hâlinde mi.
+
+    İki yol da kapatılır: pi ısıtma satırlarını ya var olan dosyaya EKLER (→ eski
+    bayt uzunluğuna truncate) ya da YENİ bir dosya açar (→ o dosya silinir; eskisi
+    zaten dokunulmamıştır). Ön ek beklenmedik şekilde değişmişse (ör. araya
+    compaction girdiyse) HİÇBİR ŞEY yapılmaz — gerçek geçmişi bozmak, ısıtma
+    kirliliğinden beterdir; yüksek sesle loglanır."""
+    directory = session_dir or _session_dir()
+    current = _find_session_file(session_id, directory)
+    if not snap.existed:
+        # Isıtma öncesi geçmiş YOKTU → ısıtmanın doğurduğu dosya tamamen gider.
+        if current is not None:
+            with contextlib.suppress(OSError):
+                current.unlink()
+        return True
+    if current is not None and current != snap.path:
+        with contextlib.suppress(OSError):
+            current.unlink()
+    path = snap.path
+    assert path is not None
+    if not path.is_file():
+        log.error("ısıtma sonrası oturum dosyası kayıp: %s", path)
+        return False
+    data = path.read_bytes()
+    if len(data) == snap.size and hashlib.sha256(data).hexdigest() == snap.digest:
+        return True  # pi hiç yazmadı (ya da ayrı dosyaya yazdı) — iş bitti
+    if len(data) > snap.size and hashlib.sha256(data[: snap.size]).hexdigest() == snap.digest:
+        with path.open("r+b") as fh:
+            fh.truncate(snap.size)
+        return True
+    log.error("ısıtma turu geri alınamadı, geçmiş beklenmedik şekilde değişti: %s", path)
+    return False
 
 
 @dataclass(frozen=True)
@@ -74,6 +185,11 @@ class PiProcess:
         self._stderr_task: Optional[asyncio.Task] = None
         self._client: Optional[asyncio.StreamWriter] = None
         self._state_lock = asyncio.Lock()
+        # Isıtma turu: client YOKKEN stdout buraya akar (çıktı YUTULUR, kimseye
+        # gitmez). `_warm_lock` ısıtma ile gerçek kiralamayı sıraya sokar.
+        self._warm_q: Optional[asyncio.Queue] = None
+        self._warm_lock = asyncio.Lock()
+        self._warm_cancel: Optional[asyncio.Event] = None
 
     @property
     def running(self) -> bool:
@@ -143,6 +259,9 @@ class PiProcess:
                 client = self._client
                 if client is None or client.is_closing():
                     # Kullanıcı ayrılmış olabilir; satırı tüket ama Pi'yi öldürme.
+                    warm_q = self._warm_q
+                    if warm_q is not None:
+                        warm_q.put_nowait(line)
                     continue
                 try:
                     client.write(line)
@@ -156,6 +275,54 @@ class PiProcess:
                     client.write(b'{"type":"broker_error","error":"pi process exited"}\n')
                     await client.drain()
             log.warning("pi kapandı: %s", self.key.label)
+
+    async def warm(self, prompt: str, timeout: float, cancel: asyncio.Event) -> bool:
+        """Tek ısıtma turu: prompt gönder, `agent_settled`'a kadar çıktıyı YUT.
+
+        Çıktı hiçbir client'a gitmez (client zaten yok — çağıran `busy`yi eledi).
+        `cancel` set edilirse (gerçek kullanıcı geldi) tur beklenmeden bırakılır.
+        Döner: tur tamamlandı mı. Geçmişin geri alınması ÇAĞIRANIN işi."""
+        q: asyncio.Queue = asyncio.Queue()
+        self._warm_q = q
+        try:
+            await self.send_raw((json.dumps({"type": "prompt", "message": prompt}) + "\n").encode())
+
+            async def _drain() -> None:
+                while True:
+                    line = await q.get()
+                    try:
+                        obj = json.loads(line)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    if isinstance(obj, dict) and obj.get("type") in (
+                        "agent_settled",
+                        "broker_error",
+                    ):
+                        return
+
+            drained = asyncio.ensure_future(_drain())
+            stopped = asyncio.ensure_future(cancel.wait())
+            done, pending = await asyncio.wait(
+                {drained, stopped}, timeout=timeout, return_when=asyncio.FIRST_COMPLETED
+            )
+            for task in pending:
+                task.cancel()
+            return drained in done
+        finally:
+            self._warm_q = None
+
+    async def yield_warm(self) -> None:
+        """Isıtma sürüyorsa BIRAK: turu kes ve temizliğin bitmesini bekle.
+
+        Gerçek kullanıcı ısıtma yüzünden bekletilmemeli; bekleme burada süreç
+        yeniden doğumu kadardır (~1 sn), ısıtmanın engellediği prefill ise 9-17 sn."""
+        cancel = self._warm_cancel
+        if cancel is not None:
+            cancel.set()
+            with contextlib.suppress(Exception):
+                await self.send_raw(b'{"type":"abort"}\n')
+        async with self._warm_lock:
+            return
 
     async def _pump_stderr(self) -> None:
         assert self.proc is not None and self.proc.stderr is not None
@@ -235,9 +402,68 @@ class PiBroker:
         """Servis açılışı/reload sonrası varsayılan Pi süreçlerini tekrar sıcak tut."""
         for key in _prewarm_specs():
             try:
-                await self.process_for(key)
+                process = await self.process_for(key)
             except Exception:  # noqa: BLE001 — tek prewarm servisi düşürmesin
                 log.exception("prewarm başarısız: %s", key.label)
+                continue
+            # Süreci doğurmak YETMİYOR: beynin KV önbelleği hâlâ boş. Kuru bir
+            # ısıtma turu at (geçmişe SIZMAZ, bkz. warm_once).
+            await self.warm_once(process)
+
+    async def warm_once(self, process: PiProcess) -> bool:
+        """Bir ısıtma turu at ve pi'nın geçmişini ısıtma ÖNCESİ hâline geri döndür.
+
+        Sıra: geçmişi parmak izle → prompt at (çıktı yutulur) → süreci ÖLDÜR
+        (dosyaya yazma bitsin) → jsonl'i geri al → süreci temiz geçmişle yeniden
+        doğur. Herhangi bir adım patlarsa akış NORMAL devam eder (sessiz düşüş:
+        loglanır, tur düşürülmez)."""
+        if not _warmup_enabled():
+            return False
+        async with process._warm_lock:
+            if process.busy:
+                return False  # gerçek kullanıcı slotta — ısıtma YARIŞMAZ
+            key = process.key
+            snap = snapshot_history(key.session_id)
+            cancel = asyncio.Event()
+            process._warm_cancel = cancel
+            warmed = False
+            try:
+                await process.start()
+                warmed = await process.warm(_warmup_prompt(), _warmup_timeout(), cancel)
+            except Exception:  # noqa: BLE001 — ısıtma broker'ı düşürmesin
+                log.warning("ısıtma turu başarısız: %s", key.label, exc_info=True)
+            finally:
+                process._warm_cancel = None
+                with contextlib.suppress(Exception):
+                    await process.stop()
+                clean = await asyncio.to_thread(restore_history, key.session_id, snap)
+                with contextlib.suppress(Exception):
+                    await process.start()
+            log.info(
+                "ısıtma: %s (tur=%s, geçmiş temiz=%s)",
+                key.label,
+                "tamam" if warmed else "yarım",
+                clean,
+            )
+            return warmed and clean
+
+    async def keepalive_loop(self) -> None:
+        """Periyodik hafif ısıtma. Aktif konuşma sırasında ÇALIŞMAZ (tek slot)."""
+        interval = _warmup_interval()
+        if not _warmup_enabled() or interval <= 0:
+            log.info("keepalive ısıtması kapalı")
+            return
+        log.info("keepalive ısıtması açık: her %.0f sn", interval)
+        while True:
+            await asyncio.sleep(interval)
+            for key in _prewarm_specs():
+                process = self._processes.get(key)
+                if process is None or process.busy:
+                    continue
+                try:
+                    await self.warm_once(process)
+                except Exception:  # noqa: BLE001 — döngü tek hatayla ölmesin
+                    log.warning("keepalive ısıtması başarısız: %s", key.label, exc_info=True)
 
     async def _handle_client(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
@@ -256,6 +482,10 @@ class PiBroker:
                 return
             key = _key_from_hello(hello)
             process = await self.process_for(key)
+            # Gerçek kullanıcı ısıtmayı ezer: süren ısıtma kesilir, geçmişi geri
+            # alınır, süreç temiz doğar. Sonra kiralama yapılır.
+            await process.yield_warm()
+            await process.start()  # ısıtma süreci yeniden doğurmuş olabilir (idempotent)
             if not await process.attach(writer):
                 writer.write(
                     json.dumps(
@@ -344,6 +574,7 @@ async def _run(socket_path: Path) -> None:
     broker = PiBroker(socket_path)
     await broker.start()
     await broker.prewarm_defaults()
+    keepalive = asyncio.create_task(broker.keepalive_loop())
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signal_name in ("SIGINT", "SIGTERM"):
@@ -351,6 +582,9 @@ async def _run(socket_path: Path) -> None:
         with contextlib.suppress(NotImplementedError):
             loop.add_signal_handler(signal, stop.set)
     await stop.wait()
+    keepalive.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await keepalive
     await broker.close()
 
 
