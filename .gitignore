@@ -72,3 +72,9 @@ experiments/tts-local-bench/refs/*.pt
 experiments/higgs-tts3/out/
 experiments/higgs-tts3/refs/*.wav
 experiments/higgs-tts3/refs/*.pt
+
+# Claude Code: makineye özel yerel ayarlar + ajan worktree'leri.
+# .claude/ altındaki paylaşılabilir şeyler (skills/, agents/, commands/) commit EDİLEBİLİR;
+# ignore edilen yalnız bu ikisi.
+.claude/settings.local.json
+.claude/worktrees/
