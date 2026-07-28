@@ -128,6 +128,12 @@ class SpeakerID:
         self._names: list[str] = []
         self._centroids = np.zeros((0, self.dim), dtype=np.float32)  # L2-normalize
         self._name_to_id: dict[str, int] = {}
+        # SALT GÖZLEM: son `identify()` çağrısının ilk iki sıralaması
+        # [(isim, skor), ...]. Karara HİÇ girmez; gölge kaydedici (speaker_tap)
+        # reddedilen pencerelerin de en-iyi/ikinci skorunu yeniden hesaplamadan
+        # yazabilsin diye burada duruyor. Çağıran, kendi `identify()` çağrısının
+        # HEMEN ardından (arada await olmadan) okumalıdır.
+        self.last_ranking_top2: list[tuple[str, float]] = []
 
         # ---- AS-norm skor kalibrasyonu (opsiyonel) ----
         # Offline ölçümde ham-kosinüs + sabit-eşik ev sahibi ile eşini AYIRAMADI
@@ -232,6 +238,7 @@ class SpeakerID:
     def identify(self, emb: np.ndarray) -> tuple[str | None, float]:
         """En iyi eşleşmeyi döndür. Eşik altı VEYA 2.'yi marj kadar geçmiyorsa
         (None, skor) = unknown."""
+        self.last_ranking_top2 = []  # bayat sıralama kaydedilmesin
         if self._centroids.shape[0] == 0:
             return None, 0.0
         if self._centroids.shape[0] < self.min_profiles_for_auto_match:
@@ -258,6 +265,7 @@ class SpeakerID:
             thr, margin, scale = self.threshold, self.margin, "ham"
         order = np.argsort(scores)[::-1]
         ranking = [(self._names[i], float(scores[i])) for i in order]
+        self.last_ranking_top2 = ranking[:2]
         best = ranking[0][1]
         second = ranking[1][1] if len(ranking) > 1 else -1e9
         # Her çağrıda (saniyede bir) INFO basmak log'u boğuyordu; skor dökümü

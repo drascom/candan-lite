@@ -17,7 +17,9 @@ import os
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
+import numpy as np
 from livekit import rtc
 
 from speaker_id import SpeakerID, emb_to_bytes, pcm_to_f32
@@ -70,6 +72,141 @@ def _b(name: str, default: bool) -> bool:
     if raw is None or raw == "":
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+class SessionEmbLog:
+    """Gölge kaydedici: pencere embedding'lerini oturum başına `.npz`'ye yazar.
+
+    NEDEN: pencere embedding'leri şimdiye dek hiçbir yere yazılmıyordu — RAM'de
+    duruyor ve her `begin_turn()`'de siliniyordu. Reddedilen pencerelerin skorları
+    yalnız `log.debug`'a gidiyor, varsayılan seviye INFO olduğu için diske hiç
+    düşmüyordu. Sonuç: "komşu pencereyle karşılaştırma" gibi fikirler GEÇMİŞ
+    veride hiç denenemiyordu. Asıl değerli veri REDDEDİLEN pencerelerdir; bu
+    yüzden onlar da yazılır.
+
+    SALT GÖZLEM: karar mantığına dokunmaz, hiçbir değer döndürmez, hızlı yolun
+    davranışını değiştirmez. `add()` yalnız RAM tamponuna yazar (mikrosaniye);
+    diske yazım turlar ARASINDA (`turn_active` False iken) ayrı bir thread'de
+    yapılır, yani gerçek zamanlı yol bloklanmaz.
+
+    ⚠️ BİYOMETRİK: embedding biyometrik veridir, depo PUBLIC. Dosyalar
+    `worker/data/` altına yazılır (`.gitignore`'da), log'a/transkripte ASLA
+    embedding basılmaz ve TTL süresi dolan dosyalar açılışta silinir.
+    """
+
+    def __init__(self) -> None:
+        # DİKKAT (DEVIR §7, `c9d0d27`): env modül seviyesinde okunursa `.env`
+        # ETKİSİZ kalır. Burası çağrı anında (SpeakerTap kurulurken, load_dotenv
+        # SONRASI) okunur; hiçbiri varsayılan argümana bağlı değildir.
+        self.enabled = _b("SPEAKER_EMB_LOG_ENABLED", True)
+        self._ttl_days = _f("SPEAKER_EMB_LOG_TTL_DAYS", 7.0)
+        self._max_windows = _i("SPEAKER_EMB_LOG_MAX_WINDOWS", 20000)
+        here = Path(__file__).resolve().parent
+        raw_dir = (os.getenv("SPEAKER_EMB_LOG_DIR") or "").strip()
+        base = Path(raw_dir) if raw_dir else Path("data") / "session-emb"
+        self.dir = base if base.is_absolute() else here / base
+        self.session_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
+        self.path = self.dir / f"{self.session_id}.npz"
+        self._rows: list[tuple] = []
+        self._dim: int | None = None
+        self._pending = 0  # henüz diske yazılmamış satır sayısı
+        self._swept = False
+        self._dropped = 0
+        if self.enabled:
+            log.info("gölge embedding kaydı: %s (TTL %.0f gün)", self.path, self._ttl_days)
+
+    @property
+    def pending(self) -> int:
+        return self._pending
+
+    def add(
+        self,
+        *,
+        turn: int,
+        embedding,
+        decided: str | None,
+        ranking: list[tuple[str, float]],
+        window_seconds: float,
+        rms: float,
+    ) -> None:
+        """Bir pencereyi tampona ekle. ASLA yükselmez, ASLA disk'e dokunmaz."""
+        if not self.enabled:
+            return
+        try:
+            arr = np.asarray(embedding)
+            if arr.ndim == 0 or arr.size == 0:
+                return  # None / skaler: gömme değil
+            vec = arr.astype(np.float16).reshape(-1)
+            if self._dim is None:
+                self._dim = int(vec.size)
+            elif int(vec.size) != self._dim:
+                return  # model değişmiş: karışık boyutlu matris yazma
+            if len(self._rows) >= self._max_windows:
+                self._dropped += 1
+                return
+            best_name, best_score = ranking[0] if ranking else ("", 0.0)
+            second_name, second_score = ranking[1] if len(ranking) > 1 else ("", 0.0)
+            self._rows.append((
+                time.time(), int(turn), vec,
+                str(best_name), float(best_score),
+                str(second_name), float(second_score),
+                float(window_seconds), float(rms), str(decided or ""),
+            ))
+            self._pending += 1
+        except Exception as e:  # noqa: BLE001 — ölçüm ASLA akışı bozmasın
+            log.debug("gölge embedding kaydı atlandı: %s", e)
+
+    async def maybe_flush(self) -> None:
+        """Bekleyen satır varsa dosyayı yeniden yaz (thread'de, olay döngüsü serbest)."""
+        if not self.enabled or self._pending <= 0:
+            return
+        rows = list(self._rows)  # anlık görüntü: `add` paralel ekleyebilir
+        self._pending = 0
+        try:
+            await asyncio.to_thread(self._write, rows)
+        except Exception as e:  # noqa: BLE001
+            log.debug("gölge embedding yazımı başarısız: %s", e)
+
+    def _write(self, rows: list[tuple]) -> None:
+        """Thread içinde çalışır. Atomik: geçici dosya + `os.replace`."""
+        if not rows:
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        if not self._swept:
+            self._swept = True
+            self._sweep()
+        tmp = self.dir / f".{self.session_id}.tmp.npz"
+        with open(tmp, "wb") as f:
+            np.savez(
+                f,
+                ts=np.array([r[0] for r in rows], dtype=np.float64),
+                turn=np.array([r[1] for r in rows], dtype=np.int32),
+                emb=np.stack([r[2] for r in rows]),
+                best_name=np.array([r[3] for r in rows]),
+                best_score=np.array([r[4] for r in rows], dtype=np.float32),
+                second_name=np.array([r[5] for r in rows]),
+                second_score=np.array([r[6] for r in rows], dtype=np.float32),
+                window_seconds=np.array([r[7] for r in rows], dtype=np.float32),
+                rms=np.array([r[8] for r in rows], dtype=np.float32),
+                decided=np.array([r[9] for r in rows]),
+            )
+        os.replace(tmp, self.path)
+
+    def _sweep(self) -> None:
+        """TTL süresi dolmuş oturum dosyalarını sil — biyometrik veri birikmesin."""
+        if self._ttl_days <= 0:
+            return
+        cutoff = time.time() - self._ttl_days * 86400.0
+        removed = 0
+        for p in self.dir.glob("*.npz"):
+            try:
+                if p.stat().st_mtime < cutoff:
+                    p.unlink()
+                    removed += 1
+            except OSError:
+                continue
+        if removed:
+            log.info("gölge embedding: %d eski oturum dosyası silindi (TTL)", removed)
 
 
 class SpeakerState:
@@ -436,6 +573,11 @@ class SpeakerTap:
             self._store = None  # tavan 0 = auto-learn kapalı
         self._learned = 0
         self._last_learn = 0.0
+        # Gölge embedding kaydedici (salt gözlem, varsayılan AÇIK, .env ile kapatılır).
+        self._emb_log = SessionEmbLog()
+        # Turlar arası akış hiç oluşmazsa (arka arkaya konuşma) tamponu boşaltacak
+        # emniyet valfi. 1 pencere/sn ile bu ~8 dk kesintisiz tek tur demektir.
+        self._emb_log_max_pending = _i("SPEAKER_EMB_LOG_FLUSH_EVERY", 512)
 
     async def _maybe_learn(self, name: str, emb) -> None:
         """Güvenli tanımada örnek ekle (kapalıysa / kota dolduysa no-op).
@@ -527,6 +669,9 @@ class SpeakerTap:
                     buf = bytearray()
                     bytes_since_window = 0
                 if not self._state.turn_active:
+                    # TURLAR ARASI = yazım için doğru an: kanıt toplanmıyor,
+                    # gecikmesi konuşmaya yansıyacak hiçbir iş yok.
+                    await self._emb_log.maybe_flush()
                     continue
                 buf.extend(payload)
                 if len(buf) > window_bytes:
@@ -564,9 +709,25 @@ class SpeakerTap:
                         self._state.last_embedding_capture_reason = reason
                     self._state.add_expression_window(chunk, emb)
                     name, score = self._sp.identify(emb)
+                    # Sıralama identify'nin HEMEN ardından, arada await olmadan
+                    # okunur — başka bir coroutine araya giremez.
+                    ranking = list(getattr(self._sp, "last_ranking_top2", None) or [])
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)
                     continue
+                # GÖLGE KAYIT — salt gözlem. Reddedilen (name=None) pencereler de
+                # yazılır; hızlı yolun ürettiği vektör TEKRAR EMBED EDİLMEDEN
+                # kullanılır ve bu satır diske dokunmaz (yalnız RAM tamponu).
+                self._emb_log.add(
+                    turn=self._state.turn_generation,
+                    embedding=emb,
+                    decided=name,
+                    ranking=ranking,
+                    window_seconds=len(chunk) / 2.0 / TAP_RATE,
+                    rms=rms,
+                )
+                if self._emb_log.pending >= self._emb_log_max_pending:
+                    await self._emb_log.maybe_flush()
                 # Artımlı öğrenme (default kapalı): yüksek güvenli tanımada centroid'i besle.
                 if name is not None and score >= self._learn_min:
                     await self._maybe_learn(name, emb)
@@ -589,3 +750,4 @@ class SpeakerTap:
         for t in self._tasks.values():
             t.cancel()
         self._tasks.clear()
+        await self._emb_log.maybe_flush()  # oturumun son pencereleri kaybolmasın
