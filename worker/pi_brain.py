@@ -7122,7 +7122,10 @@ def _compaction_test() -> int:
                                 },
                             }
                         self._turn_q.put_nowait(ev)
-            asyncio.create_task(feed())
+            # noqa NEDEN: RUF006 (kaybolan task) gerçek bir bug sınıfı ve kapıda açık
+            # kalmalı — ama burası self-test'in sahte istemcisi. feed() scripted olayları
+            # akıtıp bitiyor; testin ömrü zaten drive()'a bağlı, referans tutmanın karşılığı yok.
+            asyncio.create_task(feed())  # noqa: RUF006
 
         async def request(self, obj, timeout=10.0):
             self.requests.append(obj)
@@ -7235,7 +7238,9 @@ def _compaction_test() -> int:
 
         # (c) uzun compaction → watchdog KESMESİN. Testi hızlandırmak için normal
         # toleransı 0.3s'e indiriyoruz; compaction 1.0s (3 katı) sürüyor.
-        global PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT
+        # noqa NEDEN: PLW0603 haklı bir uyarı ama burada kasıt bu — modül seviyesindeki
+        # watchdog toleransını testin süresince kısaltıp finally'de geri koyuyoruz.
+        global PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT  # noqa: PLW0603
         old = (PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT)
         PI_TURN_STALL_TIMEOUT = PI_FIRST_TURN_STALL_TIMEOUT = 0.3
         try:

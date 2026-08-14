@@ -1,6 +1,41 @@
 #!/usr/bin/env bash
+# ┌───────────────────────────────────────────────────────────────────────────┐
+# │ EMEKLİ — 2026-08-14. Yerine: scripts/autodeploy.sh                        │
+# └───────────────────────────────────────────────────────────────────────────┘
+#
+# NEDEN EMEKLİ: bu script dosyaları scp ile tek tek kopyalıyordu, yani GİT'İ
+# ATLIYORDU. Sonuç: sunucu 3 hafta boyunca hiçbir commit'e karşılık gelmeyen kod
+# çalıştırdı. "Sunucuda ne var?" sorusunun cevabı kayboldu, kurtarmak için ayrı
+# bir tur gerekti (bkz. commit 03178cb "kurtarma: sunucuda commit'siz duran kod
+# repoya alindi"). Kopyalayan deploy, tanımı gereği bu sorunu tekrar üretir.
+#
+# YERİNE NE VAR: scripts/autodeploy.sh — sunucuda 60 sn'de bir `origin/main`'e
+# bakar, kapıda ruff + py_compile koşar, temizse `git reset --hard` + worker
+# restart, sağlık kontrolü tutmazsa geri alır. Tek doğru kaynak origin/main.
+# Deploy etmek = push etmek.
+#
+# SİLİNMEDİ ÇÜNKÜ: içindeki yedekleme/rollback ve sunucu-tarafı doğrulama akışı
+# referans değeri taşıyor; ayrıca autodeploy erişilemezse elde kaçış yolu kalsın.
+#
+# Yine de çalıştırmak için:  AUTODEPLOY_BYPASS=1 scripts/deploy-turn-identity.sh
+#
 # Turn-safe speaker identity deploy. MOSS/Whisper seçimine dokunmaz.
 set -Eeuo pipefail
+
+if [[ -z "${AUTODEPLOY_BYPASS:-}" ]]; then
+  cat >&2 <<'UYARI'
+DURDURULDU: bu deploy yolu 2026-08-14'te emekliye ayrıldı.
+
+  Sebep : scp ile kopyalıyor, git'i atlıyor. Sunucu commit'siz kod çalıştırmaya
+          başlıyor ve "canlıda ne var" izlenemez hale geliyor.
+  Yerine: push et. scripts/autodeploy.sh sunucuda 60 sn içinde origin/main'i alır,
+          ruff + py_compile kapısından geçirir, worker'ı yeniden başlatır.
+  Kayıt : /opt/candan-lite/worker/logs/deploy.jsonl
+
+Gerçekten bu eski yolu istiyorsan:  AUTODEPLOY_BYPASS=1 scripts/deploy-turn-identity.sh
+UYARI
+  exit 1
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="${CANDAN_DEPLOY_HOST:-root@192.168.0.25}"

@@ -1,0 +1,18 @@
+[Unit]
+Description=candan-lite otomatik deploy (origin/main -> canli)
+# Ağ yoksa git fetch anlamsız. Script zaten fetch hatasında sessizce çıkıyor,
+# bu yalnızca boşuna uyanmayı azaltır.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/candan-lite/scripts/autodeploy.sh
+# NEDEN root: script `git reset --hard` yapıp `systemctl restart candan-worker`
+# çağırıyor. Worker'ın kendi kullanıcısı (candan) bunların ikisini de yapamaz.
+User=root
+# Kapı kırmızıysa ya da geri alma tetiklendiyse script sıfırdan farklı döner —
+# bu BEKLENEN bir durum, timer'ı öldürmesin. Kayıt worker/logs/deploy.jsonl'de.
+SuccessExitStatus=1 2
+# Sağlık beklemesi 60 sn + restart; takılan bir tur bir sonrakini engellemesin.
+TimeoutStartSec=300

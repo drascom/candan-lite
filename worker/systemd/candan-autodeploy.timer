@@ -1,0 +1,14 @@
+[Unit]
+Description=candan-lite otomatik deploy tetikleyicisi (60 sn'de bir origin/main kontrolu)
+
+[Timer]
+# Boot'tan 2 dk sonra: worker ve pi-service önce otursun, ilk turda gereksiz
+# "kaydolamadi" alarmı üretmeyelim.
+OnBootSec=2min
+OnUnitActiveSec=60s
+# Sunucu kapalıyken kaçan turu yakalamaya gerek yok; zaten 60 sn sonra tekrar bakar.
+Persistent=false
+Unit=candan-autodeploy.service
+
+[Install]
+WantedBy=timers.target
