@@ -1095,9 +1095,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Candan terminal sesli istemcisi (tarayıcısız).",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    # web/lib/brain.ts BRAIN_DEFAULT = 'local' → CLI de aynı varsayılanla gelir.
+    # web/lib/brain.ts BRAIN_DEFAULT = 'remote' → CLI de aynı varsayılanla gelir.
+    # 2026-08-14: eski varsayılan 'local' (Gemma-4-12B, .25:8082 llama-server) EMEKLİ —
+    # candan-brain.service durduruldu/disable, GPU boşaltıldı. 'local' seçeneği duruyor
+    # ama worker tarafında uzak terra/minimal'e yönlendiriliyor (pi_brain.py BRAINS).
     # 'default' = metadata GÖNDERME → worker/.env PI_MODEL/PI_THINKING'e düş.
-    p.add_argument("--brain", choices=(*BRAINS, "default"), default="local", help="oturum beyni")
+    p.add_argument("--brain", choices=(*BRAINS, "default"), default="remote", help="oturum beyni")
     p.add_argument("--room", default=os.environ.get("MATE_LIVEKIT_ROOM"), help="LiveKit oda adı")
     p.add_argument("--url", default=os.environ.get("MATE_PUBLIC_LIVEKIT_URL") or os.environ.get("LIVEKIT_URL"),
                    help="LiveKit sunucu URL'i")
@@ -1177,8 +1180,11 @@ def main(argv: list[str] | None = None) -> int:
     global _COLOR, _OUT  # noqa: PLW0603
 
     args = _parse_args(argv)
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.WARNING,
-                        format="%(levelname)s %(name)s: %(message)s")
+    # LiveKit SDK bazı iç veri akışlarını root logger'a INFO/DEBUG olarak yazar ve
+    # parça parça gelen Candan transkriptinin ortasına girer. Root'ta yalnız gerçek
+    # uyarıları göster; --verbose sadece bu istemcinin tanı kayıtlarını açsın.
+    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    log.setLevel(logging.DEBUG if args.verbose else logging.WARNING)
     _COLOR = _color_enabled(args.no_color)
 
     if args.list_devices:
