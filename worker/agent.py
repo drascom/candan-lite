@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 from livekit.agents import Agent, AgentSession, JobContext, JobProcess, WorkerOptions, cli
@@ -19,6 +20,13 @@ from livekit.plugins import silero
 # turn_detector.__init__`'i çalıştırır → hem `en` hem `multilingual` runner'ı
 # inference sürecine KAYDEDER. Yani sunucuda İKİ revizyonun da indirilmiş olması
 # gerekir (`python -m livekit.agents download-files` ikisini de çeker).
+# 1.6.5'te yerel çok-dilli modelin yeni bir eşdeğeri yok; yalnız bu bilinen
+# geçiş uyarısını susturuyoruz. Diğer DeprecationWarning'ler görünmeye devam eder.
+warnings.filterwarnings(
+    "ignore",
+    message=r"`livekit\.plugins\.turn_detector` is deprecated.*",
+    category=DeprecationWarning,
+)
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 import barge                                # sözünü kesme: yeni komut mu, sohbet mi
@@ -78,19 +86,24 @@ HIGGS_TTS_PORT = int(os.environ.get("HIGGS_TTS_PORT", "8809"))
 HIGGS_STREAM = (os.environ.get("HIGGS_STREAM") or "1").strip().lower() not in (
     "0", "false", "no", "off",
 )
+# Candan'ın taban sesi kişi/profil bağımsızdır: canlı ve enerjik. Model yalnız
+# konuşmanın içeriği gerçekten gerektirirse `[mood:sad|calm|...]` ile o tur için
+# değiştirir. Boş/yanlış değer Higgs tarafında güvenle nötre düşer.
+HIGGS_DEFAULT_MOOD = (os.environ.get("HIGGS_DEFAULT_MOOD") or "excited").strip().lower()
 # Konuşma hızı kolu (`[speed:X]` → WSOLA tempo, perde KORUNARAK). AÇIK varsayılan
-# ama VARSAYILAN KADEME `normal` (oran 1.0) — yani kullanıcı istemedikçe davranış
-# bugünküyle BİRE BİR aynı, tek bir ek işlem bile yapılmaz. Ölçüm: +%14.8 / +%29.7
-# kelime/s, WER tabanla aynı, ilk ses 517 ms → 517 ms (experiments/konusma-hizi).
+# ve Candan için varsayılan kademe `fast`: canlı taban konuşma. Kullanıcının hız
+# talebi yine `[speed:X]` ile oturum boyunca bunun üstüne çıkar. Ölçüm: fast +%14.8,
+# WER tabanla aynı, ilk ses 517 ms → 517 ms (experiments/konusma-hizi).
 # GERİ DÖNÜŞ TEK SATIR → worker/.env'e `SPEECH_SPEED=0`.
 SPEECH_SPEED = (os.environ.get("SPEECH_SPEED") or "1").strip().lower() not in (
     "0", "false", "no", "off",
 )
+SPEECH_SPEED_DEFAULT = (os.environ.get("SPEECH_SPEED_DEFAULT") or "fast").strip().lower()
 LANG = os.environ.get("MATE_LANGUAGE", "tr")
 
 # Beyin: pi CLI, warm `--mode rpc` alt-süreci (HTTP /v1 YOK). Persona env ile seçilir.
 PI_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
-SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.0") or 1.0)
+SPEAKER_MIN_S = float(os.environ.get("SPEAKER_MIN_SECONDS", "1.5") or 1.5)
 # Yapışkanlık: art arda kaç güvensiz pencereden sonra current unknown'a düşsün.
 SPEAKER_STICKY_MISSES = int(float(os.environ.get("SPEAKER_STICKY_MISSES", "5") or 5))
 # İlk kimlik/speaker switch için gereken ardışık güvenli pencere sayısı. Tek bir
@@ -104,7 +117,34 @@ SPEAKER_TURN_CONFIRM_HITS = int(
 SPEAKER_TURN_MAX_SECONDS = float(
     os.environ.get("SPEAKER_TURN_MAX_SECONDS", "8") or 8
 )
+# Final STT, son ReDimNet2 embedding'inden birkaç yüz ms önce gelebilir. Bu tavan
+# yalnız uçuşta bir iş varsa kullanılır; normal turda sıfır gecikme ekler.
+SPEAKER_FINALIZE_WAIT_S = max(
+    0.0, float(os.environ.get("SPEAKER_FINALIZE_WAIT_MS", "400") or 400) / 1000.0
+)
+# Kısa dönüş hızlı yolu: normal identify eşiğinden geçmiş TEK pencere, ayrıca
+# sıkı marj kapısını aşarsa kimlik olur. Canlı ölçümde Ayhan=0.569/0.411 doğru
+# adayken eski 0.63 hızlı skorunda 1/2 kaldı; skor tabanı kalibre eşiğe çekildi.
+SPEAKER_FAST_SINGLE_ENABLED = (
+    os.environ.get("SPEAKER_FAST_SINGLE_ENABLED", "true").strip().lower()
+    in ("1", "true", "yes", "on")
+)
+SPEAKER_FAST_SINGLE_SCORE = float(
+    os.environ.get("SPEAKER_FAST_SINGLE_SCORE", "0.568") or 0.568
+)
+SPEAKER_FAST_SINGLE_MARGIN = float(
+    os.environ.get("SPEAKER_FAST_SINGLE_MARGIN", "0.25") or 0.25
+)
 SPEAKER_TRANSCRIPT_ATTR = "candan.speaker"
+
+
+def _turn_handling_kwargs(turn_detection) -> dict:
+    """LiveKit 1.6.5/1.6.6 ortak geçişi: yenide uyarısız, eskide uyumlu."""
+    try:
+        from livekit.agents.voice.turn import TurnHandlingOptions
+    except (ImportError, ModuleNotFoundError):
+        return {"turn_detection": turn_detection}
+    return {"turn_handling": TurnHandlingOptions(turn_detection=turn_detection)}
 
 # Paralel erken-wake dinleyici (opsiyonel, additive). Kapalıyken davranış AYNI.
 def _envflag(name: str, default: bool = False) -> bool:
@@ -195,9 +235,12 @@ def _install_user_transcript_context(
                 attrs[SPEAKER_TRANSCRIPT_ATTR] = label
 
     async def _gated_capture(text: str) -> None:
+        # `user_input_transcribed` handler'ının başlattığı tek final görevi varsa
+        # web etiketi de onunla aynı kararı kullansın. Fail-open brain içinde.
+        await brain.wait_speaker_resolution()
         # Karar final STT olayı geldiğinde resolve edilmiştir. Yarış/kanıt eksikse
         # önceki kişiyi taşımak yerine güvenli etiket kullanılır.
-        name = getattr(speaker_state, "current", None) if speaker_state else None
+        name = getattr(speaker_state, "response_name", None) if speaker_state else None
         _set_speaker_attribute(name or "Bilinmeyen")
         # Uyurken (awake False) kullanıcı metnini web'e yayınlama. wake yoksa eski
         # davranış = yayınla.
@@ -219,10 +262,11 @@ TOOL_TOPIC = "mate.tool"
 
 
 # ── PREWARM: ağır model yükleri job YOLUNDAN çıkarılır ───────────────────────
-# silero VAD + çok dilli EOU + campplus.onnx job başlarken yükleniyordu; yani
-# kullanıcı bağlandıktan SONRA, o beklerken (~2-2.7 sn). `prewarm_fnc` bunları
-# BOŞTAKİ süreçte, iş gelmeden önce yükler. Maliyet: boşta birkaç yüz MB RAM
-# (süreç başına). Geri dönüş: WorkerOptions'tan `prewarm_fnc` satırını sil.
+# silero VAD + ReDimNet2 job başlarken yükleniyordu; yani kullanıcı bağlandıktan
+# SONRA, o beklerken (~2-2.7 sn). `prewarm_fnc` bunları BOŞTAKİ süreçte, iş gelmeden
+# önce yükler. Çok dilli EOU ise LiveKit 1.6.5'te job context ister; onu burada
+# oluşturmak her job başında gereksiz traceback üretir. EOU entrypoint içinde,
+# geçerli inference executor hazırken yüklenir.
 _MISSING = object()
 
 
@@ -234,9 +278,8 @@ def prewarm(proc: JobProcess) -> None:
     log = logging.getLogger("worker.agent")
     for name, factory in (
         ("vad", silero.VAD.load),
-        ("eou", MultilingualModel),
-        # campplus.onnx (sherpa-onnx embedding çıkarıcı). speakers.db'ye DOKUNMAZ —
-        # veritabanını (SpeakerStore) job açar, burada yalnız model ağırlığı yüklenir.
+        # ReDimNet2 ağırlıkları. Veritabanını SpeakerStore job açınca yükler;
+        # prewarm yalnız model kodunu/ağırlığını hazırlar.
         ("speaker_id", build_speaker_id),
     ):
         try:
@@ -282,9 +325,8 @@ async def entrypoint(ctx: JobContext):
 
     await ctx.connect()
 
-    # --- Faz 3: speaker-ID (opsiyonel, additive) ---
-    # SPEAKER_ID_ENABLED kapalı / model yok / sherpa-onnx yok ise sp=None kalır ve
-    # davranış Faz 2 ile AYNI olur (tek persona candan, tek warm süreç).
+    # --- ReDimNet2 kapalı-grup speaker-ID ---
+    # Model yüklenemezse sesli Agent çalışır; kimlik Bilinmeyen kalır.
     sp = _prewarmed(ctx, "speaker_id")
     if sp is _MISSING:
         sp = build_speaker_id()
@@ -300,6 +342,9 @@ async def entrypoint(ctx: JobContext):
                 confirm_hits=SPEAKER_CONFIRM_HITS,
                 turn_confirm_hits=SPEAKER_TURN_CONFIRM_HITS,
                 turn_max_seconds=SPEAKER_TURN_MAX_SECONDS,
+                fast_single_enabled=SPEAKER_FAST_SINGLE_ENABLED,
+                fast_single_score=SPEAKER_FAST_SINGLE_SCORE,
+                fast_single_margin=SPEAKER_FAST_SINGLE_MARGIN,
             )
             # `capture_gate` brain doğduktan sonra bağlanır. Tap'in kurulumunu burada
             # tutmak, speaker-ID başlatma hatasında mevcut Faz 2 geri-düşüşünü korur.
@@ -335,7 +380,8 @@ async def entrypoint(ctx: JobContext):
 
     tts_plugin = HiggsTTS(
         host=HIGGS_TTS_HOST, port=HIGGS_TTS_PORT, stream=HIGGS_STREAM,
-        speed_control=SPEECH_SPEED,
+        speed_control=SPEECH_SPEED, default_mood=HIGGS_DEFAULT_MOOD,
+        default_speed=SPEECH_SPEED_DEFAULT,
     )
     # Hız kademesi TTS'te yaşıyor; DOĞRULUK DENETİMİ onu bilmek zorunda.
     # "Hızlandırıyorum" diyen ama hızı değiştirmeyen (ya da tavanda olan) tur
@@ -343,8 +389,9 @@ async def entrypoint(ctx: JobContext):
     # truth_check.speed_line — canlı hata 27 Tem 18:33).
     brain.set_speed_source(lambda: tts_plugin.speed)
     logging.getLogger("worker.agent").info(
-        "TTS motoru: higgs (%s:%d) akış=%s", tts_plugin._host, tts_plugin._port,
-        "açık" if HIGGS_STREAM else "KAPALI",
+        "TTS motoru: higgs (%s:%d) akış=%s varsayılan_ton=%s varsayılan_hız=%s",
+        tts_plugin._host, tts_plugin._port, "açık" if HIGGS_STREAM else "KAPALI",
+        tts_plugin._default_mood or "nötr", tts_plugin.speed,
     )
 
     # ── SEMANTİK TUR-SONU (EOU) — cümle ortasındaki nefes turu BÖLMESİN ──────────
@@ -369,8 +416,8 @@ async def entrypoint(ctx: JobContext):
     # `_ENDPOINTING_DEFAULTS` (min 0.5 / max 3.0) olur — bu detektör tipi için
     # framework'ün kendi tuned değeri (voice/turn.py:298 `_resolve_endpointing`).
     #
-    # Yük artık `prewarm` içinde, boştaki süreçte yapılır; buradaki yol prewarm
-    # atlandığında/patladığında bugünkü davranışı BİRE BİR sürdürür.
+    # LiveKit 1.6.5 modeli yalnız geçerli job context içinde kurabildiği için EOU
+    # burada yüklenir. Yeni sürümlerde de aynı yol uyumludur.
     turn_detection = _prewarmed(ctx, "eou")
     if turn_detection is _MISSING:
         try:
@@ -393,9 +440,8 @@ async def entrypoint(ctx: JobContext):
         # onaylanınca sp/store ile kaydeder (speaker_state None ise devre dışı).
         llm=brain,
         tts=tts_plugin,
-        # `turn_detection=` 1.6.6'da deprecated (yerine turn_handling=...) AMA sunucudaki
-        # 1.6.5 ile de çalışan TEK ortak imza bu — sürümler eşitlenene kadar burada kalsın.
-        turn_detection=turn_detection,
+        # 1.6.6+ uyarısız `turn_handling`, 1.6.5'te eski uyumlu imza.
+        **_turn_handling_kwargs(turn_detection),
     )
 
     # NOT: close_on_disconnect DEFAULT (True) bırakıldı — bilerek. False denendi ve GERİ ALINDI:
@@ -476,28 +522,29 @@ async def entrypoint(ctx: JobContext):
             hide_when_asleep=WAKE_ENABLED and SLEEP_TRANSCRIPTS_HIDDEN,
         )
 
-    # ── SÖZÜNÜ KESME: ne söylendi, nerede kesildi (bkz. worker/barge.py) ─────
+    # ── AJAN CEVAP BAĞLAMI + SÖZÜNÜ KESME ───────────────────────────────────
     # Kesme anında "kullanıcı gerçekte neyi duydu" TAHMİN EDİLMEZ — framework
     # bilir: `conversation_item_added`, ses/transkript senkronizasyonundan gelen
     # `forwarded_text`i taşır ve `interrupted` bayrağını verir (voice/generation.py
     # `_ForwardOutput.forwarded_text`). Bu tek olay hem devam mekaniğini
     # (kaldığı cümlenin başından sürdür) hem geçmiş dürüstlüğünü (kesilen metin
     # söylenmiş gibi geçmişe girmesin) besler.
-    # Bayrak kapalıysa kanca HİÇ kurulmaz → davranış bugünküyle bire bir aynı.
-    if barge.RESUME_ENABLED:
-        @session.on("conversation_item_added")
-        def _on_item_added(ev) -> None:
-            try:
-                item = getattr(ev, "item", None)
-                if getattr(item, "role", "") != "assistant":
-                    return
-                brain.note_agent_said(
-                    getattr(item, "text_content", "") or "",
-                    bool(getattr(item, "interrupted", False)),
-                )
-            except Exception:  # noqa: BLE001 — kesme defteri konuşmayı BOZMAZ
-                logging.getLogger("worker.agent").warning(
-                    "kesme defteri güncellenemedi", exc_info=True)
+    # Bu olay barge kapalıyken de gerekir: gerçekten seslendirilen son Candan
+    # cevabının soru/eylem bağlamını kısa yanıt devri kullanır. Kesme defteri kendi
+    # feature bayrağını içeride uygular.
+    @session.on("conversation_item_added")
+    def _on_item_added(ev) -> None:
+        try:
+            item = getattr(ev, "item", None)
+            if getattr(item, "role", "") != "assistant":
+                return
+            brain.note_agent_said(
+                getattr(item, "text_content", "") or "",
+                bool(getattr(item, "interrupted", False)),
+            )
+        except Exception:  # noqa: BLE001 — cevap bağlamı konuşmayı BOZMAZ
+            logging.getLogger("worker.agent").warning(
+                "ajan cevap bağlamı güncellenemedi", exc_info=True)
 
     # `mate.tool`: tool çağrısı/sonucu → odaya text-stream (web sohbette gösterir).
     # BEST-EFFORT: yayın patlarsa konuşma AYNEN sürer, sadece warning düşer.
@@ -568,24 +615,44 @@ async def entrypoint(ctx: JobContext):
         def _speaker_turn_final(ev) -> None:
             if not getattr(ev, "is_final", False):
                 return
-            decision = speaker_state.resolve_turn()
-            logging.getLogger("worker.agent").info(
-                "speaker turn kararı: %s (sebep=%s, kabul=%d/%d, skor=%.3f)"
-                " | aday=%s oran=%.2f ort_skor=%.3f pencere=%d",
-                decision.name or "Bilinmeyen",
-                decision.reason,
-                decision.accepted,
-                decision.total,
-                decision.score,
-                decision.candidate or "—",
-                decision.candidate_ratio,
-                decision.candidate_score,
-                decision.candidate_windows,
-            )
+            transcript = getattr(ev, "transcript", "") or ""
+
+            async def _finalize() -> None:
+                decision, ready, waited = await speaker_state.resolve_turn_when_ready(
+                    SPEAKER_FINALIZE_WAIT_S
+                )
+                contextual = brain.contextualize_short_reply(transcript, decision)
+                if contextual and speaker_state.assume_contextual(
+                    contextual,
+                    "önceki Candan sorusu/eylem sonucuna kısa cevap",
+                ):
+                    logging.getLogger("worker.agent").info(
+                        "speaker kısa cevap bağlamı: %s (biyometrik değil)", contextual
+                    )
+                logging.getLogger("worker.agent").info(
+                    "speaker turn kararı: %s (sebep=%s, kabul=%d/%d, skor=%.3f)"
+                    " | aday=%s oran=%.2f ort_skor=%.3f pencere=%d"
+                    " | son_pencere=%s bekleme_ms=%.0f",
+                    decision.name or "Bilinmeyen",
+                    decision.reason,
+                    decision.accepted,
+                    decision.total,
+                    decision.score,
+                    decision.candidate or "—",
+                    decision.candidate_ratio,
+                    decision.candidate_score,
+                    decision.candidate_windows,
+                    "yetişti" if ready else "zaman aşımı",
+                    waited * 1000.0,
+                )
+
+            task = asyncio.create_task(_finalize())
+            brain.set_speaker_resolution_task(task)
 
     # STT'den BAĞIMSIZ paralel speaker tap'i room'a bağla (mic track → embed/identify).
     if tap is not None:
         tap.attach(ctx.room)
+        ctx.add_shutdown_callback(tap.aclose)
 
     # Paralel erken-wake dinleyici (opsiyonel, default KAPALI). Açıksa mic track'e
     # ayrı bir VAD+Whisper penceresi bağlar; "candan" duyulunca brain.wake_now() →
@@ -774,6 +841,12 @@ async def entrypoint(ctx: JobContext):
             while True:
                 await asyncio.sleep(HEARTBEAT_SECONDS)
                 try:
+                    # Gün değişimi kullanıcı konuşmazken yakalanırsa sessizce özetle
+                    # ve session'ı döndür. Oda uyanıksa ilk gerçek tur kendi haberli
+                    # yolunu kullanır; heartbeat konuşmanın arasına girmez.
+                    await brain.daily_rollover_if_needed(
+                        announce=False, allow_awake=False
+                    )
                     user = brain.current_user()          # guest/unknown → '' → iş yok
                     if not user:
                         continue
@@ -812,7 +885,7 @@ if __name__ == "__main__":
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
-            # Ağır modeller (VAD/EOU/campplus) boştaki süreçte yüklensin; job
+            # Ağır modeller (VAD/EOU/ReDimNet2) boştaki süreçte yüklensin; job
             # başlarken kullanıcı beklemesin (~2-2.7 sn job yolundan çıkar).
             prewarm_fnc=prewarm,
             agent_name=AGENT_NAME,  # explicit dispatch — web token'ı bu adı çağırır

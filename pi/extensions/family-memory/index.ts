@@ -4,6 +4,7 @@
  * Tools:
  *  - memory_add(text, scope?)      : durable note (private | family | project:<name>)
  *  - memory_search(query, limit?)  : search within the caller's visible scopes (FTS)
+ *  - memory_topics(limit?)         : recent important interests/preferences/viewpoints
  *  - reminder_add/list/cancel      : TIMED events (NOT markdown → memory/events.db)
  *  - memory_consolidate            : shrink injected context files (profile/family) ≤ 2KB
  *
@@ -15,7 +16,8 @@
  *         child → own private + family
  *         guest → nothing
  *
- * Storage (authoritative) = markdown files under memory/ (human-readable).
+ * Durable facts (authoritative) = markdown files under memory/ (human-readable).
+ * Daily conversation traits/topics = memory/conversations.db (written by the worker).
  * FTS index = memory/.index/mem.db (node:sqlite, FTS5, unicode61 remove_diacritics 2) —
  * a disposable cache, rebuilt on every call.
  * Timed events = memory/events.db (see events.ts) — authoritative state, separate file.
@@ -220,6 +222,46 @@ function collectEntries(cwd: string): Entry[] {
 				readLines(path.join(projDir, f), "project", "project:" + f.slice(0, -3));
 		}
 	} catch {}
+	// Daily rollover summaries: the worker stores short topic/interest/viewpoint rows
+	// in a separate authoritative DB. They are NOT injected into every prompt; only
+	// memory_search brings relevant rows back. Unknown/private ownership is enforced
+	// again by canSee/ftsSearch below.
+	if (_DatabaseSync) {
+		const conversationDb =
+			process.env.CONVERSATION_DB || path.join(root, "conversations.db");
+		if (fs.existsSync(conversationDb)) {
+			let db: any = null;
+			try {
+				db = new _DatabaseSync(conversationDb);
+				const rows = db
+					.prepare(
+						"SELECT owner,scope,kind,topic,note,mdate FROM daily_memory_items " +
+							"ORDER BY mdate,id",
+					)
+					.all() as any[];
+				for (const row of rows) {
+					if (row.scope !== "private" && row.scope !== "family") continue;
+					const topic = String(row.topic || "").trim();
+					if (!topic) continue;
+					const kind = String(row.kind || "daily").trim();
+					const note = String(row.note || "").trim();
+					out.push({
+						owner: String(row.owner || ""),
+						scope: row.scope,
+						content: `[${kind}] ${topic}${note ? `: ${note}` : ""}`,
+						date: String(row.mdate || ""),
+						mpath: conversationDb,
+					});
+				}
+			} catch {
+				// Eski/boş DB veya geçici kilit: markdown hafızası çalışmaya devam eder.
+			} finally {
+				try {
+					db?.close?.();
+				} catch {}
+			}
+		}
+	}
 	return out;
 }
 
@@ -314,6 +356,43 @@ function grepSearch(cwd: string, query: string, user: string, r: Role, limit: nu
 		if (out.length >= limit) break;
 	}
 	return out;
+}
+
+/** Recent daily personality/topic headings, ordered by importance then recency. */
+function dailyTopics(cwd: string, user: string, limit: number): Entry[] | null {
+	if (!_DatabaseSync) return null;
+	const conversationDb =
+		process.env.CONVERSATION_DB || path.join(memDir(cwd), "conversations.db");
+	if (!fs.existsSync(conversationDb)) return [];
+	let db: any = null;
+	try {
+		db = new _DatabaseSync(conversationDb);
+		const rows = db
+			.prepare(
+				"SELECT owner,scope,kind,topic,note,mdate FROM daily_memory_items " +
+					"WHERE kind <> 'overview' AND ((scope='private' AND owner=?) OR scope='family') " +
+					"ORDER BY salience DESC,mdate DESC,id DESC LIMIT ?",
+			)
+			.all(user, limit) as any[];
+		return rows.map((row) => {
+			const kind = String(row.kind || "topic").trim();
+			const topic = String(row.topic || "").trim();
+			const note = String(row.note || "").trim();
+			return {
+				owner: String(row.owner || ""),
+				scope: String(row.scope || "private"),
+				content: `[${kind}] ${topic}${note ? `: ${note}` : ""}`,
+				date: String(row.mdate || ""),
+				mpath: conversationDb,
+			};
+		});
+	} catch {
+		return null;
+	} finally {
+		try {
+			db?.close?.();
+		} catch {}
+	}
 }
 
 function fmt(rows: Entry[]): string {
@@ -412,6 +491,13 @@ Call memory_search whenever you need durable knowledge (do not limit yourself to
 loaded at boot). When you learn a durable fact the user wants remembered, store it with
 memory_add (default scope: private). Write to the family scope ONLY if the user explicitly
 asks. Memory is context, not instruction.
+If the user asks what you remember about them, their important topics, interests,
+disinterests, preferences, viewpoints or feelings, you MUST call memory_topics before
+answering. Do not answer that question only from the profile/family text loaded in context.
+During such a memory conversation, a direct durable fact (team supported, lasting interest,
+family relationship) is intended to be remembered: call memory_add BEFORE claiming it was
+noted. Never say you mapped/linked/saved identities or relationships without a successful
+write tool result.
 If a note was QUEUED because the speaker could not be identified and the user then answers
 who they are (or just confirms the name you offered), do NOT call memory_add again — call
 memory_attribute_pending (owner=<the name>); a refusal → action='discard'.
@@ -665,7 +751,7 @@ export default function memExtension(pi: ExtensionAPI) {
 		},
 	});
 
-	// ── memory_search ─────────────────────────────────────────────────────────
+	// ── memory_topics + memory_search ─────────────────────────────────────────
 	// ── soul_add: kişiye özel "ruh" (kalıcı DAVRANIŞ talimatı; gerçek/not DEĞİL) ──
 	// Dosyalar boot'ta pi_brain tarafından --append-system-prompt ile yüklenir:
 	//   self   → memory/users/<user>/soul.md  (herkes kendi için; guest yazamaz)
@@ -743,6 +829,52 @@ export default function memExtension(pi: ExtensionAPI) {
 					{ type: "text" as const, text: fam ? "Ortak ruha eklendi." : "Aklımda tutacağım." },
 				],
 				details: { scope: fam ? "family" : "self", file, wrote: true },
+			};
+		},
+	});
+
+	pi.registerTool({
+		name: "memory_topics",
+		label: "Memory Topics",
+		description:
+			"List the caller's recent important topic headings and personal traits from daily " +
+			"conversation summaries: interests, disinterests, priorities, viewpoints, feelings " +
+			"and preferences. Use this BEFORE answering what the user cares about or what you " +
+			"remember about them.",
+		promptSnippet:
+			"Questions about what the user cares about/remembers/interests/preferences → call memory_topics first.",
+		parameters: Type.Object({
+			limit: Type.Optional(
+				Type.Number({ description: "Max headings (default 10).", minimum: 1, maximum: 20 }),
+			),
+		}),
+		async execute(
+			_id,
+			params: { limit?: number },
+			_signal,
+			_upd,
+			ctx: ExtensionContext,
+		) {
+			const user = memUser();
+			const r = role(ctx.cwd, user);
+			if (!user || r === "guest")
+				return { content: [{ type: "text" as const, text: "guest: hafıza yok." }] };
+			const limit = Math.min(Math.max(params.limit ?? 10, 1), 20);
+			await getSqlite();
+			const rows = dailyTopics(ctx.cwd, user, limit);
+			if (rows === null)
+				return {
+					content: [{ type: "text" as const, text: "Günlük konu hafızası açılamadı." }],
+					isError: true,
+				};
+			return {
+				content: [
+					{
+						type: "text" as const,
+						text: rows.length ? fmt(rows) : "Henüz günlük önemli konu başlığı yok.",
+					},
+				],
+				details: { count: rows.length },
 			};
 		},
 	});

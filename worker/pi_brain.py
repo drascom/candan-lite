@@ -2,9 +2,10 @@
 
 Tasarım: docs/pi-brain-design.md. Oturum başına BİR kalıcı `pi --mode rpc`
 alt-süreci sürülür (stdin/stdout JSON-lines). Her chat turu stdin'e
-`{"type":"prompt","message":...}` yazar; stdout'tan gelen `message_update`
+`{"type":"prompt","message":...,"streamingBehavior":"steer"}` yazar; stdout'tan gelen `message_update`
 event'lerindeki `assistantMessageEvent.text_delta` parçaları LLMStream olarak
-stream edilir. Tur `agent_settled` event'inde biter. Barge-in `{"type":"abort"}`.
+stream edilir. Tur `agent_settled` event'inde biter. Kullanıcı konuşmaya devam
+ederse eski Pi koşusu kesilmez; yeni söz aynı koşuya steer edilir.
 
 İki katman:
   - PiRpcClient   — saf asyncio alt-süreç RPC (livekit'e bağımsız; smoke test bunu kullanır).
@@ -40,6 +41,14 @@ from name_parser import (
 from log_utils import DedupeFilter
 import barge
 import truth_check
+from daily_memory import (
+    DailyMemoryStore,
+    daily_summary_prompt,
+    inspect_session,
+    known_memory_owners,
+    normalize_summary,
+    rollover_due,
+)
 
 logger = logging.getLogger("pi_brain")
 logger.addFilter(DedupeFilter())  # tekrarlayan warning/info loglarını seyreltir
@@ -53,6 +62,18 @@ PI_BIN = os.environ.get("PI_BIN", "pi")
 # yaşayan `pi_broker.py` servisine gider. Böylece kullanıcı odadan ayrılsa bile
 # Pi süreçleri (ve yüklenmiş extension'lar) yerinde kalır.
 PI_BROKER_SOCKET = os.environ.get("PI_BROKER_SOCKET", "").strip()
+# Dev Pi ayrı OS kullanıcısı/socket'i altında çalışabilir. Ayar yoksa geliştirme
+# kurulumlarında geriye uyum için normal broker socket'ine düşer.
+PI_DEV_BROKER_SOCKET = os.environ.get(
+    "PI_DEV_BROKER_SOCKET", PI_BROKER_SOCKET
+).strip()
+# Pi RPC tek JSON satırında bütün session ağacını döndürebilir. Uzun Candan
+# geçmişi ~600 KB iken asyncio'nun 64 KB varsayılanı `LimitOverrunError` ile reader'ı
+# öldürüyordu; alt süreç canlı kaldığından sonraki bütün turlar sessizce takılıyordu.
+PI_RPC_STREAM_LIMIT = max(
+    1024 * 1024,
+    int(os.environ.get("PI_RPC_STREAM_LIMIT") or 8 * 1024 * 1024),
+)
 # Global varsayılan model (gpt-5.6-luna) rpc'de bozuk ("Model not found") → pinlemek ZORUNLU.
 PI_MODEL = os.environ.get("PI_MODEL", "openai-codex/gpt-5.6-terra")
 PI_DEFAULT_PERSONA = os.environ.get("PI_DEFAULT_PERSONA", "candan")
@@ -89,8 +110,14 @@ PI_THINKING = os.environ.get("PI_THINKING", "minimal")
 #   uzak   → "minimal": en düşük gecikme (ölçüldü: off=6.6s, minimal=2.6s, default=3.2s).
 #
 # Seçim gelmezse/bozuksa → .env'deki PI_MODEL/PI_THINKING (bugünkü davranış).
+#
+# 2026-08-14: YEREL BEYIN EMEKLI. candan-brain.service (llama-server, Gemma-4-12B)
+# durduruldu + disable edildi, GPU bosaltildi. "local" ANAHTARI SILINMEDI: eski web
+# localStorage ve eski CLI varsayilani hala brain=local gonderiyor; yonlendirilmezse
+# o oturumlar olu beyne duser. Bu yuzden "local" da uzak terra/minimal'e bakiyor.
+# Eski deger (geri almak icin): ("llama-cpp/gemma-4-12B-it-qat-q4_0", "default")
 BRAINS: dict[str, tuple[str, str]] = {
-    "local": ("llama-cpp/gemma-4-12B-it-qat-q4_0", "default"),
+    "local": ("openai-codex/gpt-5.6-terra", "minimal"),  # emekli -> uzaga yonlendirildi
     "remote": ("openai-codex/gpt-5.6-terra", "minimal"),
 }
 
@@ -264,7 +291,7 @@ def _envflag(name: str, default: bool) -> bool:
 # bekletmek kötü). 0 → hiç söyleme. Yalnız soğuk turda, tur başına EN FAZLA bir kez.
 PI_COLD_NOTICE_DELAY = float(os.environ.get("PI_COLD_NOTICE_DELAY", "5") or 0)
 PI_COLD_NOTICE_TEXT = (
-    os.environ.get("PI_COLD_NOTICE_TEXT") or "Bir saniye, aklımı topluyorum."
+    os.environ.get("PI_COLD_NOTICE_TEXT") or "Bir saniye, cevap hazırlıyorum."
 )
 # ── Compaction (bağlam sıkıştırma) ara sözü ─────────────────────────────────
 # pi bağlam dolunca geçmişi özetler (`compaction_start` → uzun LLM çağrısı →
@@ -291,25 +318,18 @@ PI_COMPACTION_STALL_TIMEOUT = float(
     os.environ.get("PI_COMPACTION_STALL_TIMEOUT", "120") or 120
 )
 # TUR SONU compaction ARKA PLANA alınır (bkz. PiStream: "tur sonu compaction devri").
-# Yeni tur, devredilen sıkıştırma bitene kadar pi'ya prompt GÖNDEREMEZ (tek agent
-# oturumu, tek sıra). Bu kadar saniye içinde bitmezse kullanıcıyı sessiz bırakmamak
-# için TEK kısa ara söz söylenir, bekleme sürer.
-PI_COMPACTION_NOTICE_DELAY = float(
-    os.environ.get("PI_COMPACTION_NOTICE_DELAY", "1.5") or 1.5
-)
-# ── Compaction PENCERESİ: haber ver + o sırada komut alma ────────────────────
+# Yeni kullanıcı sözü sıkıştırmayı beklemez/reddedilmez: aktif stream devralır ve
+# `prompt+steer` ile Pi kuyruğuna ekler.
+# ── Compaction PENCERESİ: yalnız uzun süren işi haber ver ─────────────────────
 # İLK ÖLÇÜM (27 Tem, `candan-brain` print_timing — sıkıştırma pi'nın llama-server'a
 # attığı TEK istektir, süresi orada birebir yazıyor). Yedi sıkıştırma:
 #   20.7 · 21.2 · 23.3 · 23.6 · 33.3 · 35.2 · 61.5 sn   (ortanca 23.6, tepe 61.5)
 # Yani sıkıştırma 3 saniyelik bir duraklama DEĞİL, yarım dakikalık bir kesinti.
 # Kullanıcı bunu zaten yaşıyordu ("sistem yavaşladı") ama sebebini bilmiyordu.
-# Karar: pencereyi (a) HABER VER, (b) o sırada yeni komut ALMA — ama sıkıştırma
-# ARKA PLANDA kalsın (senkron yapmak 2026-07-26'daki sessizlik hatasını geri getirir).
+# Karar: pencereyi HABER VER ama yeni komutu daima steer kuyruğuna AL.
+# Değişken adı eski kurulumlarla uyum için korunuyor; artık komut kapısı değildir.
 PI_COMPACT_GATE_ENABLED = _envflag("PI_COMPACT_GATE_ENABLED", True)
-# Bu saniyeden KISA süren sıkıştırma için ne haber verilir ne de tur reddedilir —
-# gürültü olurdu. Aynı değer kapının "nezaket beklemesi"dir: pencereye denk gelen
-# tur önce bu kadar bekler, sıkıştırma bu sürede biterse HİÇBİR ŞEY olmamış gibi
-# normal cevaplanır (ölçülen sürelerde bu neredeyse hiç olmaz; kol geleceğe dönük).
+# Bu saniyeden KISA süren sıkıştırma için haber verilmez; gürültü olurdu.
 PI_COMPACT_NOTIFY_MIN_S = float(os.environ.get("PI_COMPACT_NOTIFY_MIN_S", "2") or 0)
 # Başlangıç cümlesi: ~yarım dakikalık bekleme SÖYLENİR (kullanıcı bilerek bekleyebilsin).
 PI_COMPACT_START_TEXT = (
@@ -318,11 +338,6 @@ PI_COMPACT_START_TEXT = (
 )
 # Bitiş: her sıkıştırmada tekrarlanacak → başlangıçtan KISA olmalı.
 PI_COMPACT_END_TEXT = os.environ.get("PI_COMPACT_END_TEXT") or "Tamam, hazırım."
-# Pencerede konuşan kullanıcıya verilen kısa işaret. SESSİZCE YUTMAK YASAK: hiçbir
-# şey duymayan kullanıcı sistemi bozuk sanar (DEVİR §2'deki asıl hata buydu).
-PI_COMPACT_BUSY_TEXT = (
-    os.environ.get("PI_COMPACT_BUSY_TEXT") or "Bir saniye, hâlâ toparlanıyorum."
-)
 # SON EMNİYET cümlesi: tur gerçekten metinsiz bittiğinde (stall/error, ya da yeniden
 # gönderim de tutmadıysa) kullanıcı sessiz kalmasın diye söylenir. ESKİ metin
 # "Bir saniye, tekrar dener misin?" idi; canlıda (2026-07-26 22:23) kullanıcı bunu
@@ -331,6 +346,15 @@ PI_COMPACT_BUSY_TEXT = (
 PI_EMPTY_TURN_TEXT = (
     os.environ.get("PI_EMPTY_TURN_TEXT")
     or "Kusura bakma, bir an aklım dağıldı — tekrar sorar mısın?"
+)
+# Taşıma öldüğünde özgün kullanıcı mesajı Pi session'a yazılmış ama yanıt
+# başlamamış olabilir. Aynı mesajı yeniden eklemek yerine bu iç devam notu
+# mevcut, cevapsız son kullanıcı girdisini yalnız bir kez sürdürür.
+PI_RECOVERY_CONTINUE_TEXT = (
+    "(Sistem kurtarma notu: Bir önceki kullanıcı mesajı süreç kesintisi nedeniyle "
+    "cevapsız kaldı. Bu yeni bir kullanıcı talebi değildir. Önceki mesajı şimdi "
+    "yalnız bir kez yanıtla; daha önce başlamış veya tamamlanmış bir araç/eylemi "
+    "tekrarlama.)"
 )
 # Hafıza (Faz A). memory/ yoksa/policy yoksa graceful → Faz 2/3 davranışı aynen.
 MEMORY_DIR = os.environ.get("MEMORY_DIR", "memory")
@@ -386,7 +410,7 @@ PI_TOOLS_ALLOWLIST = os.environ.get(
     # (yukarıdaki ölçülmüş kural). reminder_add'in de önüne kondu: çağrılmama riski en
     # yüksek olan bu — canlıda eş "beni ses olarak kaydet" dedi, model sohbet etti,
     # HİÇBİR ŞEY kaydedilmedi. Sıra dekoratif değil, davranışı ölçülü biçimde değiştiriyor.
-    "enroll_speaker,reminder_add,memory_add,soul_add,memory_search,"
+    "enroll_speaker,reminder_add,memory_add,soul_add,memory_topics,memory_search,"
     "reminder_list,reminder_cancel,web_search,fetch_content,memory_consolidate",
 )
 
@@ -406,6 +430,24 @@ CANDAN_TZ = os.environ.get("CANDAN_TZ", "Europe/London")
 # profile.md / family.md sert sınırı (bunlar HER TURDA bağlama enjekte edilir).
 MEM_CONTEXT_LIMIT = int(os.environ.get("MEM_CONTEXT_LIMIT_BYTES", "2048") or 2048)
 CONSOLIDATE_COOLDOWN = float(os.environ.get("CONSOLIDATE_COOLDOWN_SECONDS", "86400") or 86400)
+# Günlük konuşma bağlamı: önce aranabilir günlük hafızaya çıkar, sonra Pi session'ını
+# döndür. Compaction yalnız gün içi emniyet ağıdır; günlerce büyüyen ana hafıza değildir.
+DAILY_ROLLOVER_ENABLED = _envflag("DAILY_ROLLOVER_ENABLED", True)
+DAILY_ROLLOVER_SUMMARY_TIMEOUT = float(
+    os.environ.get("DAILY_ROLLOVER_SUMMARY_TIMEOUT", "180") or 180
+)
+DAILY_ROLLOVER_START_TEXT = os.environ.get(
+    "DAILY_ROLLOVER_START_TEXT",
+    "Dünün önemli konuşmalarını hafızama aktarıyorum, biraz sürebilir.",
+)
+DAILY_ROLLOVER_END_TEXT = os.environ.get(
+    "DAILY_ROLLOVER_END_TEXT",
+    "Tamam, yeni güne temiz bir sohbetle başladım.",
+)
+DAILY_ROLLOVER_FAIL_TEXT = os.environ.get(
+    "DAILY_ROLLOVER_FAIL_TEXT",
+    "Günlük hafızayı tamamlayamadım; konuşmayı koruyup devam ediyorum.",
+)
 
 # İZOLASYON (PI_ISOLATED, DEFAULT açık). Worker'ın pi süreci, kullanıcının GLOBAL pi
 # kurulumundan (~/.pi/agent/: settings.json extensions+packages, skills/, prompts,
@@ -441,13 +483,30 @@ PI_ISOLATED = _envflag("PI_ISOLATED", True)
 DEV_MODE_ENABLED = _envflag("DEV_MODE_ENABLED", True)
 DEV_PERSONA = os.environ.get("DEV_PERSONA", "dev")
 DEV_SESSION_ID = os.environ.get("DEV_SESSION_ID", "self-dev")
-# Dev beyni: uzak güçlü model (GPT-5.6). GPU gerekmez (Codex uzak).
+# Dev beyni: uzak güçlü model (GPT-5.6). GPU gerekmez (Codex uzak). Kullanıcı dev
+# modunda `set_dev_model` tool'u üzerinden Terra/Sol arasında sesle geçebilir.
+# DEV_MODEL başlangıç/fallback seçimidir; kalıcı son seçim DEV_MODEL_STATE_FILE'dadır.
 DEV_MODEL = os.environ.get("DEV_MODEL", "openai-codex/gpt-5.6-terra")
+DEV_MODEL_TERRA = os.environ.get("DEV_MODEL_TERRA", "openai-codex/gpt-5.6-terra")
+DEV_MODEL_SOL = os.environ.get("DEV_MODEL_SOL", "openai-codex/gpt-5.6-sol")
+DEV_MODEL_STATE_FILE = Path(
+    os.environ.get("DEV_MODEL_STATE_FILE", str(REPO_ROOT / "worker/data/dev-model.json"))
+)
+DEV_MODELS = {"terra": DEV_MODEL_TERRA, "sol": DEV_MODEL_SOL}
 DEV_THINKING = os.environ.get("DEV_THINKING", "minimal")
+DEV_REASONING_STATE_FILE = Path(
+    os.environ.get(
+        "DEV_REASONING_STATE_FILE",
+        str(REPO_ROOT / "worker/data/dev-reasoning.json"),
+    )
+)
 # İzole çalışma dizini = ayrı git worktree + ayrı branch. İlk girişte oluşturulur,
 # sonraki girişlerde tekrar kullanılır (bkz. _ensure_dev_worktree).
 DEV_WORKTREE = Path(
     os.environ.get("DEV_WORKTREE", str(REPO_ROOT.parent / "candan-lite-selfdev"))
+)
+PI_DEV_SESSION_DIR = Path(
+    os.environ.get("PI_DEV_SESSION_DIR", str(DEV_WORKTREE / "sessions"))
 )
 DEV_BRANCH = os.environ.get("DEV_BRANCH", "self-dev")
 # Dev tool allowlist. BOŞ (default) → allowlist YOK + --no-builtin-tools YOK → tüm
@@ -490,6 +549,126 @@ DEV_MEM_ROLE = os.environ.get("DEV_MEM_ROLE", "child")
 # VE policy.json'da 'adult' OLMALI, ayrıca bu slug'a eşit olmalı (ev sahibi).
 # Boş bırakılırsa herhangi bir doğrulanmış adult dev hafızasını açar.
 DEV_MEM_OWNER = os.environ.get("DEV_MEM_OWNER", "ayhan")
+
+
+def _dev_model_name(value: str) -> Optional[str]:
+    """Ses/tool/config değerini desteklenen dev model anahtarına indirger."""
+    normalized = (value or "").strip().casefold()
+    aliases = {
+        "terra": "terra",
+        "gpt-5.6-terra": "terra",
+        DEV_MODEL_TERRA.casefold(): "terra",
+        "sol": "sol",
+        "gpt-5.6-sol": "sol",
+        DEV_MODEL_SOL.casefold(): "sol",
+    }
+    return aliases.get(normalized)
+
+
+def _load_dev_model_name() -> str:
+    """Kalıcı dev model seçimini oku; bozuk/yoksa DEV_MODEL varsayılanına düş."""
+    fallback = _dev_model_name(DEV_MODEL) or "terra"
+    try:
+        data = json.loads(DEV_MODEL_STATE_FILE.read_text(encoding="utf-8"))
+        selected = _dev_model_name(str(data.get("model") or ""))
+        return selected or fallback
+    except (OSError, ValueError, TypeError):
+        return fallback
+
+
+def _save_dev_model_name(name: str) -> bool:
+    """Dev model seçimini atomik ve yalnız servis kullanıcısına açık biçimde yaz."""
+    selected = _dev_model_name(name)
+    if selected is None:
+        return False
+    path = DEV_MODEL_STATE_FILE
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(
+            json.dumps({"model": selected, "model_id": DEV_MODELS[selected]}) + "\n",
+            encoding="utf-8",
+        )
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        logger.warning("dev model seçimi kaydedilemedi: %s", path, exc_info=True)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return False
+
+
+def _dev_reasoning_name(value: str) -> Optional[str]:
+    """Tool/config değerini güvenli bir Pi düşünme seviyesi anahtarına indirger.
+
+    Desteklenen değerleri burada sabitlemeyiz: aktif modelin listesi Pi tarafından
+    çalışma anında hesaplanır. Bu yardımcı yalnız Türkçe ses eş adlarını ve güvenli
+    CLI anahtarı biçimini çözer.
+    """
+    normalized = (value or "").strip().casefold().replace("_", "-")
+    aliases = {
+        "off": "off",
+        "kapalı": "off",
+        "kapali": "off",
+        "minimal": "minimal",
+        "minimum": "minimal",
+        "low": "low",
+        "düşük": "low",
+        "dusuk": "low",
+        "medium": "medium",
+        "medyum": "medium",
+        "orta": "medium",
+        "high": "high",
+        "yüksek": "high",
+        "yuksek": "high",
+        "xhigh": "xhigh",
+        "x-high": "xhigh",
+        "çok yüksek": "xhigh",
+        "cok yuksek": "xhigh",
+        "max": "max",
+        "maksimum": "max",
+    }
+    selected = aliases.get(normalized, normalized)
+    return selected if re.fullmatch(r"[a-z][a-z0-9-]{0,31}", selected) else None
+
+
+def _load_dev_reasoning_name() -> str:
+    """Kalıcı dev düşünme seviyesini oku; bozuk/yoksa DEV_THINKING'e düş."""
+    fallback = _dev_reasoning_name(DEV_THINKING) or "minimal"
+    try:
+        data = json.loads(DEV_REASONING_STATE_FILE.read_text(encoding="utf-8"))
+        selected = _dev_reasoning_name(str(data.get("reasoning") or ""))
+        return selected or fallback
+    except (OSError, ValueError, TypeError):
+        return fallback
+
+
+def _save_dev_reasoning_name(name: str) -> bool:
+    """Dev düşünme seviyesini atomik ve servis kullanıcısına özel kaydet."""
+    selected = _dev_reasoning_name(name)
+    if selected is None:
+        return False
+    path = DEV_REASONING_STATE_FILE
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(
+            json.dumps({"reasoning": selected}) + "\n",
+            encoding="utf-8",
+        )
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+        return True
+    except OSError:
+        logger.warning("dev düşünme seviyesi kaydedilemedi: %s", path, exc_info=True)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return False
 
 
 def _ensure_dev_worktree() -> Path:
@@ -756,7 +935,7 @@ SPEAKER_CANDIDATE_MIN_WINDOWS = int(
 # teklif edilir; reddedilirse o oturumda bir daha açılmaz.
 SPEAKER_OFFER_ENROLL_ON_DENY = _envflag("SPEAKER_OFFER_ENROLL_ON_DENY", True)
 # Onay soruları ve cevapları (aday, skor, oran, cevap) buraya JSONL yazılır.
-# "Hayır" cevabı ETİKETLİ VERİdir: birkaç gün sonra asnorm eşiği bu dosyayla
+# "Hayır" cevabı ETİKETLİ VERİdir: ReDimNet2 eşiği bu dosyayla
 # ve gölge ölçüm log'uyla TAHMİNLE değil VERİYLE seçilecek.
 SPEAKER_CONFIRM_LOG = Path(os.environ.get(
     "SPEAKER_CONFIRM_LOG",
@@ -893,8 +1072,11 @@ def reload_settings() -> None:
     global RESET_ACK, RESET_FAIL, RESET_CONFIRM_ASK, RESET_CONFIRM_NO  # noqa: PLW0603
     global DEV_MODE_ENABLED, PI_ISOLATED, PI_NO_BUILTIN_TOOLS  # noqa: PLW0603
     global WEB_SEARCH_LEGACY_QWANT, CANDAN_TZ  # noqa: PLW0603
+    global DAILY_ROLLOVER_ENABLED, DAILY_ROLLOVER_SUMMARY_TIMEOUT  # noqa: PLW0603
+    global DAILY_ROLLOVER_START_TEXT, DAILY_ROLLOVER_END_TEXT  # noqa: PLW0603
+    global DAILY_ROLLOVER_FAIL_TEXT  # noqa: PLW0603
     global PI_COMPACT_GATE_ENABLED, PI_COMPACT_NOTIFY_MIN_S  # noqa: PLW0603
-    global PI_COMPACT_START_TEXT, PI_COMPACT_END_TEXT, PI_COMPACT_BUSY_TEXT  # noqa: PLW0603
+    global PI_COMPACT_START_TEXT, PI_COMPACT_END_TEXT  # noqa: PLW0603
 
     # wake gate
     WAKE_ENABLED = _envflag("WAKE_ENABLED", True)
@@ -958,7 +1140,23 @@ def reload_settings() -> None:
     PI_NO_BUILTIN_TOOLS = _envflag("PI_NO_BUILTIN_TOOLS", True)
     WEB_SEARCH_LEGACY_QWANT = _envflag("WEB_SEARCH_LEGACY_QWANT", False)
     CANDAN_TZ = os.environ.get("CANDAN_TZ", "Europe/London")
-    # compaction penceresi (haber ver + komut alma). ⚠️ Bu blok BİLEREK kolun içinde:
+    DAILY_ROLLOVER_ENABLED = _envflag("DAILY_ROLLOVER_ENABLED", True)
+    DAILY_ROLLOVER_SUMMARY_TIMEOUT = float(
+        os.environ.get("DAILY_ROLLOVER_SUMMARY_TIMEOUT", "180") or 180
+    )
+    DAILY_ROLLOVER_START_TEXT = os.environ.get(
+        "DAILY_ROLLOVER_START_TEXT",
+        "Dünün önemli konuşmalarını hafızama aktarıyorum, biraz sürebilir.",
+    )
+    DAILY_ROLLOVER_END_TEXT = os.environ.get(
+        "DAILY_ROLLOVER_END_TEXT",
+        "Tamam, yeni güne temiz bir sohbetle başladım.",
+    )
+    DAILY_ROLLOVER_FAIL_TEXT = os.environ.get(
+        "DAILY_ROLLOVER_FAIL_TEXT",
+        "Günlük hafızayı tamamlayamadım; konuşmayı koruyup devam ediyorum.",
+    )
+    # compaction penceresi (haber ver; komutlar steer ile kabul edilir). ⚠️ Bu blok BİLEREK kolun içinde:
     # yukarıdaki kapsam notunda `*_NOTICE_*`/`*_TIMEOUT` altyapı sayılıp DIŞARIDA
     # bırakılmıştı; bunlar ise kullanıcının açıp kapatacağı DAVRANIŞ kollarıdır ve
     # `.env`'den gerçekten çalıştıkları ÖLÇÜLDÜ (tests/test_env_kollari.py).
@@ -969,9 +1167,6 @@ def reload_settings() -> None:
         or "Hafızamı toparlıyorum, yarım dakika kadar sürebilir. Bitince haber vereceğim."
     )
     PI_COMPACT_END_TEXT = os.environ.get("PI_COMPACT_END_TEXT") or "Tamam, hazırım."
-    PI_COMPACT_BUSY_TEXT = (
-        os.environ.get("PI_COMPACT_BUSY_TEXT") or "Bir saniye, hâlâ toparlanıyorum."
-    )
 
 
 # Onay sorusuna gelen RET + DÜZELTME'nin ("hayır, Havi") başındaki olumsuzlama.
@@ -1025,6 +1220,153 @@ def _is_confirm_yes(text: str) -> bool:
     if len(raw.split()) > SPEAKER_CONFIRM_ANSWER_MAX_WORDS:
         return False
     return is_affirmative_reply(raw)
+
+
+_SHORT_REPLY_MAX_WORDS = 5
+_SHORT_REPLY_MAX_CHARS = 48
+_SHORT_REPLY_CONTEXT_TTL_S = 30.0
+_REPLY_CHAIN_TTL_S = 8.0
+
+
+def _reply_words(text: str) -> list[str]:
+    return re.findall(r"[a-zçğıöşü0-9]+", (text or "").casefold())
+
+
+def _is_short_context_reply(text: str) -> bool:
+    """Bir ses penceresi yetişmeden bitebilecek doğal kısa cevap mı?"""
+    raw = (text or "").strip()
+    words = _reply_words(raw)
+    return bool(words) and len(words) <= _SHORT_REPLY_MAX_WORDS and len(raw) <= _SHORT_REPLY_MAX_CHARS
+
+
+def _is_short_action_approval(text: str) -> bool:
+    """Modelin işlem başlatmaya yorumlayabileceği kısa olumlu cevap."""
+    if not _is_short_context_reply(text) or _is_decline_enroll(text):
+        return False
+    low = truth_check.fold(text)
+    if is_affirmative_reply(text):
+        return True
+    return bool(re.search(
+        r"\b(tamam|peki|olur|yap|yapabilirsin|devam|devam et|istiyorum|kabul)\b",
+        low,
+    ))
+
+
+def _is_short_acknowledgement(text: str) -> bool:
+    """Soru olmayan bir Candan cevabını doğal olarak bağlayan kısa söz."""
+    if not _is_short_context_reply(text):
+        return False
+    words = _reply_words(truth_check.fold(text))
+    allowed = {
+        "evet", "hayir", "tamam", "peki", "olur", "anladim", "guzel",
+        "iyi", "tesekkurler", "tesekkur", "istemiyorum", "istiyorum",
+    }
+    return bool(words) and all(word in allowed for word in words)
+
+
+def _is_reply_chain_segment(text: str) -> bool:
+    """Ajan araya girmeden gelen devam parçası için kötüye kullanım tavanı."""
+    raw = (text or "").strip()
+    words = _reply_words(raw)
+    return bool(words) and len(words) <= 30 and len(raw) <= 240
+
+
+def _is_explicit_action_approval(text: str) -> bool:
+    """Kısa evet yerine istenen açık, uzun ve denetlenebilir onay cümlesi."""
+    words = _reply_words(text)
+    if len(words) < 5 or _is_decline_enroll(text):
+        return False
+    low = truth_check.fold(text)
+    return bool(re.search(
+        r"\b(?:bu (?:islemi|eylemi|degisikligi) (?:yapmani|gerceklestirmeni|uygulamani) "
+        r"(?:acikca )?(?:onayliyorum|istiyorum)|bu (?:islemi|eylemi|degisikligi) "
+        r"acikca onayliyorum|bu islemi artik yapabilirsin|devam etmeni acikca onayliyorum|"
+        r"bu ses eslestirmesini onayliyorum|yeni sohbet baslatmani acikca onayliyorum)\b",
+        low,
+    ))
+
+
+_BRIEF_ACK_OPENERS = frozenset({
+    "evet", "hayir", "tamam", "peki", "olur", "guzel", "harika", "super",
+    "anladim", "tesekkurler", "tesekkur",
+})
+_BRIEF_CLOSURE_RE = re.compile(
+    r"\b(?:sadece (?:bir )?test|test (?:yaptim|ettim|ettik|ediyoruz)|"
+    r"bir sey yapmiyoruz|bir sey istemiyorum|bu kadar|isimiz bitti|"
+    r"konu kapandi|gayet iyi|cok guzel)\b"
+)
+_DETAIL_REQUEST_RE = re.compile(
+    r"\b(?:ayrintili|detayli|uzun uzun|adim adim|neden|nasil|acikla|anlat|"
+    r"karsilastir|listele|orneklendir)\b"
+)
+
+
+def _is_brief_ack_turn(text: str) -> bool:
+    """Yeni bilgi istemeyen onay/bitiriş turu mu? Bu turlar tek cümleliktir."""
+    raw = (text or "").strip()
+    if not raw or "?" in raw:
+        return False
+    low = truth_check.fold(raw)
+    if _DETAIL_REQUEST_RE.search(low):
+        return False
+    words = _reply_words(low)
+    if not words or len(words) > 45:
+        return False
+    if len(words) <= 6 and words[0] in _BRIEF_ACK_OPENERS:
+        return True
+    return bool(_BRIEF_CLOSURE_RE.search(low))
+
+
+def _voice_brevity_note(text: str, *, brief_ack: bool) -> str:
+    """Sesli yanıt uzunluğu kuralını kullanıcı metnine en yakın sistem notu yap."""
+    if brief_ack:
+        rule = (
+            "Bu tur yalnız kısa bir onay/bitiriş gerektiriyor. En fazla TEK kısa "
+            "cümle söyle; açıklama, tekrar, övgü, teklif veya takip cümlesi ekleme."
+        )
+    else:
+        rule = (
+            "Sesli cevap ver: doğrudan ve kısa konuş. Gerekli bilgi tek cümleye "
+            "sığıyorsa ikinci cümleyi ekleme; kullanıcı ayrıntı istemediyse uzatma."
+        )
+    return f"(Sistem: {rule})\n\n{text}"
+
+
+def _agent_reply_context_kind(text: str, *, had_tool_result: bool = False) -> Optional[str]:
+    """Gerçekten söylenen Candan cevabının takip türünü sınıflandır."""
+    low = truth_check.fold(text)
+    if not low:
+        return None
+    is_question = "?" in (text or "") or bool(re.search(
+        r"\b(?:mi|misin|musun|miyim|miyiz|ister misin|istiyor musun|"
+        r"ne dersin|ne dusunuyorsun)\s*[.!]*$",
+        low,
+    ))
+    action_question = (
+        is_question
+        and bool(re.search(
+            r"\b(?:yapayim|kaydedeyim|ekleyeyim|sileyim|kaldirayim|iptal edeyim|"
+            r"baslatayim|durdurayim|gondereyim|arayayim|aciyim|kapatayim|"
+            r"degistireyim|uygulayayim|kurayim|olusturayim|ayarlayayim|"
+            r"gerceklestireyim|devam edeyim|onayliyor musun|onay verir misin|"
+            r"(?:baslatmami|silmemi|kaydetmemi|yapmami|kurmami|gondermemi|"
+            r"degistirmemi|iptal etmemi)(?: mi| ister misin| istiyor musun))\b",
+            low,
+        ))
+    )
+    identity_confirmation = (
+        is_question
+        and ("sesinden emin olamadim" in low or "ses eslestirme" in low)
+    ) or (
+        "dogru mu" in low and bool(re.search(r"\b(adin|adini|ses|kimlik|kayit)\b", low))
+    )
+    if action_question or identity_confirmation:
+        return "action_confirmation"
+    if is_question:
+        return "question"
+    if had_tool_result or truth_check.claim_kind(text) in {"record", "action"}:
+        return "action_result"
+    return None
 
 
 def _misin(name: str) -> str:
@@ -1204,13 +1546,42 @@ def reset_near_match(text: str, phrases: Optional[frozenset] = None) -> bool:
     return d is not None and _RESET_FUZZY_DIST < d <= _RESET_NEAR_DIST
 
 
-def _find_session_file(session_id: str, session_dir: Path) -> Optional[Path]:
-    """`sessions/` içinde header id'si `session_id` olan jsonl'i bul (pi'nın
-    --session-id çözümüyle AYNI kural: dosya ADI değil, ilk satırdaki header.id).
-    Bulunamazsa None. Sadece OKUR."""
-    if not session_dir.is_dir():
+_MODE_ENTER_RE = re.compile(
+    r"\b(?:gelistirme|developer|dev|kod) mod(?:una|a) "
+    r"(?:tekrar )?(?:gec(?:er misin|ebilir misin|elim|in|mek istiyorum)?|"
+    r"gir(?:er misin|ebilir misin|elim|in|mek istiyorum)?|al(?:ir misin)?)\b|"
+    r"\b(?:gelistirme|developer|dev|kod) modunu ac\b"
+)
+_MODE_EXIT_RE = re.compile(
+    r"\bnormal mod(?:una|a) "
+    r"(?:don(?:er misin|ebilir misin|elim|un|mek istiyorum)?|"
+    r"gec(?:er misin|ebilir misin|elim|in|mek istiyorum)?)\b|"
+    r"\b(?:gelistirme|developer|dev|kod) modundan "
+    r"cik(?:ar misin|abilir misin|alim|in|mak istiyorum)?\b|"
+    r"\b(?:gelistirme|developer|dev|kod) modunu kapat\b"
+)
+
+
+def mode_command(text: str) -> Optional[str]:
+    """Açık mod değiştirme emrini çöz: ``dev`` | ``normal`` | ``None``.
+
+    Yalnız emir kalıpları eşleşir. "Hangi moddayım?" veya "nasıl geçerim?" gibi
+    durum/bilgi soruları eşleşmez; böylece kod model adına niyet uydurmaz.
+    """
+    normalized = truth_check.fold(text)
+    enter = bool(_MODE_ENTER_RE.search(normalized))
+    leave = bool(_MODE_EXIT_RE.search(normalized))
+    if enter == leave:
         return None
-    for p in sorted(session_dir.glob("*.jsonl"), reverse=True):
+    return "dev" if enter else "normal"
+
+
+def _matching_session_files(session_id: str, session_dir: Path) -> list[Path]:
+    """Header id'si eşleşen dosyaları en yeni session önce olacak biçimde döndür."""
+    if not session_dir.is_dir():
+        return []
+    matches: list[tuple[str, float, Path]] = []
+    for p in session_dir.glob("*.jsonl"):
         try:
             with p.open("r", encoding="utf-8", errors="replace") as f:
                 first = f.readline()
@@ -1218,8 +1589,19 @@ def _find_session_file(session_id: str, session_dir: Path) -> Optional[Path]:
         except Exception:  # noqa: BLE001 — bozuk/boş dosya → aday değil
             continue
         if isinstance(hdr, dict) and hdr.get("type") == "session" and hdr.get("id") == session_id:
-            return p
-    return None
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                mtime = 0.0
+            matches.append((str(hdr.get("timestamp") or ""), mtime, p))
+    matches.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return [item[2] for item in matches]
+
+
+def _find_session_file(session_id: str, session_dir: Path) -> Optional[Path]:
+    """Pi'nın etkin sayacağı en yeni `session_id` dosyasını bul; yalnız okur."""
+    matches = _matching_session_files(session_id, session_dir)
+    return matches[0] if matches else None
 
 
 def _rotate_session_id(session_id: str, session_dir: Path) -> Optional[Path]:
@@ -1238,22 +1620,25 @@ def _rotate_session_id(session_id: str, session_dir: Path) -> Optional[Path]:
     yeniden resume ederdi (sıfırlama kalıcı OLMAZDI).
 
     Döner: arşivlenen dosya (yoksa None = zaten temiz, sıfırlanacak bir şey yok)."""
-    p = _find_session_file(session_id, session_dir)
-    if p is None:
+    paths = _matching_session_files(session_id, session_dir)
+    if not paths:
         return None
-    lines = p.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-    if not lines:
-        return None
-    hdr = json.loads(lines[0])
     stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime())
-    # assertValidSessionId: sadece [A-Za-z0-9._-], alnum ile başla/bit → slug+stamp uyar.
-    hdr["id"] = f"{session_id}-eski-{stamp}"
-    lines[0] = json.dumps(hdr, ensure_ascii=False) + "\n"
-    # Atomik: geçici dosyaya yaz + replace → yarıda kesilirse eski dosya BOZULMAZ.
-    tmp = p.with_suffix(".jsonl.tmp")
-    tmp.write_text("".join(lines), encoding="utf-8")
-    os.replace(tmp, p)
-    return p
+    for index, p in enumerate(paths):
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+        if not lines:
+            continue
+        hdr = json.loads(lines[0])
+        # Aynı slug'lı kalıntıların TÜMÜ dönmeli; biri kalsa Pi sonraki açılışta
+        # eski geçmişi diriltir. Birden fazlaysa id'leri de benzersiz yap.
+        suffix = f"-{index + 1}" if len(paths) > 1 else ""
+        hdr["id"] = f"{session_id}-eski-{stamp}{suffix}"
+        lines[0] = json.dumps(hdr, ensure_ascii=False) + "\n"
+        # Atomik: geçici dosyaya yaz + replace → yarıda kesilirse eski dosya BOZULMAZ.
+        tmp = p.with_suffix(".jsonl.tmp")
+        tmp.write_text("".join(lines), encoding="utf-8")
+        os.replace(tmp, p)
+    return paths[0]
 
 
 class WakeGate:
@@ -1636,6 +2021,22 @@ def _identity_guard_reply(text: str, voice_name: Optional[str]) -> Optional[str]
     return f"Bu konuşmadaki ses kimliği {voice_name} olarak doğrulandı."
 
 
+def _speaker_response_prefix(
+    voice_name: Optional[str], previous_key: Optional[str]
+) -> tuple[str, str]:
+    """Dönüş cevabının deterministik konuşmacı hitabını ve yeni durum anahtarını ver.
+
+    Tanınan ad yalnız konuşmacı DEĞİŞTİĞİNDE söylenir. Bilinmeyen kimlik ise her
+    dönüşte kısa ve dürüst biçimde belirtilir; önceki tanınan ad asla taşınmaz.
+    """
+    name = (voice_name or "").strip()
+    if not name:
+        return "Sesini tanıyamadım. ", "unknown"
+    key = f"known:{_slug(name)}"
+    prefix = f"{name.capitalize()}, " if key != previous_key else ""
+    return prefix, key
+
+
 # "Ayhan'ı yetişkin yap" / "Ayhan'ı aileye ekle" → rol yükseltme komutu (SADECE adult).
 _PROMOTE_RE = re.compile(
     r"(?:yeti[şs]kin\s+yap"
@@ -1674,7 +2075,7 @@ def _persona_exists(persona: str) -> bool:
 # yükleme maliyeti kullanıcı konuştuktan SONRA ödeniyordu (ölçüm: 17:14:34 wake →
 # aynı saniye swap → cevap 17:15:43, 69 sn). Son konuşanı ısıtırsak tahmin TUTTUĞUNDA
 # swap hiç olmaz. Tahmin TUTMAZSA swap yolu aynen çalışır → bugünkünden kötü değil.
-# İşaret dosyası çünkü: speakers.db'deki updated_at son ENROLL'u gösterir, son
+# İşaret dosyası çünkü: speaker DB'deki updated_at son ENROLL'u gösterir, son
 # GÖRÜLMEyi değil — tanınmak updated_at'i bümez, o yüzden proxy olarak yanlış.
 def _last_speaker_path() -> Path:
     """memory/last_speaker.json (MEMORY_DIR mutlak ise o — test izolasyonu)."""
@@ -1793,7 +2194,11 @@ def _build_pi_args(
     Dev'de çağıran _dev_mem_user() ile çözüp verir; '' → dev hafızası yok."""
     model = model or PI_MODEL
     thinking = PI_THINKING if thinking is None else thinking
-    args = [PI_BIN, "--mode", "rpc", "--approve", "--model", model]
+    # Proje güveni KAPALI: explicit CLI `-e`/`--skill` kaynakları yine yüklenir,
+    # fakat repo `.pi/settings.json` paket kuramaz veya yeni extension sokamaz.
+    # Özellikle yetkisiz systemd kullanıcısında bu hem gerçek güvenlik sınırı hem
+    # salt-okunur repo üzerinde npm kurulum/lock hatalarını önler.
+    args = [PI_BIN, "--mode", "rpc", "--no-approve", "--model", model]
     # İzolasyon: global (~/.pi/agent) extension/skill/prompt/theme/context keşfini kapat.
     # Aşağıdaki explicit `-e` / `--skill` / `--append-system-prompt` yolları etkilenmez.
     if PI_ISOLATED:
@@ -1819,7 +2224,10 @@ def _build_pi_args(
     # Allowlist boşsa (dev default) HİÇ eklenmez → kısıtlama yok, tool zaten yüklü
     # extension'dan çağrılabilir. Böylece boş-allowlist = "tümü açık" korunur.
     if DEV_MODE_ENABLED and allow_items:
-        for mode_tool in ("enter_dev_mode", "exit_dev_mode"):
+        mode_tools = ["enter_dev_mode", "exit_dev_mode"]
+        if dev:
+            mode_tools.extend(("set_dev_model", "set_dev_reasoning"))
+        for mode_tool in mode_tools:
             if mode_tool not in allow_items:
                 allow_items.append(mode_tool)
     allowlist = ",".join(allow_items)
@@ -1909,8 +2317,19 @@ def _build_pi_args(
         ms_ext = REPO_ROOT / "pi" / "extensions" / "mode-switch" / "index.ts"
         if ms_ext.is_file():
             args += ["-e", str(ms_ext)]
-            args += ["--append-system-prompt", MODE_STATE_LINE_DEV if dev
-                     else MODE_STATE_LINE_NORMAL]
+            state_line = MODE_STATE_LINE_DEV if dev else MODE_STATE_LINE_NORMAL
+            if dev:
+                state_line += (
+                    f" Aktif geliştirme modelin {model}. Kullanıcı Terra veya Sol "
+                    "modeline geçmeni isterse set_dev_model aracını çağır. "
+                    f"Aktif düşünme seviyen {thinking or 'default'}. Kullanıcı düşünme "
+                    "seviyesini değiştirmek isterse set_dev_reasoning aracını çağır."
+                )
+            args += ["--append-system-prompt", state_line]
+    if dev:
+        dm_ext = REPO_ROOT / "pi" / "extensions" / "dev-model-switch" / "index.ts"
+        if dm_ext.is_file():
+            args += ["-e", str(dm_ext)]
     # ---- WEB ERİŞİMİ (2026-07-14: Qwant → SearXNG) ---------------------------
     # ESKİ YOL (DEVRE DIŞI, dosya duruyor): pi/extensions/websearch/index.ts = anahtarsız
     # Qwant kazıması. Qwant CAPTCHA döndürmeye başladı → `web_search` canlıda ÖLÜYDÜ.
@@ -1943,10 +2362,13 @@ def _build_pi_args(
     web_access_ext = PI_NPM_DIR / "pi-web-access" / "index.ts"
     if web_access_ext.is_file():
         args += ["-e", str(web_access_ext)]
-    # Session dizini: dev'de pi'nın cwd'si worktree olduğu için RELATİF "sessions" worktree'ye
-    # düşerdi → ANA repo'nun sessions/'ına sabitle (dev session'ı ayrı ID ile orada, normal
-    # sohbete KARIŞMAZ). Normal modda cwd=REPO_ROOT olduğundan sonuç bugünküyle aynı dizin.
-    session_dir = str(REPO_ROOT / PI_SESSION_DIR) if dev else PI_SESSION_DIR
+    # Dev session'ları normal Candan geçmişinden yol/izin düzeyinde ayrıdır. Ayrı
+    # broker kullanıcısı ana repo sessions/ dizisine yazamaz; yalnız dev worktree
+    # içindeki bu köke yazar. Normal yol aynen PI_SESSION_DIR kullanır.
+    normal_session_dir = Path(PI_SESSION_DIR)
+    if not normal_session_dir.is_absolute():
+        normal_session_dir = REPO_ROOT / normal_session_dir
+    session_dir = str(PI_DEV_SESSION_DIR if dev else normal_session_dir)
     args += ["--session-dir", session_dir, "--session-id", session_id]
     return args
 
@@ -1970,15 +2392,16 @@ class PiRpcClient:
     ):
         self._persona = persona
         self._session_id = session_id
-        self._model = model
-        self._thinking = thinking
+        self._model = model or PI_MODEL
+        self._thinking = PI_THINKING if thinking is None else thinking
         # Alt-sürece geçecek hafıza ortamı (tek kaynak: pi_mem_env). Normal → bugünkü
         # MEM_USER. Dev → dev personasının kimliği + MEM_DIR = AYRI dev kökü. mem_user
         # verilmezse dev'de '' çıkar (kimlik kapısı kapalı = bugünkü davranış).
         self._mem_env = pi_mem_env(session_id, dev=dev, mem_user=mem_user)
         self._mem_user = self._mem_env["MEM_USER"]
         self._args = _build_pi_args(
-            persona, session_id, model, thinking, dev=dev, mem_user=self._mem_user
+            persona, session_id, self._model, self._thinking,
+            dev=dev, mem_user=self._mem_user
         )
         # cwd: normal → REPO_ROOT (bugünkü); dev → izole worktree (kod EDIT'leri orada kalır).
         self._cwd = Path(cwd) if cwd is not None else REPO_ROOT
@@ -1986,6 +2409,8 @@ class PiRpcClient:
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._broker_reader: Optional[asyncio.StreamReader] = None
         self._broker_writer: Optional[asyncio.StreamWriter] = None
+        self._broker_pid: Optional[int] = None
+        self._broker_generation: Optional[int] = None
         self._reader_task: Optional[asyncio.Task] = None
         self._pending: dict[str, asyncio.Future] = {}
         self._turn_q: Optional[asyncio.Queue] = None
@@ -1998,6 +2423,7 @@ class PiRpcClient:
         # ve kullanıcıya HİÇBİR ŞEY söylemez (turun "yutulması"). _deferred>0 iken
         # reader olayları YUTAR; agent_settled gelince koşu kapanır.
         self._deferred = 0
+        self._deferred_handoff = False
         self._settled_ev = asyncio.Event()
         self._settled_ev.set()
         # ── Compaction PENCERESİ (turlar arası ortak durum) ──────────────────
@@ -2015,6 +2441,7 @@ class PiRpcClient:
         # İlk delta ile True olur ve süreç ölene kadar öyle kalır (yeni PiRpcClient =
         # yeni süreç = yeniden False; swap zaten yeni nesne kurar).
         self.warmed_up = False
+        self._steering_mode_ready = False
 
     @property
     def started(self) -> bool:
@@ -2022,11 +2449,14 @@ class PiRpcClient:
             return not self._broker_writer.is_closing()
         return self._proc is not None and self._proc.returncode is None
 
+    def _broker_socket(self) -> str:
+        return PI_DEV_BROKER_SOCKET if self._dev else PI_BROKER_SOCKET
+
     async def start(self) -> None:
         async with self._start_lock:
             if self.started:
                 return
-            if PI_BROKER_SOCKET:
+            if self._broker_socket():
                 await self._start_broker_client()
                 return
             self._proc = await asyncio.create_subprocess_exec(
@@ -2036,6 +2466,7 @@ class PiRpcClient:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=PI_RPC_STREAM_LIMIT,
             )
             self._reader_task = asyncio.create_task(self._read_stdout())
 
@@ -2047,10 +2478,14 @@ class PiRpcClient:
         Socket ayarlıysa sessiz yerel fallback YOKTUR: yanlış yapılandırma yeniden
         job-başına Pi doğmasına ve görünmez performans gerilemesine yol açardı.
         """
+        socket_path = self._broker_socket()
         try:
-            reader, writer = await asyncio.open_unix_connection(PI_BROKER_SOCKET)
+            reader, writer = await asyncio.open_unix_connection(
+                socket_path,
+                limit=PI_RPC_STREAM_LIMIT,
+            )
         except OSError as exc:
-            raise RuntimeError(f"pi broker'a bağlanılamadı: {PI_BROKER_SOCKET}: {exc}") from exc
+            raise RuntimeError(f"pi broker'a bağlanılamadı: {socket_path}: {exc}") from exc
         hello = {
             "type": "broker_connect",
             "persona": self._persona_for_broker(),
@@ -2070,6 +2505,12 @@ class PiRpcClient:
             reply = json.loads(raw.decode()) if raw else {}
             if reply.get("type") != "broker_ready":
                 raise RuntimeError(reply.get("error") or "pi broker hazır değil")
+            self._broker_pid = reply.get("pid")
+            self._broker_generation = reply.get("generation")
+            logger.info(
+                "pi broker kiralandı: key=%s pid=%s generation=%s dev=%s",
+                reply.get("key"), reply.get("pid"), reply.get("generation"), self._dev,
+            )
         except Exception:
             writer.close()
             try:
@@ -2079,7 +2520,13 @@ class PiRpcClient:
             raise
         self._broker_reader = reader
         self._broker_writer = writer
-        self._reader_task = asyncio.create_task(self._read_broker_stdout())
+        # Reader/writer'ı göreve SABİTLE. Alanları döngü içinde tekrar okumak,
+        # `broker_error` işlenirken `_mark_transport_closed` bu alanları None
+        # yaptığında `None.readline()` yarışına yol açıyordu. Ayrıca eski reader'ın
+        # finally bloğu yeni kurulmuş bağlantıyı kapatmamalı.
+        self._reader_task = asyncio.create_task(
+            self._read_broker_stdout(reader, writer)
+        )
 
     # PiRpcClient zamanla persona/session değiştirebiliyor. Broker'a gönderilen
     # yapılandırma ise her client nesnesinde sabit olduğundan bu küçük erişimciler
@@ -2114,25 +2561,38 @@ class PiRpcClient:
         finally:
             self._mark_transport_closed("pi rpc process exited")
 
-    async def _read_broker_stdout(self) -> None:
-        assert self._broker_reader is not None
+    async def _read_broker_stdout(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter,
+    ) -> None:
         try:
             while True:
-                line = await self._broker_reader.readline()
+                line = await reader.readline()
                 if not line:
                     break
                 try:
                     obj = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                self._route_output(obj)
+                self._route_output(obj, broker_writer=writer)
         finally:
-            self._mark_transport_closed("pi broker bağlantısı kapandı")
+            self._mark_transport_closed(
+                "pi broker bağlantısı kapandı", broker_writer=writer
+            )
 
-    def _route_output(self, obj: dict) -> None:
+    def _route_output(
+        self,
+        obj: dict,
+        *,
+        broker_writer: Optional[asyncio.StreamWriter] = None,
+    ) -> None:
         """Yerel subprocess veya broker'dan gelen tek bir RPC olayını yönlendir."""
         if obj.get("type") in {"broker_error", "broker_reloaded"}:
-            self._mark_transport_closed(obj.get("error") or "pi broker süreci yenilendi")
+            self._mark_transport_closed(
+                obj.get("error") or "pi broker süreci yenilendi",
+                broker_writer=broker_writer,
+            )
             return
         if obj.get("type") == "response":
             fut = self._pending.pop(obj.get("id"), None)
@@ -2158,7 +2618,24 @@ class PiRpcClient:
         kullanıcının sonraki turu 20+ sn kilitte beklemez. Kalan olaylar (compaction_end,
         agent_settled) `_route_output` tarafından yutulur."""
         self._deferred += 1
+        self._deferred_handoff = False
         self._settled_ev.clear()
+
+    def takeover_deferred(self) -> bool:
+        """Arka plan koşusunu yeni kullanıcı stream'ine geri devret.
+
+        Pi compaction sırasında da `prompt+steer` kabul eder. Yeni konuşmayı
+        bekletmek/reddetmek yerine kalan compaction olaylarını yeni `_turn_q`
+        izler; own-prompt kapısı eski olayların seslendirilmesini engeller.
+        """
+        if self._deferred <= 0:
+            return False
+        self._deferred = 0
+        self._deferred_handoff = True
+        # Eski compaction izleyicisinin sahipliği bırakmasını sağla. Sıkıştırma
+        # penceresi burada KAPANMAZ; compaction_end'i yeni aktif stream kapatır.
+        self._settled_ev.set()
+        return True
 
     def force_settled(self) -> None:
         """Devredilen koşuyu kapat (agent_settled geldi / süreç öldü / zaman aşımı).
@@ -2167,6 +2644,7 @@ class PiRpcClient:
         compaction penceresi burada da kapanır. Pencerenin AÇIK KALMASI kapıyı
         (bkz. _compact_gate) sonsuza dek kapalı tutardı: fail-open şart."""
         self._deferred = 0
+        self._deferred_handoff = False
         self._settled_ev.set()
         self.compact_end()
 
@@ -2207,14 +2685,27 @@ class PiRpcClient:
         except asyncio.TimeoutError:
             return False
 
-    def _mark_transport_closed(self, reason: str) -> None:
+    def _mark_transport_closed(
+        self,
+        reason: str,
+        *,
+        broker_writer: Optional[asyncio.StreamWriter] = None,
+    ) -> None:
         # Süreç/soket öldü: bekleyen istekleri ve aktif turu serbest bırak.
         # Devredilen koşu da ölmüştür → bekleyen tur sonsuza kadar beklemesin.
+        # Eski reader görevi yeni bağlantı kurulduktan sonra finally'ye ulaşabilir;
+        # yalnız KENDİ taşımasını kapatmasına izin ver, yenisini asla düşürme.
+        if broker_writer is not None and self._broker_writer is not broker_writer:
+            return
         self.force_settled()
         if self._broker_writer is not None:
             self._broker_writer.close()
             self._broker_writer = None
             self._broker_reader = None
+            self._broker_pid = None
+            self._broker_generation = None
+        self.warmed_up = False
+        self._steering_mode_ready = False
         for fut in self._pending.values():
             if not fut.done():
                 fut.set_exception(RuntimeError(reason))
@@ -2238,18 +2729,54 @@ class PiRpcClient:
             pass
 
     async def send(self, obj: dict) -> None:
-        self._write(obj)
-        if self._broker_writer is not None:
+        # Normal prompt/request yolu hata yutmamalı: aksi halde ölü socket'e yazılan
+        # tur watchdog dolana kadar cevapsız kalır. `_write` yalnız abort gibi
+        # best-effort, beklemesiz yollar içindir.
+        if not self.started:
+            await self.start()
+        if self._broker_socket():
+            writer = self._broker_writer
+            if writer is None:
+                raise RuntimeError("pi broker bağlantısı hazır değil")
             try:
-                await self._broker_writer.drain()
-            except Exception:
-                pass
+                writer.write((json.dumps(obj) + "\n").encode())
+                await writer.drain()
+            except Exception as exc:
+                self._mark_transport_closed(
+                    f"pi broker yazma hatası: {exc}", broker_writer=writer
+                )
+                raise RuntimeError("pi broker'a yazılamadı") from exc
             return
-        if self._proc is not None and self._proc.stdin is not None:
+        proc = self._proc
+        if proc is None or proc.stdin is None or proc.returncode is not None:
+            raise RuntimeError("pi rpc süreci çalışmıyor")
+        try:
+            proc.stdin.write((json.dumps(obj) + "\n").encode())
+            await proc.stdin.drain()
+        except Exception as exc:
+            self._mark_transport_closed(f"pi rpc yazma hatası: {exc}")
+            raise RuntimeError("pi rpc sürecine yazılamadı") from exc
+
+    async def reconnect(self, attempts: int = 3) -> None:
+        """Kapanmış broker taşımasını sınırlı geri çekilmeyle yeniden kirala.
+
+        Pi ölünce broker eski socket'i detach ederken yeni bağlantı kısa süreliğine
+        "oturum kullanımda" görebilir. Sınırlı üç deneme bu yarışı kapatır; sonsuz
+        retry yoktur ve son hata çağırana taşınır.
+        """
+        if self.started:
+            return
+        last_error: Optional[Exception] = None
+        for attempt in range(max(1, attempts)):
             try:
-                await self._proc.stdin.drain()
-            except Exception:
-                pass
+                await self.start()
+                return
+            except Exception as exc:  # noqa: BLE001 — son hata aynen geri taşınır
+                last_error = exc
+                if attempt + 1 < attempts:
+                    await asyncio.sleep(0.1 * (attempt + 1))
+        assert last_error is not None
+        raise last_error
 
     async def request(self, cmd: dict, timeout: float = 60.0) -> dict:
         """Bir response bekleyen komut gönder (get_state gibi)."""
@@ -2260,11 +2787,60 @@ class PiRpcClient:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         self._pending[req_id] = fut
-        await self.send(cmd)
         try:
+            await self.send(cmd)
             return await asyncio.wait_for(fut, timeout)
         finally:
             self._pending.pop(req_id, None)
+
+    async def ensure_steering_all(self) -> None:
+        """Hızlı ses parçalarını bir sonraki LLM çağrısına birlikte teslim et."""
+        if self._steering_mode_ready:
+            return
+        reply = await self.request(
+            {"type": "set_steering_mode", "mode": "all"}, timeout=8.0
+        )
+        if not reply.get("success"):
+            raise RuntimeError(reply.get("error") or "pi steering mode ayarlanamadı")
+        self._steering_mode_ready = True
+
+    async def get_entries(
+        self, since: Optional[str] = None, timeout: float = 8.0
+    ) -> tuple[list[dict], Optional[str]]:
+        """Pi append-only session ağacını ve dayanıklı leaf cursor'ını oku."""
+        cmd: dict[str, Any] = {"type": "get_entries"}
+        if since:
+            cmd["since"] = since
+        reply = await self.request(cmd, timeout=timeout)
+        if not reply.get("success"):
+            raise RuntimeError(reply.get("error") or "get_entries başarısız")
+        data = reply.get("data") or {}
+        entries = data.get("entries") or []
+        if not isinstance(entries, list):
+            raise RuntimeError("get_entries geçersiz entries döndürdü")
+        leaf = data.get("leafId")
+        return [item for item in entries if isinstance(item, dict)], (
+            str(leaf) if leaf else None
+        )
+
+    async def verify_reconnected_state(self, timeout: float = 8.0) -> dict:
+        """Yeni Pi sürecinin beklenen modele ve kalıcı session'a bağlılığını doğrula."""
+        reply = await self.request({"type": "get_state"}, timeout=timeout)
+        if not reply.get("success"):
+            raise RuntimeError(reply.get("error") or "get_state başarısız")
+        data = reply.get("data") or {}
+        model = data.get("model") or {}
+        provider = str(model.get("provider") or "") if isinstance(model, dict) else ""
+        model_id = str(model.get("id") or "") if isinstance(model, dict) else ""
+        actual = f"{provider}/{model_id}".strip("/")
+        expected = str(self._model or "")
+        if expected and actual and actual != expected:
+            raise RuntimeError(
+                f"pi yeniden bağlantı model uyuşmazlığı: {actual} != {expected}"
+            )
+        if not data.get("sessionFile"):
+            raise RuntimeError("pi yeniden bağlantıda kalıcı sessionFile yok")
+        return data
 
     async def stop(self, *, persist: bool = True) -> None:
         """Taşımayı kapat.
@@ -2279,6 +2855,8 @@ class PiRpcClient:
             writer = self._broker_writer
             self._broker_writer = None
             self._broker_reader = None
+            self._broker_pid = None
+            self._broker_generation = None
             try:
                 command = "broker_release" if persist else "broker_discard"
                 writer.write((json.dumps({"type": command}) + "\n").encode())
@@ -2358,6 +2936,137 @@ def _assistant_msg_text(message: Any) -> str:
     return "".join(parts)
 
 
+def _rpc_msg_text(message: Any) -> str:
+    """Pi RPC user/assistant mesajından metni sürüm-toleranslı çıkar."""
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return ""
+    parts: list[str] = []
+    for item in content:
+        if isinstance(item, str):
+            parts.append(item)
+        elif isinstance(item, dict) and item.get("type") == "text":
+            parts.append(str(item.get("text") or ""))
+    return "".join(parts)
+
+
+# Model bazen gerçekten susmak yerine bunu parantez içinde ANLATIR. Bu metin
+# ChatChunk'a bir kez çıkarsa hem TTS seslendirir hem de speaker ön eki eklenir;
+# sonradan geri almak mümkün değildir. Yalnız ilk birkaç karakteri tutan aşağıdaki
+# dar kapı, tam yer tutucuyu yutar; normal cevabı ilk uyuşmazlıkta aynen bırakır.
+_INTENTIONAL_SILENCE_FORMS = frozenset({
+    "sessiz kalindi",
+    "sessiz kaliyorum",
+    "sessiz kalacagim",
+    "sessizce bekliyorum",
+    "sessizlik",
+    "tamam sessiz kaliyorum",
+    "tamam sessiz kalacagim",
+    "yanit verilmedi",
+    "cevap verilmedi",
+    "yanit yok",
+    "cevap yok",
+    "candan sessiz kalir",
+    "silent",
+    "silence",
+    "no response",
+})
+_LEADING_TTS_TAG_RE = re.compile(r"^\s*\[[^\]\n]{1,48}\]\s*")
+
+
+def _silence_placeholder_key(text: str) -> str:
+    """TTS işaretlerini ve noktalama/anlatım parantezlerini yok sayan dar anahtar."""
+    raw = text or ""
+    while True:
+        cleaned = _LEADING_TTS_TAG_RE.sub("", raw, count=1)
+        if cleaned == raw:
+            break
+        raw = cleaned
+    return " ".join(re.findall(r"[a-z0-9]+", truth_check.fold(raw)))
+
+
+def _is_intentional_silence_placeholder(text: str) -> bool:
+    """Yalnız tamamı bir sessizlik anlatımı olan model cevabını tanı."""
+    raw = (text or "").strip()
+    if raw in {"...", "…"}:
+        return True
+    bare = " ".join(re.findall(r"[a-z0-9]+", truth_check.fold(raw)))
+    if bare in _INTENTIONAL_SILENCE_FORMS:
+        return True
+    return _silence_placeholder_key(raw) in _INTENTIONAL_SILENCE_FORMS
+
+
+class _IntentionalSilenceProbe:
+    """Streaming cevabın yalnız olası sessizlik yer tutucusu ön ekini tamponla."""
+
+    _MAX_CHARS = 160
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._released = False
+
+    def feed(self, chunk: str) -> str:
+        """Yayınlanabilir metni döndür; olası yer tutucuysa şimdilik boş döner."""
+        if not chunk:
+            return ""
+        if self._released:
+            return chunk
+        self._buffer += chunk
+        key = _silence_placeholder_key(self._buffer)
+        possible = not key or any(form.startswith(key) for form in _INTENTIONAL_SILENCE_FORMS)
+        if possible and len(self._buffer) <= self._MAX_CHARS:
+            return ""
+        self._released = True
+        out, self._buffer = self._buffer, ""
+        return out
+
+    def finish(self) -> tuple[str, bool]:
+        """(yayınlanacak kuyruk, kasıtlı sessizlik) döndür."""
+        if self._released:
+            return "", False
+        out, self._buffer = self._buffer, ""
+        if _is_intentional_silence_placeholder(out):
+            return "", True
+        self._released = True
+        return out, False
+
+
+class _BriefResponseLimiter:
+    """Basit onay turunda modelin ilk cümlesinden sonrasını canlıya çıkarma."""
+
+    _MAX_CHARS = 140
+
+    def __init__(self, enabled: bool) -> None:
+        self.enabled = bool(enabled)
+        self.done = False
+        self._sent = 0
+
+    def feed(self, chunk: str) -> str:
+        if not chunk or not self.enabled:
+            return chunk
+        if self.done:
+            return ""
+        remaining = self._MAX_CHARS - self._sent
+        if remaining <= 0:
+            self.done = True
+            return ""
+        candidate = chunk[:remaining]
+        boundary = re.search(r"[.!?](?=\s|$)", candidate)
+        if boundary is not None:
+            candidate = candidate[: boundary.end()]
+            self.done = True
+        elif len(chunk) > remaining:
+            cut = candidate.rfind(" ")
+            candidate = (candidate[:cut] if cut > 0 else candidate).rstrip(" ,;:") + "."
+            self.done = True
+        self._sent += len(candidate)
+        return candidate
+
+
 # ── `mate.tool` — Candan'ın NE YAPTIĞI (tool çağrısı + sonucu) ───────────────
 # pi'nin mesaj akışındaki iki şekli okuruz (sessions/*.jsonl ile birebir aynı):
 #   assistant  → content[] içinde {"type":"toolCall","id":…,"name":…,"arguments":{…}}
@@ -2366,6 +3075,71 @@ def _assistant_msg_text(message: Any) -> str:
 #   {"type":"tool_call",   "id","name","args","ts"}
 #   {"type":"tool_result", "id","name","result","isError","ts"}
 # ts = epoch MİLİSANİYE (web transkript damgalarıyla aynı birim → tek kronolojik sıra).
+_FETCH_CONTENT_ERROR_PREFIXES = (
+    "403 forbidden",
+    "404 not found",
+    "access denied",
+    "captcha",
+    "could not fetch",
+    "error fetching",
+    "failed to fetch",
+    "fetch failed",
+    "unable to fetch",
+)
+
+
+def _tool_result_for_display(name: str, result: str, is_error: bool) -> tuple[str, bool]:
+    """Tool sonucunu gözlem ekranı için güvenli ve kısa hale getir.
+
+    Model özgün sonucu daha önce almıştır; burada yalnız CLI/web'e yayınlanan
+    `mate.tool` kopyasını biçimlendiriyoruz. `fetch_content` sayfa gövdesini,
+    `web_search` ise uzun sonuç listesini yayınlamaz. Model her iki özgün sonucu
+    da görmeye devam eder; yalnız kullanıcı kartı kısa durum gösterir.
+    """
+    if name not in {"fetch_content", "web_search"}:
+        return result, is_error
+
+    compact = " ".join(result.split())
+    if name == "web_search":
+        if is_error:
+            reason = compact[:180]
+            return (f"Web araması başarısız: {reason}" if reason else "Web araması başarısız."), True
+        folded = compact.casefold()
+        if not compact or any(marker in folded for marker in (
+            "no results found",
+            "sonuç bulunamadı",
+            "sonuc bulunamadi",
+            "web sonucu bulunamadı",
+            "web sonucu bulunamadi",
+        )):
+            return "Web aramasında sonuç bulunamadı.", False
+        if any(marker in folded for marker in (
+            "web aramasına şu an ulaşamadım",
+            "web aramasina su an ulasamadim",
+            "search failed",
+            "arama başarısız",
+            "arama basarisiz",
+        )):
+            return "Web araması tamamlanamadı.", True
+        numbered = re.findall(r"(?:^|\s)(\d{1,2})\.\s", result)
+        count = max((int(value) for value in numbered), default=0)
+        suffix = f" ({count} sonuç)" if count else ""
+        return f"Web araması tamamlandı{suffix}.", False
+
+    if is_error:
+        reason = compact[:180]
+        return (f"İçerik alınamadı: {reason}" if reason else "İçerik alınamadı."), True
+    if not compact:
+        return "İçerik boş geldi.", True
+
+    prefix = compact[:400].casefold()
+    if any(prefix.startswith(marker) for marker in _FETCH_CONTENT_ERROR_PREFIXES):
+        return f"İçerik alınamadı veya geçersiz döndü: {compact[:180]}", True
+
+    formatted_size = f"{len(result):,}".replace(",", ".")
+    return f"İçerik başarıyla alındı ({formatted_size} karakter).", False
+
+
 def _tool_events(message: Any) -> list[dict]:
     """pi mesajından yayınlanacak tool olaylarını çıkar. Tool yoksa boş liste."""
     if not isinstance(message, dict):
@@ -2389,13 +3163,19 @@ def _tool_events(message: Any) -> list[dict]:
             for c in message.get("content", []) or []
             if isinstance(c, dict) and c.get("type") == "text"
         )
+        name = str(message.get("toolName") or "")
+        display_text, display_error = _tool_result_for_display(
+            name,
+            text,
+            bool(message.get("isError")),
+        )
         ts = message.get("timestamp")
         out.append({
             "type": "tool_result",
             "id": message.get("toolCallId") or "",
-            "name": message.get("toolName") or "",
-            "result": text,
-            "isError": bool(message.get("isError")),
+            "name": name,
+            "result": display_text,
+            "isError": display_error,
             "ts": int(ts) if isinstance(ts, (int, float)) else now_ms,
         })
     # id/name'i olmayan olay web'de eşleşemez → yayınlama.
@@ -2410,6 +3190,20 @@ def _msg_has_tool_call(message: Any) -> bool:
         isinstance(c, dict) and c.get("type") == "toolCall"
         for c in (message.get("content") or [])
     )
+
+
+def _assistant_msg_aborted(message: Any) -> bool:
+    """Assistant mesajı sağlayıcı/Pi tarafından bilinçli olarak iptal edilmiş mi?"""
+    if not isinstance(message, dict) or message.get("role") != "assistant":
+        return False
+    stop_reason = str(message.get("stopReason") or "").strip().casefold()
+    if stop_reason == "aborted":
+        return True
+    # Pi sürümleri arasında stopReason alanı boş kalabiliyor; protokolün açık
+    # iptal iletisini de tanı. Gerçek sağlayıcı hataları stopReason=error yolunda
+    # kalır ve kullanıcıya yedek cümle söylenmeye devam eder.
+    error = str(message.get("errorMessage") or "").strip().casefold()
+    return stop_reason != "error" and error == "request was aborted"
 
 
 def _run_answer_done(turn_ended: bool, final_msg: Any) -> bool:
@@ -2446,29 +3240,20 @@ if _HAS_LIVEKIT:
             self._brain = pi_llm
             self._client = pi_llm._client  # _run başında güncel speaker'a göre çözülür
 
-        async def _wait_deferred(self, emit) -> None:
-            """Arka plana devredilmiş tur sonu compaction bitene kadar bekle.
+        async def _wait_deferred(self, _emit) -> None:
+            """Arka plan compaction sahipliğini yeni kullanıcı stream'ine devret.
 
-            pi TEK agent oturumudur: sıkıştırma sürerken gönderilen prompt'un olayları
-            eski koşununkilerle karışır. O yüzden bekleriz — ama bekleme SESSİZ olmaz:
-            PI_COMPACTION_NOTICE_DELAY'i aşarsa tek kısa ara söz söylenir. Sıkıştırma
-            best-effort'tur: tolerans aşılırsa devredilen koşu zorla kapatılır ve tur
-            YİNE gönderilir (compaction başarısızlığı turu ASLA yutmaz)."""
+            Eski tasarım burada 20–60 saniye bekliyor, hatta yeni turu reddediyordu.
+            `prompt+streamingBehavior=steer` compaction sırasında güvenle kuyruğa
+            alınabildiği için artık bekleme yok: yeni stream kalan olayları devralır.
+            """
             client = self._client
-            if getattr(client, "_settled_ev", None) is None:
-                return                                  # eski/test client'ı → gate yok
-            if await client.wait_settled(PI_COMPACTION_NOTICE_DELAY):
-                return
-            logger.info(
-                "pi arka plan compaction sürüyor → ara söz, tur sırada bekliyor"
-            )
-            emit(PI_COMPACTION_NOTICE_TEXT)
-            if not await client.wait_settled(PI_COMPACTION_STALL_TIMEOUT):
-                logger.warning(
-                    "pi compaction %.0fs'de bitmedi → tur yine de gönderiliyor",
-                    PI_COMPACTION_STALL_TIMEOUT,
+            takeover = getattr(client, "takeover_deferred", None)
+            if takeover is not None and takeover():
+                logger.info(
+                    "pi arka plan compaction → yeni kullanıcı stream'ine devredildi, "
+                    "söz steer kuyruğuna alınacak"
                 )
-                client.force_settled()
 
         @staticmethod
         def _compact_mark(client, begin: bool) -> float:
@@ -2482,35 +3267,14 @@ if _HAS_LIVEKIT:
                 return 0.0
             return client.compact_end() if hasattr(client, "compact_end") else 0.0
 
-        async def _compact_gate(self, emit) -> bool:
-            """Sıkıştırma penceresindeysek bu turu KABUL ETME. True = devam et.
-
-            Kullanıcının isteği: "compaction'a girdiğinde yeni sesli komut almasın."
-            Ölçüldü: sıkıştırma 21-62 sn sürüyor (ortanca ~24) — o pencerede pi tek
-            oturumdur, gönderilen prompt ya kilitte sıraya girer ya olayları karışır.
-            Bugüne dek kullanıcı bunu "sistem yavaşladı / cevap vermedi" diye yaşıyordu.
-
-            İKİ TUZAK, ikisi de burada kapatılıyor:
-              1. SESSİZCE YUTMA — reddedilen tur kısa bir işaret ALIR
-                 (`PI_COMPACT_BUSY_TEXT`). Hiçbir şey duymayan kullanıcı sistemi
-                 bozuk sanar; asıl hata buydu.
-              2. GEREKSİZ GÜRÜLTÜ — önce `PI_COMPACT_NOTIFY_MIN_S` kadar beklenir.
-                 Sıkıştırma o sürede biterse tur HİÇ reddedilmez, normal cevaplanır.
-
-            Kapı YALNIZ pencere boyunca kapalıdır; `PI_COMPACT_GATE_ENABLED=false`
-            ile bugünkü davranışa (bekle ve yine de gönder) bire bir dönülür."""
+        async def _compact_gate(self, _emit) -> bool:
+            """Compaction sürse bile kullanıcı turunu steer yoluna kabul et."""
             client = self._client
-            if not PI_COMPACT_GATE_ENABLED or not hasattr(client, "compacting"):
-                return True
-            if not client.compacting():
-                return True
-            if await client.wait_compact_done(PI_COMPACT_NOTIFY_MIN_S):
-                return True     # kısa sıkıştırma → kullanıcı hiçbir şey fark etmesin
-            logger.info(
-                "pi compaction penceresi → tur KABUL EDİLMEDİ, kısa işaret verildi"
-            )
-            emit(PI_COMPACT_BUSY_TEXT)
-            return False
+            if hasattr(client, "compacting") and client.compacting():
+                logger.info(
+                    "pi compaction penceresi → tur reddedilmedi, steer kuyruğuna alınacak"
+                )
+            return True
 
         async def _truth_check(
             self,
@@ -2569,20 +3333,27 @@ if _HAS_LIVEKIT:
                 emit("".join(guard_buf))
 
         async def _run(self) -> None:
+            turn_started_at = time.monotonic()
+            text = _last_user_text(self._chat_ctx)
+            if not text:
+                return
+            # Final STT ile aynı anda bitmek üzere olan ReDimNet2 penceresine
+            # sınırlı süre tanı. Bu bekleme persona/hafıza seçiminin ÖNCESİNDE
+            # olmalı; aksi hâlde doğru isim UI'a yetişse bile yanlış Pi açılır.
+            speaker_wait_s = await self._brain.wait_speaker_resolution()
             # Tur başında güncel konuşmacıyı çöz; kişi değiştiyse warm süreci swap et.
             self._client = await self._brain._current_client()
             await self._client.start()
-            # Ortak oda: bu turun hafıza kimliğini pi'ya duyur (tool'lar bunu okur).
-            # Mod geçişinden SONRA, prompt'tan ÖNCE — ve turun geri kalanı scripted
-            # yolla erken dönse bile kimlik yine tazelenmiş olur (bayat kimlik yok).
-            self._brain._publish_turn_user()
+            ensure_steering = getattr(self._client, "ensure_steering_all", None)
+            if ensure_steering is not None:
+                try:
+                    await ensure_steering()
+                except Exception as exc:  # noqa: BLE001 — konuşma fail-open sürer
+                    logger.warning("pi steering mode=all ayarlanamadı: %s", exc)
             # Hız kademesini TUR BAŞINDA dondur. Tur sonunda okumak yanıltırdı:
             # `[speed:X]` işareti ilk cümleyle birlikte ZATEN uygulanmış olur ve
             # "kademe değişmedi" gibi görünürdü (bkz. truth_check.speed_line).
             self._speed_before = self._brain.current_speed()
-            text = _last_user_text(self._chat_ctx)
-            if not text:
-                return
             turn_id = uuid.uuid4().hex
             spoke = [False]   # bu tur kullanıcıya TEK bir şey söyledi mi?
             said_count = [0]  # kaç PARÇA söylendi (ara sözler dahil) — emniyet ağı bunu
@@ -2592,6 +3363,8 @@ if _HAS_LIVEKIT:
             self._brain._barge_turn_start()
 
             def _emit(content: str) -> None:
+                if not spoke[0]:
+                    content = self._brain._consume_speaker_response_prefix() + content
                 spoke[0] = True
                 said_count[0] += 1
                 self._brain._barge_track(content)
@@ -2602,32 +3375,56 @@ if _HAS_LIVEKIT:
                     )
                 )
 
+            # Gün değiştiyse kullanıcının YENİ sözü eski güne eklenmeden önce:
+            # 1) eski session'ı günlük, kişi-bazlı aranabilir hafızaya çıkar;
+            # 2) DB yazımını doğrula; 3) session'ı arşivleyip taze Pi aç. Başlangıç/
+            # bitiş sözleri bu LLMStream üzerinden gider; re-entrant session.say yok.
+            rolled = await self._brain.daily_rollover_if_needed(
+                announce=False,
+                allow_awake=True,
+                emit=_emit,
+            )
+            if rolled:
+                self._client = await self._brain._current_client()
+                await self._client.start()
+
+            # Ortak oda: bu turun hafıza kimliğini pi'ya duyur (tool'lar bunu okur).
+            # Mod geçişinden/günlük rollover'dan SONRA, prompt'tan ÖNCE — ve turun
+            # geri kalanı scripted yolla erken dönse bile kimlik yine tazelenir.
+            self._brain._publish_turn_user()
+
             # Wake gate (DIŞ kapı). Konuşmacı çözümünden SONRA, enrollment/pi'dan
             # ÖNCE. Uyurken + wake yok → sessiz (pi'ya GİTME, token yok). Wake ile
             # uyanınca enrollment/normal akış devam eder. Kapalıysa gate yok.
             action, payload = self._brain._wake_decide(text)
-            # Bekleyen "devam" (önceki cevabın sözü kesilmişti) HER YOLDA burada
-            # düşürülür: aşağıdaki scripted yollardan biri turu erken kapatsa bile
-            # bayat bir devam sonraki tura sarkmaz. Kararı ise scripted yollardan
-            # SONRA veriyoruz — kimlik/kayıt/sıfırlama akışları hep önceliklidir.
-            pending = self._brain._barge_take()
+            # Önceki cevabın kesilen kısmını yalnızca bağlam notunda kullan; eski
+            # metni yerelden yeniden okutma. Pi'ya gidecek her yeni söz aşağıda aynı
+            # aktif koşuya steer edilir. Pending kaydı burada düşürülür ki scripted
+            # bir yol erken dönse bile bayat bir "devam" sonraki tura sarkmasın.
+            self._brain._barge_take()
             if action == "silent":
-                # Uyanıkken tek başına "Candan?" buraya düşer: wake gate pi'ya
-                # göndermez ama bu bir İSİM SESLENİŞİDİR — kullanıcının kendi
-                # örneğinde sohbet sınıfındadır → kesilen cevap devam eder.
-                # Uyurken ya da proaktif seslenme sürerken (hold) devam YOK.
-                if (pending is not None and self._brain._wake.awake
-                        and not self._brain._wake.hold):
-                    resume = pending.resume()
-                    if resume:
-                        logger.info("kesme: isim seslenişi → devam (%d harf)",
-                                    barge.speakable_len(resume))
-                        _emit(resume)
                 return
             if action == "scripted":
                 _emit(payload)
                 return
             text = payload  # 'process' → wake ayıklanmış / uyanık metin
+
+            # Açık mod değiştirme komutu modele bırakılmaz. Yerel model iki kez
+            # enter_dev_mode çağırmadan "geçtim" dedi (2026-08-09 16:50); doğruluk
+            # katmanı da ancak sonuna düzeltme ekleyebildi. Burada gerçek swap
+            # tamamlanır, sonra tek ve doğru onay söylenir.
+            scripted = await self._brain._mode_command_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
+
+            # Bir önceki Candan sorusu gerçek bir EYLEM onayı istiyorsa kısa
+            # "evet/tamam" işlemi başlatamaz. Uzun açık cümle ve güncel gerçek
+            # speaker-ID kararı olmadan aşağıdaki model/scripted yollara geçilmez.
+            scripted = self._brain._explicit_action_confirmation_line(text)
+            if scripted is not None:
+                _emit(scripted)
+                return
 
             # Bekleyen kimlik ONAY sorusunun cevabı — kimlik guard'ından ÖNCE.
             # "hayır, ben Havi'yim" guard'a kimlik İDDİASI gibi görünür ve orada
@@ -2678,23 +3475,13 @@ if _HAS_LIVEKIT:
                 _emit(scripted)
                 return
 
-            # SÖZÜNÜ KESME — yeni komut mu, sadece sohbet mi? (bkz. barge.py)
-            # Deterministik kapı tipik kesmeyi bedava çözer; belirsizse küçük LLM'e
-            # sorulur; o da kararsızsa YENİ İSTEK sayılır (kullanıcının kararı).
-            # "Sohbet" kararında metin YENİDEN ÜRETİLMEZ: elde olan cevabın kalanı,
-            # kesilen cümlenin BAŞINDAN itibaren seslendirilir → pi'ya HİÇ gidilmez.
-            if pending is not None:
-                resume = await self._brain._barge_resume_line(pending, text)
-                if resume is not None:
-                    _emit(resume)
-                    return
-
             # COMPACTION KAPISI — pi'ya giden yolun EN BAŞI. Buraya kadar olan yollar
-            # (wake/kimlik/kayıt/sıfırlama/kesme-devamı) beyne GİTMEZ, o yüzden
+            # (wake/kimlik/kayıt/sıfırlama) beyne GİTMEZ, o yüzden
             # sıkıştırma sürerken de çalışmaya devam ederler.
             if not await self._compact_gate(_emit):
                 return
 
+            brief_reply = _is_brief_ack_turn(text)
             # Tanınan kişinin bu bağlantıdaki İLK turu → pi'ya giden mesaja
             # ismiyle-selam direktifi ekle (pi doğal selamlasın).
             text = self._brain._maybe_greet(text)
@@ -2714,6 +3501,7 @@ if _HAS_LIVEKIT:
             # Her tura güncel saati (Europe/London) iliştir. Model yine de due_at HESAPLAMAZ
             # (onu reminder_add server-side çözer); bu satır "bugün/yarın/şu an" için.
             text = self._brain._now_note() + "\n\n" + text
+            text = _voice_brevity_note(text, brief_ack=brief_reply)
 
             q: asyncio.Queue = asyncio.Queue()
 
@@ -2746,6 +3534,20 @@ if _HAS_LIVEKIT:
             ledger = truth_check.TurnLedger()
             guard_buf: list = []      # guard açıkken bastırılan model metni (atılır)
             model_said: list = []     # kullanıcıya GERÇEKTEN giden model metni
+            silence_probe = _IntentionalSilenceProbe()
+            brief_limiter = _BriefResponseLimiter(brief_reply)
+            prompt_accepted_at: Optional[float] = None
+            first_delta_at: Optional[float] = None
+            reconnects = 0
+
+            def _emit_model(content: str) -> None:
+                """İlk model parçasındaki sahte sessizliği canlıya çıkarmadan ayır."""
+                released = silence_probe.feed(content)
+                if released:
+                    limited = brief_limiter.feed(released)
+                    if limited:
+                        model_said.append(limited)
+                        _emit(limited)
 
             async with self._client._turn_lock:
                 # Önceki turdan ARKA PLANA devredilmiş sıkıştırma sürüyor olabilir.
@@ -2753,22 +3555,39 @@ if _HAS_LIVEKIT:
                 # olayları karıştırır. Bekle — ama kullanıcıyı SESSİZ bırakma.
                 await self._wait_deferred(_emit)
                 self._client._turn_q = q
-                aborted = False
+                aborted = False       # Pi'nin kendisinden gelen açık abort sonucu
+                detached = False      # LiveKit eski stream'i bıraktı; Pi çalışmaya devam
                 got_delta = False
                 stalled = False       # watchdog / pi error → turu erken kapat
                 turn_ended = False    # pi `turn_end` yaydı → koşunun söyleyeceği bitti
                 final_msg: Any = None  # son assistant mesajı (fallback/hata için)
+                tool_activity = False  # yeniden gönderimde yan etkili tool'u tekrarlama
                 try:
-                    # ── DENEME DÖNGÜSÜ (en fazla İKİ tur: asıl + BİR yeniden gönderim) ──
-                    # Tur sonu compaction turu arka plana devrederken kullanıcının
-                    # sorusu HİÇ cevaplanmamış olabilir (canlı 2026-07-26 22:23: hava
-                    # durumu sorusu compaction'a denk geldi, tur metinsiz kapandı,
-                    # kullanıcı yalnız özür cümlesi duydu). Böyle bir durumda sıkıştırma
-                    # bitince prompt'u BİR KEZ yeniden göndeririz. `resent` bayrağı
-                    # sonsuz döngüyü imkânsız kılar: ikinci deneme başarısız olsa bile
-                    # üçüncü YOKTUR, aşağıdaki emniyet ağı devreye girer.
+                    # ── DENEME DÖNGÜSÜ (asıl + EN FAZLA BİR yeniden gönderim) ────────
+                    # İki güvenli yeniden gönderim sebebi var: (a) cevapsız tur-sonu
+                    # compaction devri, (b) model tek kelime/tool üretmeden Pi taşımasının
+                    # ölmesi. Ortak `resent` bayrağı toplam denemeyi ikiyle sınırlar.
+                    # Tool başladıysa yeniden gönderim YOK: yan etkili işlemi iki kez
+                    # çalıştırmak, kullanıcıdan tekrar istemekten daha tehlikelidir.
                     resent = False
                     resend_mark = -1   # yeniden gönderim anındaki `said_count`
+                    prompt_message = text
+                    # Prompt öncesi leaf, Pi session ağacında dayanıklı cursor'dır.
+                    # Taşıma ölürse özgün mesajın diske yazılıp yazılmadığını bununla
+                    # ayırırız; cursor alınamazsa kör replay güvenli değildir.
+                    cursor_ok = True
+                    prompt_cursor: Optional[str] = None
+                    prompt_entry_ids: set[str] = set()
+                    try:
+                        baseline_entries, prompt_cursor = await self._client.get_entries()
+                        prompt_entry_ids = {
+                            str(entry.get("id"))
+                            for entry in baseline_entries
+                            if entry.get("id")
+                        }
+                    except Exception as exc:  # noqa: BLE001 — tur fallback'e devam eder
+                        cursor_ok = False
+                        logger.warning("pi prompt cursor alınamadı: %s", exc)
                     # Watchdog: her ilerlemede (text_delta / herhangi olay) sıfırlanan
                     # inaktivite sayacı. Tolerans boyunca HİÇ olay gelmezse (WebSocket
                     # 1000 gibi ~33-40s takılma) turu temiz kapat.
@@ -2800,7 +3619,30 @@ if _HAS_LIVEKIT:
                     while True:
                         # Bu deneme tur sonu compaction devriyle mi kapandı?
                         deferred_here = False
-                        await self._client.send({"type": "prompt", "message": text})
+                        transport_lost = False
+                        awaiting_own_prompt = True
+                        skipped_handoff_events = 0
+                        try:
+                            accepted = await self._client.request(
+                                {
+                                    "type": "prompt",
+                                    "message": prompt_message,
+                                    # Atomik davranış: Pi boşta ise normal prompt;
+                                    # çalışıyorsa mevcut koşuyu kesmeden steering
+                                    # kuyruğuna ekler. Normal/dev aynı yolu kullanır.
+                                    "streamingBehavior": "steer",
+                                },
+                                timeout=10.0,
+                            )
+                            if not accepted.get("success"):
+                                raise RuntimeError(
+                                    accepted.get("error") or "pi prompt reddedildi"
+                                )
+                            if prompt_accepted_at is None:
+                                prompt_accepted_at = time.monotonic()
+                        except Exception as exc:  # noqa: BLE001 — fallback/reconnect kapısı
+                            logger.warning("pi prompt gönderilemedi: %s", exc)
+                            transport_lost = True
                         cold = not self._client.warmed_up
                         compacting = False
                         probe.reset()          # her deneme kendi prefill bütçesiyle başlar
@@ -2812,7 +3654,7 @@ if _HAS_LIVEKIT:
                             else None
                         )
                         last_progress = time.monotonic()
-                        while True:
+                        while not transport_lost:
                             now = time.monotonic()
                             # Tolerans her turda YENİDEN hesaplanır: ilk delta geldiği anda
                             # uzun → kısa geçiş burada yürürlüğe girer.
@@ -2857,9 +3699,53 @@ if _HAS_LIVEKIT:
                                 break
                             # İlerleme var → inaktivite sayacını sıfırla.
                             last_progress = time.monotonic()
-                            if obj is None:  # süreç öldü
+                            if obj is None:  # süreç/socket öldü
+                                transport_lost = True
                                 break
                             etype = obj.get("type")
+                            # Önceki LiveKit stream'i bırakılmış fakat Pi koşusu
+                            # sürüyor olabilir. Yeni kuyruk o eski cevabın kalan
+                            # event'lerini de görür. Yalnız BU prompt'un user mesajı
+                            # session'a girdiğinde kapıyı aç; böylece eski cevap yeni
+                            # kullanıcı turunda asla seslendirilmez. Birkaç hızlı STT
+                            # parçasında her stream yalnız kendi tam prompt işaretini
+                            # bekler, aradaki steer mesajına yanlışlıkla sahip çıkmaz.
+                            if awaiting_own_prompt:
+                                event_msg = obj.get("message")
+                                own_prompt_started = (
+                                    isinstance(event_msg, dict)
+                                    and event_msg.get("role") == "user"
+                                    and _rpc_msg_text(event_msg) == prompt_message
+                                )
+                                if own_prompt_started:
+                                    awaiting_own_prompt = False
+                                    if skipped_handoff_events:
+                                        logger.info(
+                                            "pi steer devri tamamlandı: %d eski olay "
+                                            "sessizce atlandı",
+                                            skipped_handoff_events,
+                                        )
+                                    continue
+                                # Önceki koşu compaction'a girdiyse watchdog bunu
+                                # sıradan stall sanmasın; yeni steer mesajı işlenene
+                                # kadar yalnız pencere durumunu takip et.
+                                if etype == "compaction_start":
+                                    compacting = True
+                                    self._compact_mark(self._client, True)
+                                elif etype == "compaction_end":
+                                    compacting = False
+                                    self._compact_mark(self._client, False)
+                                skipped_handoff_events += 1
+                                continue
+                            if etype in (
+                                "tool_execution_start",
+                                "tool_execution_update",
+                                "tool_execution_end",
+                            ):
+                                # Özellikle start önemlidir: süreç tool çalışırken
+                                # ölürse message_end hiç gelmeyebilir. Replay aynı
+                                # yan etkili işlemi ikinci kez başlatmamalı.
+                                tool_activity = True
                             # Tool çağrısı/sonucu → odaya yayınla (`mate.tool`). SADECE mesaj
                             # KESİNLEŞİNCE (message_end/turn_end): message_update akışında
                             # toolCall.arguments PARÇA PARÇA dolar (önce {}, sonra {"text":"Ç"}…).
@@ -2869,11 +3755,20 @@ if _HAS_LIVEKIT:
                             # message_end + turn_end ile iki kez gelebilir → id ile elenir;
                             # yayın hatası turu BOZMAZ (best-effort).
                             if etype in ("message_end", "turn_end"):
-                                self._brain._publish_tool_msg(obj.get("message"))
+                                event_msg = obj.get("message")
+                                self._brain._publish_tool_msg(event_msg)
                                 # Katman 1 — tur defteri. Yayınla AYNI kapıdan geçer
                                 # (mesaj KESİNLEŞMİŞ olmalı); tekrar gelen olay
                                 # toolCallId ile elenir.
-                                ledger.record_message(obj.get("message"))
+                                ledger.record_message(event_msg)
+                                if isinstance(event_msg, dict) and (
+                                    event_msg.get("role") == "toolResult"
+                                    or event_msg.get("stopReason") == "toolUse"
+                                ):
+                                    tool_activity = True
+                                # Model argümanı ancak mesaj kapanınca tamdır. Sesle
+                                # Terra/Sol seçimi bu noktada bir sonraki tura yazılır.
+                                self._brain._detect_dev_model_signal(event_msg)
                             # Dev tool sinyali (enter_dev_mode/exit_dev_mode) → mod isteği.
                             # Swap bu tur BİTİNCE (sonraki tur başında) uygulanır: komutu söyleyen
                             # pi cevabını ("geçiyorum") temiz verir, sonra süreç swap olur.
@@ -2891,6 +3786,7 @@ if _HAS_LIVEKIT:
                                             # sonraki turlar kısa toleransla başlar. Bekleyen
                                             # ara söz varsa iptal (cevap zaten akmaya başladı).
                                             got_delta = True
+                                            first_delta_at = time.monotonic()
                                             notice_at = None
                                             self._client.warmed_up = True
                                         if _enroll_guard():
@@ -2900,14 +3796,24 @@ if _HAS_LIVEKIT:
                                             # devraldı; modelin cümlesi canlıya çıkmaz.
                                             guard_buf.append(delta)
                                         else:
-                                            model_said.append(delta)
-                                            _emit(delta)
+                                            _emit_model(delta)
                             elif etype in ("message_end", "turn_end"):
                                 if etype == "turn_end":
                                     turn_ended = True
                                 msg = obj.get("message")
                                 if isinstance(msg, dict) and msg.get("role") == "assistant":
                                     final_msg = msg
+                                    if _assistant_msg_aborted(msg):
+                                        # Biz LiveKit kesmesinde artık abort göndermiyoruz.
+                                        # Yine de sağlayıcı/Pi açık bir aborted sonucu
+                                        # döndürebilir; bu cevap hatası veya boş yanıt
+                                        # değildir, sessiz kapanmalıdır.
+                                        aborted = True
+                                        logger.info(
+                                            "pi turu kullanıcı kesmesiyle iptal edildi "
+                                            "→ yedek cümle söylenmeyecek"
+                                        )
+                                        break
                                     if msg.get("stopReason") == "error":
                                         logger.warning(
                                             "pi assistant error: %s",
@@ -2975,6 +3881,117 @@ if _HAS_LIVEKIT:
                             elif etype == "agent_settled":
                                 break
                         # ── Bu deneme bitti: yeniden gönderim gerekli mi? ──────────
+                        # Taşıma, model/tool tarafından görünür hiçbir iş yapılmadan
+                        # öldüyse broker'a yeniden bağlan ve AYNI prompt'u BİR KEZ
+                        # gönder. Eski kuyruğu at: kapanış sentinel'i yeni süreci
+                        # anında bitirmesin. Kısmi cevapta/tool sonrasında replay yok.
+                        if transport_lost:
+                            can_replay = (
+                                not resent
+                                and not got_delta
+                                and not tool_activity
+                                and not ledger.entries
+                                and not _assistant_msg_text(final_msg)
+                            )
+                            if can_replay:
+                                resent = True
+                                resend_mark = said_count[0]
+                                logger.warning(
+                                    "pi taşıması cevap başlamadan kapandı → session "
+                                    "cursor doğrulanarak TEK kurtarma denenecek"
+                                )
+                                self._client._turn_q = None
+                                try:
+                                    await self._client.reconnect()
+                                    reconnects += 1
+                                    await self._client.verify_reconnected_state()
+                                except Exception as exc:  # noqa: BLE001 — son emniyet
+                                    logger.warning("pi yeniden bağlantı başarısız: %s", exc)
+                                    stalled = True
+                                    break
+                                if not cursor_ok:
+                                    logger.warning(
+                                        "pi kurtarma cursor'sız kaldı → kör prompt "
+                                        "tekrarı yapılmıyor"
+                                    )
+                                    stalled = True
+                                    break
+                                try:
+                                    new_entries, _leaf = await self._client.get_entries(
+                                        since=prompt_cursor
+                                    )
+                                except Exception as exc:  # noqa: BLE001
+                                    # Çok yeni bir session'ın prompt-öncesi leaf'i
+                                    # yalnız RAM'de kalıp süreçle birlikte ölebilir.
+                                    # O durumda `since` doğal olarak "Entry not
+                                    # found" döner. Bütün ağacı okuyup başlangıçta
+                                    # gördüğümüz stable id'leri çıkarmak aynı güvenli
+                                    # farkı verir; bu da olmazsa kör replay yok.
+                                    logger.info(
+                                        "pi kurtarma cursor doğrudan bulunamadı (%s) "
+                                        "→ stable-id farkına düşülüyor",
+                                        exc,
+                                    )
+                                    try:
+                                        all_entries, _leaf = await self._client.get_entries()
+                                        new_entries = [
+                                            entry for entry in all_entries
+                                            if str(entry.get("id") or "")
+                                            not in prompt_entry_ids
+                                        ]
+                                    except Exception as fallback_exc:  # noqa: BLE001
+                                        logger.warning(
+                                            "pi kurtarma session farkı okunamadı: %s",
+                                            fallback_exc,
+                                        )
+                                        stalled = True
+                                        break
+                                roles: list[str] = []
+                                non_user_activity = False
+                                for entry in new_entries:
+                                    if entry.get("type") != "message":
+                                        # model/thinking/compaction gibi session
+                                        # meta-entry'leri süreç açılışında yeniden
+                                        # üretilebilir; kullanıcı işinin başladığına
+                                        # kanıt değildir. Yan etki yalnız message
+                                        # içindeki assistant toolCall/toolResult'tır.
+                                        continue
+                                    message = entry.get("message") or {}
+                                    role = str(message.get("role") or "")
+                                    roles.append(role)
+                                    if role != "user":
+                                        non_user_activity = True
+                                if non_user_activity:
+                                    logger.warning(
+                                        "pi kurtarma: session'da model/tool faaliyeti "
+                                        "var (roller=%s) → tekrar yok",
+                                        ",".join(roles) or "session-olayı",
+                                    )
+                                    stalled = True
+                                    break
+                                if roles:
+                                    # Özgün kullanıcı girdisi kalıcı; aynı metni
+                                    # ikinci kez ekleme. Cevapsız son girdiyi sürdür.
+                                    prompt_message = PI_RECOVERY_CONTINUE_TEXT
+                                    logger.info(
+                                        "pi kurtarma: kullanıcı girdisi session'da "
+                                        "mevcut → iç devam notu gönderilecek"
+                                    )
+                                else:
+                                    prompt_message = text
+                                    logger.info(
+                                        "pi kurtarma: session ilerlememiş → özgün "
+                                        "prompt tek kez yeniden gönderilecek"
+                                    )
+                                q = asyncio.Queue()
+                                self._client._turn_q = q
+                                final_msg = None
+                                turn_ended = False
+                                stalled = False
+                                cold = not self._client.warmed_up
+                                continue
+                            stalled = True
+                            break
                         # ŞARTLAR (hepsi): (1) tur arka plan compaction'ına devredildi,
                         # (2) daha önce yeniden göndermedik, (3) kullanıcı bu turda
                         # MODELDEN tek kelime duymadı (ne delta ne tam-content).
@@ -3009,6 +4026,11 @@ if _HAS_LIVEKIT:
                         final_msg = None
                         turn_ended = False
                         stalled = False
+                    # `stopReason=aborted` bilinçli bir uzak iptal sonucudur. Buradan
+                    # sonraki boş-yanıt güvenlik ağları çalışırsa kullanıcı konuşmaya
+                    # devam ederken yanlışlıkla "aklım dağıldı" duyurulur.
+                    if aborted:
+                        return
                     # Fallback: hiç delta gelmediyse ama tam-content varsa onu stream et.
                     if not got_delta:
                         full = _assistant_msg_text(final_msg)
@@ -3018,8 +4040,7 @@ if _HAS_LIVEKIT:
                             elif ledger.guard_on:
                                 guard_buf.append(full)
                             else:
-                                model_said.append(full)
-                                _emit(full)
+                                _emit_model(full)
                         elif stalled:
                             # Hiç metin yok + stall/error → kullanıcı sessiz kalmasın.
                             if final_msg is not None and final_msg.get("stopReason") == "error":
@@ -3033,6 +4054,19 @@ if _HAS_LIVEKIT:
                                 "pi boş yanıt (error): %s",
                                 final_msg.get("errorMessage") or "(bilinmiyor)",
                             )
+                    # Streaming'in ilk parçası olası bir sessizlik anlatımıysa bu
+                    # noktaya kadar canlıya çıkmadı. Tam cevap yer tutucuysa GERÇEK
+                    # sessizlik olarak yut; değilse tamponu kayıpsız yayınla.
+                    silence_tail, intentional_silence = silence_probe.finish()
+                    if silence_tail:
+                        limited = brief_limiter.feed(silence_tail)
+                        if limited:
+                            model_said.append(limited)
+                            _emit(limited)
+                    if intentional_silence:
+                        logger.info("pi kasıtlı sessizlik yer tutucusu BASTIRILDI")
+                    elif brief_limiter.done:
+                        logger.info("pi basit onay yanıtı ilk kısa cümlede BİTİRİLDİ")
                     # ── DOĞRULUK DENETİMİ (model NE YAPILACAĞINA karar verir,
                     # harness NE OLDUĞUNU söyler). Kayıt turu bu denetimin DIŞINDA:
                     # orada zaten _run_pending_enroll otoriter cümleyi söylüyor.
@@ -3079,7 +4113,11 @@ if _HAS_LIVEKIT:
                     # söylenmediyse ağ YİNE devreye girer. Bekleme ara sözü tek başına
                     # "konuştuk" saymaz — kullanıcının sorusu hâlâ cevapsızdır.
                     silent_after_resend = resent and said_count[0] == resend_mark
-                    if (not spoke[0] or silent_after_resend) and not enroll_guard:
+                    if (
+                        (not spoke[0] or silent_after_resend)
+                        and not enroll_guard
+                        and not intentional_silence
+                    ):
                         logger.warning(
                             "pi turu METİNSİZ bitti → yedek cümle "
                             "(got_delta=%s stalled=%s resent=%s)",
@@ -3090,13 +4128,17 @@ if _HAS_LIVEKIT:
                     if stalled:
                         self._client._write({"type": "abort"})
                 except asyncio.CancelledError:
-                    # Barge-in / interrupt: pi'ya abort gönder.
-                    aborted = True
-                    self._client._write({"type": "abort"})
+                    # LiveKit yeni kullanıcı sözü gelince eski Python LLMStream'ini
+                    # kapatır. Pi koşusunu ABORT ETME: sıradaki prompt atomik steer
+                    # olarak bu koşuya eklenecek. Eski cevabın kalan event'leri yeni
+                    # stream'deki own-prompt kapısına kadar sessizce atılır.
+                    detached = True
+                    logger.info(
+                        "pi stream kullanıcı devamı için bırakıldı → koşu açık, "
+                        "sonraki söz steer edilecek"
+                    )
                     raise
                 finally:
-                    if aborted:
-                        self._client._write({"type": "abort"})
                     self._client._turn_q = None
                     # FAIL-OPEN: tur İÇİ sıkıştırma penceresini `compaction_end`
                     # kapatır — ama tur stall/abort/hata ile biterse o olay HİÇ
@@ -3110,6 +4152,39 @@ if _HAS_LIVEKIT:
                                 "pi compaction penceresi tur bitiminde AÇIK kalmıştı "
                                 "→ zorla kapatıldı (%.1f sn)", left,
                             )
+                    finished_at = time.monotonic()
+                    speaker_name = (
+                        getattr(self._brain._speaker_state, "response_name", None)
+                        if self._brain._speaker_state is not None
+                        else None
+                    )
+                    ack_ms = (
+                        (prompt_accepted_at - turn_started_at) * 1000.0
+                        if prompt_accepted_at is not None
+                        else -1.0
+                    )
+                    first_ms = (
+                        (first_delta_at - turn_started_at) * 1000.0
+                        if first_delta_at is not None
+                        else -1.0
+                    )
+                    logger.info(
+                        "turn_metric id=%s mode=%s speaker=%s speaker_wait_ms=%.0f "
+                        "prompt_ack_ms=%.0f first_delta_ms=%.0f total_ms=%.0f "
+                        "reconnects=%d tool=%s outcome=%s",
+                        turn_id[:10],
+                        self._brain._mode,
+                        speaker_name or "unknown",
+                        speaker_wait_s * 1000.0,
+                        ack_ms,
+                        first_ms,
+                        (finished_at - turn_started_at) * 1000.0,
+                        reconnects,
+                        "yes" if tool_activity else "no",
+                        "steer_wait" if detached else (
+                            "aborted" if aborted else "stalled" if stalled else "ok"
+                        ),
+                    )
 
     class PiBrain(llm.LLM):
         """livekit-agents LLM: warm `pi --mode rpc` beyni. openai.LLM(...) yerine geçer."""
@@ -3163,6 +4238,10 @@ if _HAS_LIVEKIT:
             # speaker_state: `.current` alanı olan paylaşılan durum (None = kapalı).
             # Kapalıyken davranış Faz 2 ile AYNI: tek persona, tek warm süreç.
             self._speaker_state = speaker_state
+            # Agent'ın final STT handler'ı speaker embed işini sınırlı bekleyen
+            # güçlü bir task bırakır. Hem web transkript kapısı hem PiStream aynı
+            # task'ı bekler; kimlik kararı iki farklı yerde yarışarak kapanmaz.
+            self._speaker_resolution_task: Optional[asyncio.Task] = None
             self._client = PiRpcClient(
                 self._persona, self._session_id, self._model, self._thinking
             )
@@ -3174,6 +4253,15 @@ if _HAS_LIVEKIT:
             self._mode = "normal"
             self._pending_mode: Optional[str] = None
             self._saved_normal: Optional[tuple[str, str]] = None
+            # Dev modeli oda/worker yeniden başlasa da korunur. Tool sinyali mevcut
+            # dev turunun sonunda `_pending_dev_model` bırakır; swap sonraki tur başında.
+            self._dev_model_name = _load_dev_model_name()
+            self._dev_model = DEV_MODELS[self._dev_model_name]
+            self._pending_dev_model: Optional[str] = None
+            # Düşünme seviyesi model metadata'sından dinamik doğrulanır; burada
+            # yalnız son doğrulanmış seçimi kalıcı olarak tutarız.
+            self._dev_thinking = _load_dev_reasoning_name()
+            self._pending_dev_reasoning: Optional[str] = None
             # `mate.tool` yayıncısı (agent.py bağlar; None → yayın YOK, eski davranış).
             # Tool çağrısı/sonucu olayları buradan odaya gider; hata konuşmayı BOZMAZ.
             self._tool_publisher: Optional[Callable[[dict], None]] = None
@@ -3226,7 +4314,7 @@ if _HAS_LIVEKIT:
             self._enroll_collector: Optional[asyncio.Task] = None
             # Toplayıcı kalite-kapısı sayaçları (temiz ölçüm için). NEDEN: log'a
             # bakınca kaç pencere görüldü / kaçı kapıyı geçti / kaçı yankı-sessizlik
-            # diye elendi görünsün ki campplus'ın TEMİZ aynı-kişi skoru okunabilsin.
+            # diye elendi görünsün ki modelin TEMİZ aynı-kişi skoru okunabilsin.
             self._enroll_seen = 0            # tap'ten görülen distinct pencere
             self._enroll_taken = 0           # kapıyı geçip havuza giren
             self._enroll_drop_echo = 0       # agent_busy → Candan yankısı, elendi
@@ -3249,6 +4337,22 @@ if _HAS_LIVEKIT:
             # bitiş sözünü verene kadar tüm sonraki cümleler aynı WAV'e eklenir.
             self._expression_free_started = False
             self._greeted: set[str] = set()               # ismiyle selamlanan kişiler
+            # Son GERÇEKTEN cevaplanan turun kimliği. None = henüz cevap yok.
+            # `known:<slug>` / `unknown` ayrımı sayesinde Ayhan→unknown→Ayhan geçişi
+            # ikinci Ayhan dönüşünde yeniden adla karşılanır.
+            self._last_answer_speaker_key: Optional[str] = None
+            # Son GERÇEKTEN seslendirilen Candan cevabının takip bağlamı. Bu,
+            # biyometrik kimlik üretmez; yalnız kısa cevabın UI/hitap akışını taşır.
+            self._reply_context: Optional[dict] = None
+            # Tek LiveKit kullanıcı cevabı birden fazla final STT parçasına
+            # bölünebilir. İlk parça güvenle bağlandıysa, Candan araya girene dek
+            # sonraki sıfır-kanıt parçaları bu kısa ömürlü konuşma zincirini taşır.
+            self._reply_chain_speaker: Optional[str] = None
+            self._reply_chain_expires = 0.0
+            self._turn_had_tool_result = False
+            # Bir işlem sorusuna gelen kısa "evet/tamam" burada durdurulur. İşlem
+            # ancak sonraki uzun açık cümle + gerçek speaker-ID kararıyla devam eder.
+            self._explicit_action_confirmation: Optional[dict] = None
             self._enroll_lock = asyncio.Lock()
             # ── Kimlik ONAY DÖNGÜSÜ durumu (bağlantı ömürlü) ──────────────────
             # _confirm_pending: sorulmuş onay sorusu + O TURUN aday pencereleri
@@ -3281,6 +4385,16 @@ if _HAS_LIVEKIT:
             self._wake_task: Optional[asyncio.Task] = None
             # Konsolidasyon: dosya başına son çalıştırma (günde en çok 1 → LLM turu yakma).
             self._consolidated: dict[str, float] = {}
+            # Günlük konuşma özeti + session rollover. DB idempotency anahtarı ve bu
+            # kilit birlikte heartbeat/ilk-kullanıcı-turu yarışını kapatır.
+            conversation_db = Path(
+                os.environ.get("CONVERSATION_DB") or "memory/conversations.db"
+            )
+            if not conversation_db.is_absolute():
+                conversation_db = REPO_ROOT / conversation_db
+            self._daily_store = DailyMemoryStore(conversation_db)
+            self._daily_lock = asyncio.Lock()
+            self._daily_checked_source = ""
             # Tur DIŞI söz (compaction haberleri). agent.py bağlar; None → haber YOK.
             self._announcer: Optional[Callable[[str], Any]] = None
 
@@ -3293,6 +4407,25 @@ if _HAS_LIVEKIT:
             eski çağıranlar) haber verme sessizce KAPALI kalır — davranış bugünküyle
             birebir aynı olur."""
             self._announcer = cb
+
+        def set_speaker_resolution_task(self, task: asyncio.Task) -> None:
+            """Bu kullanıcı dönüşünün tek speaker-finalize görevini bağla."""
+            self._speaker_resolution_task = task
+
+        async def wait_speaker_resolution(self) -> float:
+            """Varsa speaker kararını bekle; hata sesli turu durdurmasın."""
+            task = self._speaker_resolution_task
+            if task is None:
+                return 0.0
+            started = time.monotonic()
+            try:
+                await asyncio.shield(task)
+            except Exception:  # noqa: BLE001 — speaker-ID fail-open
+                logger.warning("speaker final kararı başarısız", exc_info=True)
+            finally:
+                if self._speaker_resolution_task is task and task.done():
+                    self._speaker_resolution_task = None
+            return time.monotonic() - started
 
         async def _announce(self, text: str) -> None:
             """Deterministik harness cümlesini tur dışında söyle (best-effort)."""
@@ -3349,13 +4482,21 @@ if _HAS_LIVEKIT:
                     ok = True
             finally:
                 elapsed = time.monotonic() - t0
-                client.force_settled()      # fail-open: pencere ASLA açık kalmaz
+                handed_off = bool(getattr(client, "_deferred_handoff", False))
+                if handed_off:
+                    # Yeni aktif stream compaction_end + agent_settled olaylarını
+                    # devraldı. Burada pencereyi kapatmak veya "hazırım" demek hem
+                    # yanlış hem de yeni kullanıcı cevabının önüne geçer.
+                    client._deferred_handoff = False
+                else:
+                    client.force_settled()  # fail-open: pencere ASLA açık kalmaz
                 logger.info(
-                    "pi arka plan compaction BİTTİ: %.1f sn (reason=%s haber=%s%s)",
+                    "pi arka plan compaction %s: %.1f sn (reason=%s haber=%s%s)",
+                    "AKTİF TURA DEVREDİLDİ" if handed_off else "BİTTİ",
                     elapsed, reason, "evet" if told else "hayır",
-                    "" if ok else " ZAMAN AŞIMI",
+                    "" if (ok or handed_off) else " ZAMAN AŞIMI",
                 )
-            if told and not client._compact_resend:
+            if told and not handed_off and not client._compact_resend:
                 await self._announce(PI_COMPACT_END_TEXT)
 
         # ── `mate.tool` yayını (Candan ne yapıyor) ───────────────────────────
@@ -3384,6 +4525,7 @@ if _HAS_LIVEKIT:
 
             SADECE `_answer_buf` sıfırlanır. `_barge_pending` ÖNCEKİ turdan gelir
             ve bu turda tüketilecektir — burada silinmez."""
+            self._turn_had_tool_result = False
             if barge.RESUME_ENABLED:
                 self._answer_buf = []
 
@@ -3399,10 +4541,33 @@ if _HAS_LIVEKIT:
             livekit'in ses/transkript senkronizasyonundan gelir — TAHMİN DEĞİL,
             hoparlöre GİDEN metindir. Defter burada TÜKETİLİR: `session.say()`
             gibi PiStream'den geçmeyen sözler boş defter bulur ve durumu bozmaz."""
-            if not barge.RESUME_ENABLED:
-                return
             full = "".join(self._answer_buf)
             self._answer_buf = []
+            actual = (spoken or full or "").strip()
+            kind = _agent_reply_context_kind(
+                actual,
+                had_tool_result=self._turn_had_tool_result,
+            )
+            self._turn_had_tool_result = False
+            # Ajan gerçekten araya girdi: önceki çok-parçalı kullanıcı zinciri bitti.
+            self._reply_chain_speaker = None
+            self._reply_chain_expires = 0.0
+            state = self._speaker_state
+            speaker = getattr(state, "response_name", None) if state else None
+            if actual and speaker:
+                self._reply_context = {
+                    "kind": kind or "statement",
+                    "speaker": speaker,
+                    "at": time.monotonic(),
+                }
+                logger.debug(
+                    "kısa cevap bağlamı açıldı: tür=%s kişi=%s",
+                    kind or "statement", speaker,
+                )
+            else:
+                self._reply_context = None
+            if not barge.RESUME_ENABLED:
+                return
             if not full:
                 return                       # PiStream turu değil (ör. hatırlatma sesi)
             if not interrupted:
@@ -3482,13 +4647,15 @@ if _HAS_LIVEKIT:
             DİKKAT: yalnızca KESİNLEŞMİŞ mesajla çağır (message_end/turn_end). message_update
             akışındaki mesaj yarımdır (toolCall.arguments henüz dolmamış olabilir) ve
             "ilk gelen kazanır" dedupe'u yüzünden boş argüman kalıcı olur."""
-            cb = self._tool_publisher
-            if cb is None:
-                return
             try:
                 events = _tool_events(message)
             except Exception:  # noqa: BLE001 — ayrıştırma hatası konuşmayı BOZMAZ
                 logger.warning("mate.tool: olay ayrıştırılamadı", exc_info=True)
+                return
+            if any(ev.get("type") == "tool_result" for ev in events):
+                self._turn_had_tool_result = True
+            cb = self._tool_publisher
+            if cb is None:
                 return
             for ev in events:
                 key = f"{ev['type']}:{ev['id']}"
@@ -3631,13 +4798,28 @@ if _HAS_LIVEKIT:
                     f"[{CANDAN_TZ}].)")
 
         # ── Sessiz pi turu (TTS'e GİTMEZ; AgentSession'ı hiç görmez) ──────────
-        async def _silent_turn(self, prompt: str, timeout: float = 30.0) -> bool:
-            """pi'ya arka planda bir prompt gönder ve tur bitene kadar bekle. Çıktı sesli
-            OKUNMAZ (LLMStream değil, doğrudan RPC). Hata/timeout → False (akış bloklanmaz)."""
+        async def _capture_silent_turn(
+            self,
+            prompt: str,
+            timeout: float = 30.0,
+            *,
+            require_memory_user: bool = True,
+        ) -> tuple[bool, str]:
+            """Arka plan turunu çalıştır; seslendirmeden başarı + model metnini döndür.
+
+            Günlük rollover ortak ``candan`` session'ında çalışır; süreç MEM_USER'ı
+            bilerek boştur, kimlik tur dosyasından çözülür. Bu yüzden günlük özet
+            ``require_memory_user=False`` kullanır. Hafıza tool'u çağıran eski sessiz
+            işler ise kimlik kapısını korur.
+            """
             client = self._client
-            if client is None or not client.started or not client._mem_user:
-                return False
+            if client is None or not client.started:
+                return False, ""
+            if require_memory_user and not client._mem_user:
+                return False, ""
             q: asyncio.Queue = asyncio.Queue()
+            delta_text = ""
+            final_msg: Any = None
             try:
                 async with client._turn_lock:
                     client._turn_q = q
@@ -3645,21 +4827,155 @@ if _HAS_LIVEKIT:
                         await client.send({"type": "prompt", "message": prompt})
 
                         async def _drain() -> None:
+                            nonlocal delta_text, final_msg
                             while True:
                                 obj = await q.get()
-                                if obj is None or obj.get("type") == "agent_settled":
+                                if obj is None:
+                                    raise RuntimeError("pi sessiz tur bağlantısı kapandı")
+                                event_type = obj.get("type")
+                                if event_type == "message_update":
+                                    update = obj.get("assistantMessageEvent") or {}
+                                    if update.get("type") == "text_delta":
+                                        delta_text += update.get("delta") or ""
+                                elif event_type in ("message_end", "turn_end"):
+                                    message = obj.get("message")
+                                    if isinstance(message, dict) and message.get("role") == "assistant":
+                                        final_msg = message
+                                elif event_type == "agent_settled":
                                     break
 
                         await asyncio.wait_for(_drain(), timeout=timeout)
-                        return True
+                        if not delta_text:
+                            delta_text = _assistant_msg_text(final_msg)
+                        if isinstance(final_msg, dict) and final_msg.get("stopReason") == "error":
+                            logger.info(
+                                "sessiz tur model hatası: %s",
+                                final_msg.get("errorMessage") or "(bilinmiyor)",
+                            )
+                            return False, delta_text.strip()
+                        return True, delta_text.strip()
                     except Exception as e:  # noqa: BLE001 — arka plan turu akışı bloklamaz
                         logger.info("sessiz tur atlandı/timeout: %r", e)
                         client._write({"type": "abort"})
-                        return False
+                        return False, ""
                     finally:
                         client._turn_q = None
             except Exception:  # noqa: BLE001
+                return False, ""
+
+        async def _silent_turn(self, prompt: str, timeout: float = 30.0) -> bool:
+            """Kimlik gerektiren eski sessiz tool turu; çıktı seslendirilmez."""
+            ok, _ = await self._capture_silent_turn(prompt, timeout)
+            return ok
+
+        def _active_session_dir(self) -> Path:
+            session_dir = PI_DEV_SESSION_DIR if self._mode == "dev" else Path(PI_SESSION_DIR)
+            return session_dir if session_dir.is_absolute() else REPO_ROOT / session_dir
+
+        async def daily_rollover_if_needed(
+            self,
+            *,
+            now: Optional[datetime] = None,
+            announce: bool = True,
+            allow_awake: bool = True,
+            emit: Optional[Callable[[str], None]] = None,
+        ) -> bool:
+            """Önceki güne ait session'ı özetle, DB'ye yaz, sonra kayıpsız döndür.
+
+            DB kaydı session header zamanından türetilen idempotency anahtarıyla ÖNCE
+            tamamlanır. Özet/DB başarısızsa session ASLA döndürülmez. Kaza DB yazımıyla
+            rotate arasında olursa sonraki deneme özeti yeniden üretmeden yalnız rotate eder.
+            """
+            if not DAILY_ROLLOVER_ENABLED or self._mode != "normal":
                 return False
+            if self._wake.busy():
+                return False
+            if not allow_awake and self._wake.enabled and self._wake.awake:
+                return False
+
+            async def tell(text: str) -> None:
+                if emit is not None:
+                    emit(text)
+                elif announce:
+                    await self._announce(text)
+
+            async with self._daily_lock:
+                session_file = await asyncio.to_thread(
+                    _find_session_file, self._session_id, self._active_session_dir()
+                )
+                if session_file is None:
+                    return False
+                window = await asyncio.to_thread(inspect_session, session_file)
+                if window is None:
+                    logger.warning("günlük rollover: session metadata okunamadı: %s", session_file)
+                    return False
+                if window.source_key == self._daily_checked_source:
+                    return False
+                if not rollover_due(window, now=now, timezone=CANDAN_TZ):
+                    self._daily_checked_source = window.source_key
+                    return False
+
+                already_recorded = await asyncio.to_thread(
+                    self._daily_store.contains, window.source_key
+                )
+                told = False
+                if not already_recorded:
+                    if announce or emit is not None:
+                        told = True
+                        await tell(DAILY_ROLLOVER_START_TEXT)
+                    try:
+                        await self._client.start()
+                        if self._client.compacting():
+                            await self._client.wait_compact_done(
+                                PI_COMPACTION_STALL_TIMEOUT
+                            )
+                        memory_dir = REPO_ROOT / MEMORY_DIR
+                        owners = await asyncio.to_thread(known_memory_owners, memory_dir)
+                        prompt = daily_summary_prompt(window, owners, CANDAN_TZ)
+                        ok, raw_summary = await self._capture_silent_turn(
+                            prompt,
+                            DAILY_ROLLOVER_SUMMARY_TIMEOUT,
+                            require_memory_user=False,
+                        )
+                        if not ok or not raw_summary:
+                            raise RuntimeError("model günlük özeti üretmedi")
+                        overview, items, _ = normalize_summary(raw_summary, owners)
+                        await asyncio.to_thread(
+                            self._daily_store.record,
+                            window,
+                            timezone=CANDAN_TZ,
+                            overview=overview,
+                            items=items,
+                            raw_summary=raw_summary,
+                        )
+                        logger.info(
+                            "günlük hafıza yazıldı: %s (%s→%s, %d kişi başlığı)",
+                            window.source_key,
+                            window.start_day(CANDAN_TZ),
+                            window.end_day(CANDAN_TZ),
+                            len(items),
+                        )
+                    except Exception:  # noqa: BLE001 — özet yoksa geçmişi ASLA döndürme
+                        logger.warning("günlük rollover özeti başarısız", exc_info=True)
+                        if told:
+                            await tell(DAILY_ROLLOVER_FAIL_TEXT)
+                        return False
+
+                rotated = await self.new_session()
+                if not rotated:
+                    logger.warning("günlük hafıza yazıldı ama session döndürülemedi")
+                    if told:
+                        await tell(DAILY_ROLLOVER_FAIL_TEXT)
+                    return False
+                self._daily_checked_source = window.source_key
+                logger.info(
+                    "günlük rollover tamamlandı: %s → taze %s",
+                    window.source_key,
+                    self._session_id,
+                )
+                if announce or emit is not None:
+                    await tell(DAILY_ROLLOVER_END_TEXT)
+                return True
 
         # ── PARÇA B: konsolidasyon (bağlam şişmesi) ───────────────────────────
         def _context_files(self, user: str) -> list[tuple[str, Path]]:
@@ -4044,7 +5360,7 @@ if _HAS_LIVEKIT:
                 if self._enroll_stage == "verify_existing":
                     match = self._enroll_match or ""
                     name = self._enroll_name or ""
-                    if is_affirmative_reply(text):
+                    if is_affirmative_reply(text) or _is_explicit_action_approval(text):
                         return await self._merge_into(match)
                     if _is_decline_enroll(text) or parse_spoken_name(text):
                         logger.info("enrollment: %r değilmiş → yeni kişi açılıyor", match)
@@ -4164,7 +5480,7 @@ if _HAS_LIVEKIT:
                 self._enroll_stage = "net_confirm"
                 return f"Adını {name} olarak anladım, doğru mu?"
             # net_confirm
-            if is_affirmative_reply(text):
+            if is_affirmative_reply(text) or _is_explicit_action_approval(text):
                 return await self._enroll_apply(self._enroll_name or "")
             # Düzeltme mi ("hayır, Havi") — reddin en olası biçimi; önce onu dene.
             corrected = _parse_correction_name(text)
@@ -4560,10 +5876,121 @@ if _HAS_LIVEKIT:
                     else "akşam" if 18 <= h < 22 else "gece")
             note = (
                 f"(Sistem notu: {name} az önce bağlandı (~{h:02d}:00, {part}); bu, bu "
-                f"oturumdaki ilk mesajı. Yanıtlamadan önce ona ismiyle KISA ve doğal bir "
-                f"selam ver, sonra mesajını yanıtla.)"
+                f"oturumdaki ilk mesajı. KISA ve doğal bir selam ver, sonra mesajını "
+                f"yanıtla. Konuşmacı adı cevaba sistem tarafından ayrıca eklenecek; "
+                f"ismi tekrar etme.)"
             )
             return note + "\n\n" + text
+
+        def _consume_speaker_response_prefix(self) -> str:
+            """Bu turun ilk çıktı parçası için hitabı bir kez tüket."""
+            if self._speaker_state is None:
+                return ""
+            name = getattr(self._speaker_state, "response_name", None)
+            prefix, key = _speaker_response_prefix(name, self._last_answer_speaker_key)
+            self._last_answer_speaker_key = key
+            return prefix
+
+        def contextualize_short_reply(self, text: str, decision: Any) -> Optional[str]:
+            """Önceki soru/sonuca kısa cevabı yalnız konuşma bağlamında devral.
+
+            Gerçek turn kararı her zaman üstün gelir. Kabul edilmiş ses penceresi
+            varsa (kimlik çıkmasa bile) başka bir ses olasılığını önceki kişiye
+            yapıştırmayız. Bağlam tek sonraki kullanıcı turunda tüketilir.
+            """
+            now = time.monotonic()
+            context = self._reply_context
+            if (
+                context and context.get("kind") == "action_confirmation"
+                and _is_short_action_approval(text)
+            ):
+                self._explicit_action_confirmation = {
+                    "speaker": context.get("speaker"),
+                    "expires": now + _SHORT_REPLY_CONTEXT_TTL_S,
+                }
+            decided = getattr(decision, "name", None)
+            if decided is not None:
+                self._reply_chain_speaker = str(decided)
+                self._reply_chain_expires = now + _REPLY_CHAIN_TTL_S
+                return None
+            if int(getattr(decision, "accepted", 0) or 0) > 0:
+                # Bir ses penceresi var ama güvenli karar yok: bağlamla üstünü örtme.
+                self._reply_chain_speaker = None
+                self._reply_chain_expires = 0.0
+                return None
+            chain = (self._reply_chain_speaker or "").strip()
+            if chain and now <= self._reply_chain_expires and _is_reply_chain_segment(text):
+                self._reply_chain_expires = now + _REPLY_CHAIN_TTL_S
+                return chain
+            if not context:
+                return None
+            age = now - float(context.get("at") or 0.0)
+            if age < 0.0 or age > _SHORT_REPLY_CONTEXT_TTL_S:
+                return None
+            kind = context.get("kind")
+            eligible = (
+                _is_short_context_reply(text)
+                if kind in {"question", "action_result", "action_confirmation"}
+                else _is_short_acknowledgement(text)
+            )
+            if not eligible:
+                return None
+            name = (context.get("speaker") or "").strip()
+            if name:
+                self._reply_chain_speaker = name
+                self._reply_chain_expires = now + _REPLY_CHAIN_TTL_S
+            return name or None
+
+        def _explicit_action_confirmation_line(self, text: str) -> Optional[str]:
+            """Kısa işlem onayını durdur; uzun cümlede gerçek sesi şart koş."""
+            pending = self._explicit_action_confirmation
+            if pending is None:
+                return None
+            if time.monotonic() > float(pending.get("expires") or 0.0):
+                self._explicit_action_confirmation = None
+                return None
+            # Ret/vazgeçme güvenli yöndür; işlemi başlatamaz, normal akış işlesin.
+            if _is_decline_enroll(text):
+                self._explicit_action_confirmation = None
+                return None
+            if _is_short_action_approval(text) or not _is_explicit_action_approval(text):
+                # Scripted kimlik onayının TTL'si de ikinci cümle için yeniden başlasın.
+                if self._confirm_pending is not None:
+                    self._confirm_pending["asked_at"] = time.time()
+                return (
+                    "Bu bir işlem onayı. Lütfen kısa cevap yerine "
+                    "‘Bu işlemi yapmanı açıkça onaylıyorum’ diye tekrar söyle."
+                )
+            state = self._speaker_state
+            verified = getattr(state, "current", None) if state else None
+            expected = (pending.get("speaker") or "").strip()
+            if not verified:
+                # Yeni kişi kayıt akışında zaten tanınan `current` olamaz; onun
+                # güvenliği ayrı çok-pencere/çekirdek kalite kapısındadır. Uzun
+                # cümle tam da o örneklerin oluşması için istenir.
+                if self._enroll_stage in {"net_confirm", "verify_existing"}:
+                    self._explicit_action_confirmation = None
+                    return None
+                return (
+                    "Sesini doğrulayamadım; işlemi yapmadım. Lütfen "
+                    "‘Bu işlemi yapmanı açıkça onaylıyorum’ diye tekrar söyle."
+                )
+            candidate = ""
+            if self._confirm_pending is not None:
+                candidate = (self._confirm_pending.get("name") or "").strip()
+            if candidate and _slug(verified) != _slug(candidate):
+                return "Sesin beklenen kimlikle eşleşmedi; işlemi yapmadım."
+            # Normal bir eylemde önceki isteğin sahibi bilinmiyorsa, sonradan
+            # odaya giren herhangi bir kayıtlı kişi onun adına onay veremez.
+            if not expected and not candidate and self._enroll_stage not in {
+                "net_confirm", "verify_existing"
+            }:
+                return "İşlemi isteyen kişinin sesini doğrulayamadım; işlemi yapmadım."
+            if expected and _slug(verified) != _slug(expected):
+                return "Bu onayı işlemi isteyen kişiden bekliyorum; işlemi yapmadım."
+            self._explicit_action_confirmation = None
+            logger.info("uzun işlem onayı doğrulandı: kişi=%s", verified)
+            return None
 
         def _identity_note(self, text: str) -> str:
             """Modele HER TURDA (selamdan bağımsız) o an kimle konuştuğunu söyleyen
@@ -4585,12 +6012,14 @@ if _HAS_LIVEKIT:
             if self._enroll_active and getattr(self._speaker_state, "current", None) is None:
                 return text
             name = getattr(self._speaker_state, "current", None)
+            contextual = getattr(self._speaker_state, "contextual_current", None)
             roster = self._speaker_id.names() if self._speaker_id else []
             if name:
                 note = (
                     f"(Sistem — ses tanıma: YALNIZCA bu konuşma dönüşünün güncel ses "
-                    f"pencereleri {name} kimliğiyle eşleşti. Ona {name} diye hitap "
-                    f"et. Hafızanda/aile notlarında (family.md) geçen BAŞKA isimler (ör. "
+                    f"pencereleri {name} kimliğiyle eşleşti. Konuşmacı değiştiğinde adı "
+                    f"cevaba sistem tarafından eklenir; sen cevabın başında adı tekrar "
+                    f"etme. Hafızanda/aile notlarında (family.md) geçen BAŞKA isimler (ör. "
                     f"diğer aile üyeleri, 'annenin adı ...' gibi satırlar) bu kişi DEĞİLDİR "
                     f"— konuşmacıyı onlarla KARIŞTIRMA. 'Beni tanıyor musun / ben kimim / "
                     f"adım ne' sorulursa cevap {name}."
@@ -4601,10 +6030,20 @@ if _HAS_LIVEKIT:
                     # duruyordu → model çelişkiyi sürdürüyordu. Tek cümleyle iptal.
                     note += (" Geçmişteki <enrollment> notu ('bu sesi TANIMIYORSUN')"
                              " ARTIK GEÇERSİZ.")
+            elif contextual:
+                note = (
+                    f"(Sistem — konuşma bağlamı: bu çok kısa cevap, hemen önceki "
+                    f"Candan sorusu/eylem sonucunun devamı olduğu için konuşma akışında "
+                    f"{contextual} kişisine bağlandı. Bu BİYOMETRİK doğrulama değildir; "
+                    f"kimlik doğruladığını söyleme, kişisel hafıza/yetki kullanma. "
+                    f"Hitap adı cevaba sistem tarafından eklenir; ismi tekrar etme."
+                )
             else:
                 note = (
-                    "(Sistem — ses tanıma: şu an konuşanın sesi tanınmıyor/kayıtlı değil. "
-                    "'Beni tanıyor musun' derse dürüstçe tanımadığını söyle, uydurma."
+                    "(Sistem — ses tanıma: bu dönüşte konuşanın sesi yeterli güvenle "
+                    "eşleştirilemedi; bu, kişinin kayıtlı olmadığı anlamına gelmez. "
+                    "Cevabın başına sistem zaten 'Sesini tanıyamadım.' ekler; bunu "
+                    "tekrar etme. Kullanıcının mesajını yanıtla ve isim uydurma."
                 )
             if roster:
                 note += f" Kayıtlı tanıdığın kişiler: {', '.join(roster)}."
@@ -4638,7 +6077,7 @@ if _HAS_LIVEKIT:
             # hiç çağırmıyordu. Kimlik burada BİLDİRİLİR, tool tarafında ayrıca
             # doğrulanır (MEM_TURN_FILE) — model bu satırı değiştirerek kimlik uyduramaz.
             head = (
-                f"(Sistem — bu turda hafıza kimliği: {user}. memory_add / memory_search / "
+                f"(Sistem — bu turda hafıza kimliği: {user}. memory_add / memory_topics / memory_search / "
                 f"soul_add / reminder_* yalnız {user} adına çalışır; kalıcı bir şey "
                 f"istenirse GERÇEKTEN memory_add'i çağır. Aşağısı {name} için yalnız bu "
                 "turda geçerli hafıza bağlamıdır. Başka konuşmacılara ifşa etme; belirsiz "
@@ -4699,7 +6138,9 @@ if _HAS_LIVEKIT:
             name = pending.get("name") or ""
             negated = _is_decline_enroll(text) or bool(
                 _ENROLL_NEG_PREFIX_RE.match(text or ""))
-            if not negated and _is_confirm_yes(text):
+            if not negated and (
+                _is_confirm_yes(text) or _is_explicit_action_approval(text)
+            ):
                 # KİMLİK BAĞLAMA ile PROFİLE YAZMA ayrı kararlardır: ilki oturumluk
                 # ve geri alınabilir, ikincisi kalıcı. Onay ikisini de hak eder ama
                 # yazma ayrıca KANIT ister (bkz. _confirm_learn).
@@ -4910,7 +6351,7 @@ if _HAS_LIVEKIT:
             """Soru/cevap/skor satırını JSONL'e yaz — ETİKETLİ VERİ.
 
             Kullanıcının "hayır"ı, o turun skorlarının yabancıya ait olduğunu
-            söyler. Birkaç gün sonra asnorm eşiği bu dosya + gölge ölçüm log'uyla
+            söyler. Birkaç gün sonra ReDimNet2 eşiği bu dosya + pencere log'uyla
             TAHMİNLE değil VERİYLE seçilecek. Best-effort: yazamazsak tur sürer."""
             row = {
                 "ts": time.time(),
@@ -5000,6 +6441,105 @@ if _HAS_LIVEKIT:
                     elif name == "exit_dev_mode":
                         self.request_mode("normal")
 
+        def _detect_dev_model_signal(self, message: Any) -> None:
+            """Tamamlanan dev model/düşünme tool sinyallerini yakala."""
+            if not DEV_MODE_ENABLED or not isinstance(message, dict):
+                return
+            for event in _tool_events(message):
+                if event["type"] != "tool_call" or event["name"] != "set_dev_model":
+                    continue
+                args = event.get("args")
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except ValueError:
+                        args = {}
+                if isinstance(args, dict):
+                    self.request_dev_model(str(args.get("model") or ""))
+            if (
+                message.get("role") == "toolResult"
+                and message.get("toolName") == "set_dev_reasoning"
+                and not message.get("isError")
+            ):
+                details = message.get("details")
+                if (
+                    isinstance(details, dict)
+                    and details.get("signal") == "set_dev_reasoning"
+                ):
+                    self.request_dev_reasoning(str(details.get("level") or ""))
+
+        def request_dev_model(self, model: str) -> None:
+            """Dev modunda Terra/Sol seçimini kalıcılaştır; swap'ı sonraki tura bırak."""
+            selected = _dev_model_name(model)
+            if self._mode != "dev":
+                logger.warning("dev model isteği reddedildi: aktif mod=%s", self._mode)
+                return
+            if selected is None:
+                logger.warning("desteklenmeyen dev model isteği: %r", model)
+                return
+            target = DEV_MODELS[selected]
+            self._dev_model_name = selected
+            self._dev_model = target
+            _save_dev_model_name(selected)
+            if target == getattr(self._client, "_model", None):
+                self._pending_dev_model = None
+                logger.info("dev model isteği yok sayıldı: zaten %s", selected)
+                return
+            self._pending_dev_model = target
+            logger.info("dev model isteği alındı: %s → %s", selected, target)
+
+        def request_dev_reasoning(self, level: str) -> None:
+            """Aktif modelin tool içinde doğruladığı düşünme seviyesini kalıcılaştır."""
+            selected = _dev_reasoning_name(level)
+            if self._mode != "dev":
+                logger.warning(
+                    "dev düşünme isteği reddedildi: aktif mod=%s", self._mode
+                )
+                return
+            if selected is None:
+                logger.warning("geçersiz dev düşünme seviyesi sinyali: %r", level)
+                return
+            self._dev_thinking = selected
+            _save_dev_reasoning_name(selected)
+            if selected == getattr(self._client, "_thinking", None):
+                self._pending_dev_reasoning = None
+                logger.info(
+                    "dev düşünme isteği yok sayıldı: zaten %s", selected
+                )
+                return
+            self._pending_dev_reasoning = selected
+            logger.info("dev düşünme seviyesi isteği alındı: %s", selected)
+
+        async def _sync_dev_reasoning_from_runtime(self, client: Any) -> None:
+            """Pi'nin model için uyguladığı gerçek (gerekirse clamp edilmiş) seviyeyi al."""
+            request = getattr(client, "request", None)
+            if not callable(request):
+                return  # küçük test doubles / broker dışı özel istemciler
+            try:
+                reply = await request({"type": "get_state"}, timeout=8.0)
+                data = reply.get("data") if isinstance(reply, dict) else None
+                selected = _dev_reasoning_name(
+                    str(data.get("thinkingLevel") or "")
+                    if isinstance(data, dict)
+                    else ""
+                )
+                if selected is None:
+                    return
+                client._thinking = selected
+                if selected != self._dev_thinking:
+                    logger.info(
+                        "dev düşünme seviyesi model tarafından ayarlandı: %s → %s",
+                        self._dev_thinking,
+                        selected,
+                    )
+                self._dev_thinking = selected
+                _save_dev_reasoning_name(selected)
+            except Exception:  # noqa: BLE001 — durum sorgusu swap'ı bozmamalı
+                logger.warning(
+                    "dev düşünme seviyesi çalışma anından doğrulanamadı",
+                    exc_info=True,
+                )
+
         def request_mode(self, mode: str) -> None:
             """Dev tool sinyalini kaydet ("dev" | "normal"). Event akışından (PiStream)
             çağrılır; swap BİR SONRAKİ tur başında _current_client'ta uygulanır. Idempotent.
@@ -5027,12 +6567,51 @@ if _HAS_LIVEKIT:
                 self._pending_mode = mode
                 logger.info("mod isteği alındı: %s (aktif=%s)", mode, self._mode)
 
+        async def _mode_command_line(self, text: str) -> Optional[str]:
+            """Açık sesli mod komutunu modelsiz uygula ve gerçek sonucu söyle."""
+            target = mode_command(text)
+            if target is None:
+                return None
+            if not DEV_MODE_ENABLED:
+                return "Geliştirme modu şu anda kapalı."
+            if target == self._mode:
+                return (
+                    "Zaten geliştirme modundayım."
+                    if target == "dev"
+                    else "Zaten normal moddayım."
+                )
+
+            self.request_mode(target)
+            try:
+                # Komutun onayını gerçek swap tamamlandıktan sonra söyle. Böylece
+                # "geçtim" cümlesi hiçbir zaman yalnızca bir niyet beyanı olmaz.
+                await self._current_client()
+            except Exception:  # noqa: BLE001 — kullanıcı turunu sessiz bırakma
+                self._pending_mode = None
+                logger.warning(
+                    "deterministik mod geçişi başarısız: %s → %s",
+                    self._mode,
+                    target,
+                    exc_info=True,
+                )
+                return (
+                    "Geliştirme moduna geçemedim."
+                    if target == "dev"
+                    else "Normal moda dönemedim."
+                )
+            return (
+                "Geliştirme moduna geçtim."
+                if target == "dev"
+                else "Normal moda döndüm."
+            )
+
         async def _switch_mode(self, target: str) -> None:
             """Warm pi sürecini mod'lar arasında swap et. _swap_lock TUTULUYORKEN çağrılır."""
             old = self._client
+            saved_normal = self._saved_normal
             if target == "dev":
                 await asyncio.to_thread(_ensure_dev_worktree)
-                self._saved_normal = (self._persona, self._session_id)
+                saved_normal = (self._persona, self._session_id)
                 persona, session_id = DEV_PERSONA, DEV_SESSION_ID
                 # Dev personasının hafıza kimliği KONUŞMACIYA bağlıdır: doğrulanmış
                 # ev sahibi (bkz. _dev_mem_user) → 'dev' kimliği + AYRI dev kökü;
@@ -5044,7 +6623,7 @@ if _HAS_LIVEKIT:
                 ) or self._session_id
                 dev_user = _dev_mem_user(speaker)
                 new = PiRpcClient(
-                    persona, session_id, DEV_MODEL, DEV_THINKING,
+                    persona, session_id, self._dev_model, self._dev_thinking,
                     cwd=DEV_WORKTREE, dev=True, mem_user=dev_user,
                 )
                 logger.info(
@@ -5062,12 +6641,75 @@ if _HAS_LIVEKIT:
                 "mod swap: %s → %s (persona=%s session=%s)",
                 self._mode, target, persona, session_id,
             )
+            # Transactional: yeni süreç gerçekten açılmadan aktif mod/client
+            # alanlarını değiştirme. Başlatma hatasında çalışan eski mod kalır.
+            await new.start()
+            if target == "dev":
+                await self._sync_dev_reasoning_from_runtime(new)
             self._client = new
             self._persona, self._session_id = persona, session_id
             self._mode = target
+            self._saved_normal = saved_normal
             self._pending_mode = None
-            await new.start()
+            self._pending_dev_model = None
+            self._pending_dev_reasoning = None
             await old.stop()
+
+        async def _switch_dev_model(self, target: str) -> None:
+            """Aynı dev persona/session/hafıza ile yalnız modeli güvenli biçimde değiştir."""
+            old = self._client
+            new = PiRpcClient(
+                self._persona,
+                self._session_id,
+                target,
+                self._dev_thinking,
+                cwd=DEV_WORKTREE,
+                dev=True,
+                mem_user=getattr(old, "_mem_user", "") or "",
+            )
+            logger.info(
+                "dev model swap: %s → %s (session=%s)",
+                getattr(old, "_model", "-"),
+                target,
+                self._session_id,
+            )
+            # Önce yeni modeli doğrula; açılamazsa mevcut çalışan dev client yerinde
+            # kalsın. Başarılı olduktan sonra eski broker sürecini TAM öldür: farklı
+            # model key'inde sıcak bırakmak aynı session dosyasını bayat RAM ağacıyla
+            # yeniden açıp Sol/Terra geçmişini iki dala bölebilirdi.
+            await new.start()
+            await self._sync_dev_reasoning_from_runtime(new)
+            self._client = new
+            self._pending_dev_model = None
+            # Aynı tur model + seviye istendiyse yeni süreç güncel seviyeyi zaten
+            # aldı; ikinci bir gereksiz süreç değişimi yapma.
+            self._pending_dev_reasoning = None
+            await old.stop(persist=False)
+
+        async def _switch_dev_reasoning(self, target: str) -> None:
+            """Dev oturumunu aynı modelle, dinamik doğrulanmış seviyede yeniden aç."""
+            old = self._client
+            new = PiRpcClient(
+                self._persona,
+                self._session_id,
+                self._dev_model,
+                target,
+                cwd=DEV_WORKTREE,
+                dev=True,
+                mem_user=getattr(old, "_mem_user", "") or "",
+            )
+            logger.info(
+                "dev düşünme seviyesi swap: %s → %s (model=%s session=%s)",
+                getattr(old, "_thinking", "-"),
+                target,
+                self._dev_model,
+                self._session_id,
+            )
+            await new.start()
+            await self._sync_dev_reasoning_from_runtime(new)
+            self._client = new
+            self._pending_dev_reasoning = None
+            await old.stop(persist=False)
 
         async def _current_client(self) -> "PiRpcClient":
             """Turluk çözüm: (1) bekleyen mod geçişi varsa uygula (dev↔normal); (2) dev
@@ -5078,6 +6720,20 @@ if _HAS_LIVEKIT:
                 async with self._swap_lock:
                     if self._pending_mode is not None and self._pending_mode != self._mode:
                         await self._switch_mode(self._pending_mode)
+            # (1b) Dev içinde sesle model değişimi. Tool'u çağıran eski model mevcut
+            # cevabını bitirdi; yeni model bir sonraki kullanıcı turunu alır.
+            if self._mode == "dev" and self._pending_dev_model is not None:
+                async with self._swap_lock:
+                    if self._pending_dev_model is not None:
+                        await self._switch_dev_model(self._pending_dev_model)
+            # (1c) Dev içinde modelin kendi metadata'sından doğrulanan düşünme
+            # seviyesi. Model swap'ı aynı seviyeyi aldıysa pending yukarıda temizlenir.
+            if self._mode == "dev" and self._pending_dev_reasoning is not None:
+                async with self._swap_lock:
+                    if self._pending_dev_reasoning is not None:
+                        await self._switch_dev_reasoning(
+                            self._pending_dev_reasoning
+                        )
             # (2) Dev modunda konuşmacıya göre swap ETME → dev oturumu tek ve izole.
             if self._mode == "dev":
                 return self._client
@@ -5129,11 +6785,8 @@ if _HAS_LIVEKIT:
                 old = self._client
                 persona, session_id = self._persona, self._session_id
                 dev = self._mode == "dev"
-                # Dev modunda session dizini ana repo'ya sabitlenir (_build_pi_args ile
-                # AYNI kural) → dev oturumu da doğru dosyada sıfırlanır.
-                session_dir = REPO_ROOT / PI_SESSION_DIR if dev else Path(PI_SESSION_DIR)
-                if not session_dir.is_absolute():
-                    session_dir = REPO_ROOT / session_dir
+                # `_build_pi_args` ile aynı ayrık session kökü.
+                session_dir = self._active_session_dir()
                 logger.info(
                     "sohbet sıfırlama: persona=%s session=%s mod=%s", persona, session_id, self._mode
                 )
@@ -5157,7 +6810,7 @@ if _HAS_LIVEKIT:
                 if dev:
                     # Dev hafıza kimliği KORUNUR: sıfırlanan yalnız sohbet geçmişi.
                     new = PiRpcClient(
-                        persona, session_id, DEV_MODEL, DEV_THINKING,
+                        persona, session_id, self._dev_model, self._dev_thinking,
                         cwd=DEV_WORKTREE, dev=True,
                         mem_user=getattr(old, "_mem_user", "") or "",
                     )
@@ -5165,6 +6818,8 @@ if _HAS_LIVEKIT:
                     new = PiRpcClient(persona, session_id, self._model, self._thinking)
                 self._client = new
                 await new.start()
+                if dev:
+                    await self._sync_dev_reasoning_from_runtime(new)
                 # Taze oturum = pi bu bağlantıda kimseyi selamlamadı → ismiyle-selam
                 # direktifi tekrar verilebilsin (yoksa yeni sohbet selamsız başlar).
                 self._greeted.discard(
@@ -5190,7 +6845,7 @@ if _HAS_LIVEKIT:
                 return None
             if self._reset_pending:
                 self._reset_pending = False  # her koşulda düşür (tek tur yaşar)
-                if is_affirmative_reply(text):
+                if is_affirmative_reply(text) or _is_explicit_action_approval(text):
                     logger.info("sıfırlama onaylandı (%r) → yürütülüyor", text[:40])
                     return await self.new_session_spoken()
                 if _is_decline_enroll(text):
@@ -5444,6 +7099,8 @@ def _compaction_test() -> int:
             self.warmed_up = True   # sıcak → soğuk-yükleme ara sözü karışmasın
             self._script = script
             self.writes: list[dict] = []
+            self.requests: list[dict] = []
+            self._prompt_message = ""
 
         async def start(self) -> None:
             pass
@@ -5453,8 +7110,28 @@ def _compaction_test() -> int:
                 for delay, ev in self._script:
                     await asyncio.sleep(delay)
                     if self._turn_q is not None:
+                        if ev.get("type") == "test_own_user":
+                            ev = {
+                                "type": "message_start",
+                                "message": {
+                                    "role": "user",
+                                    "content": [{
+                                        "type": "text",
+                                        "text": self._prompt_message,
+                                    }],
+                                },
+                            }
                         self._turn_q.put_nowait(ev)
             asyncio.create_task(feed())
+
+        async def request(self, obj, timeout=10.0):
+            self.requests.append(obj)
+            self._prompt_message = str(obj.get("message") or "")
+            await self.send(obj)
+            return {"success": True}
+
+        async def get_entries(self, *, since=None):
+            return [], "test-leaf"
 
         def _write(self, obj) -> None:
             self.writes.append(obj)
@@ -5468,8 +7145,18 @@ def _compaction_test() -> int:
 
     _CEND = {"type": "compaction_end", "aborted": False, "willRetry": True}
     _SETTLED = {"type": "agent_settled"}
+    _OWN_USER = {"type": "test_own_user"}
+    _ABORTED = {
+        "type": "turn_end",
+        "message": {
+            "role": "assistant",
+            "content": [],
+            "stopReason": "aborted",
+            "errorMessage": "Request was aborted",
+        },
+    }
 
-    async def drive(script) -> tuple[str, list[dict]]:
+    async def drive(script) -> tuple[str, list[dict], list[dict]]:
         brain = PiBrain(persona=PI_DEFAULT_PERSONA)
         fc = FakeClient(script)
         brain._client = fc
@@ -5485,23 +7172,60 @@ def _compaction_test() -> int:
             d = ch.delta
             if d and d.content:
                 out.append(d.content)
-        return "".join(out), fc.writes
+        return "".join(out), fc.writes, fc.requests
+
+    async def drive_cancel() -> tuple[list[dict], list[dict]]:
+        """LiveKit stream iptalini taklit et; Pi'ya abort yazılmamalı."""
+        brain = PiBrain(persona=PI_DEFAULT_PERSONA)
+        fc = FakeClient([(0.01, _OWN_USER), (60.0, _SETTLED)])
+        brain._client = fc
+
+        async def _cc():
+            return fc
+
+        brain._current_client = _cc
+        ctx = llm.ChatContext.empty()
+        ctx.add_message(role="user", content=f"{WAKE_WORD} sözüm devam ediyor")
+        st = PiStream(
+            brain,
+            chat_ctx=ctx,
+            tools=[],
+            conn_options=DEFAULT_API_CONNECT_OPTIONS,
+        )
+
+        async def consume() -> None:
+            async for _chunk in st:
+                pass
+
+        task = asyncio.create_task(consume())
+        await asyncio.sleep(0.05)
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        return fc.writes, fc.requests
 
     async def run() -> bool:
         ok = True
         notice = PI_COMPACTION_NOTICE_TEXT
 
         # (a) overflow: cevap YOK → ara söz söylensin, sonra cevap gelsin
-        txt, _ = await drive([
+        txt, _, requests = await drive([
+            (0.01, _OWN_USER),
             (0.02, _cstart("overflow")), (0.05, _CEND),
             (0.02, _delta("Merhaba!")), (0.02, _SETTLED),
         ])
-        good = txt == notice + "Merhaba!"
+        good = (
+            txt == notice + "Merhaba!"
+            and all(r.get("streamingBehavior") == "steer" for r in requests)
+        )
         ok = ok and good
         print(f"(a) overflow, cevap YOK  → ara söz   {txt!r:<46} {'PASS' if good else 'FAIL'}")
 
         # (b) threshold: cevap AKMIŞ → sus (pi zaten tur sonuna saklamış)
-        txt, _ = await drive([
+        txt, _, _ = await drive([
+            (0.01, _OWN_USER),
             (0.02, _delta("Merhaba!")), (0.02, _cstart("threshold")),
             (0.05, _CEND), (0.02, _SETTLED),
         ])
@@ -5515,7 +7239,8 @@ def _compaction_test() -> int:
         old = (PI_TURN_STALL_TIMEOUT, PI_FIRST_TURN_STALL_TIMEOUT)
         PI_TURN_STALL_TIMEOUT = PI_FIRST_TURN_STALL_TIMEOUT = 0.3
         try:
-            txt, writes = await drive([
+            txt, writes, _ = await drive([
+                (0.01, _OWN_USER),
                 (0.02, _delta("Merhaba!")), (0.02, _cstart("threshold")),
                 (1.0, _CEND), (0.02, _delta(" Devam.")), (0.02, _SETTLED),
             ])
@@ -5524,6 +7249,83 @@ def _compaction_test() -> int:
         good = txt == "Merhaba! Devam." and not writes  # writes boş = abort YOK
         ok = ok and good
         print(f"(c) uzun compaction      → kesilmez  {txt!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (d) Sağlayıcıdan açık bir aborted sonucu gelirse "aklım dağıldı" yedeği
+        # söylenmez ve zaten bitmiş koşuya ikinci kez abort yollanmaz.
+        txt, writes, _ = await drive([
+            (0.01, _OWN_USER), (0.02, _ABORTED),
+        ])
+        good = txt == "" and not writes
+        ok = ok and good
+        print(f"(d) uzak abort           → sessiz     {txt!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (e) LiveKit eski Python stream'ini bırakıp yenisini kurduğunda Pi'nin
+        # önceki cevabı hâlâ akıyor olabilir. Yeni stream kendi user mesajı session'a
+        # girene kadar eski delta/turn_end'i yutar; yalnız steer sonrası cevabı söyler.
+        txt, writes, requests = await drive([
+            (0.01, _delta("ESKİ CEVAP")),
+            (0.01, {
+                "type": "turn_end",
+                "message": {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": "ESKİ CEVAP"}],
+                    "stopReason": "stop",
+                },
+            }),
+            (0.01, _OWN_USER),
+            (0.01, _delta("Yeni cevap")),
+            (0.01, _SETTLED),
+        ])
+        good = (
+            txt == "Yeni cevap"
+            and not writes
+            and requests[0].get("streamingBehavior") == "steer"
+        )
+        ok = ok and good
+        print(f"(e) steer devir kapısı   → yeni cevap {txt!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (f) LiveKit yeni kullanıcı sözü nedeniyle eski LLMStream'i iptal eder.
+        # Adapter yalnız kuyruktan ayrılır; Pi koşusunu abort etmez.
+        writes, requests = await drive_cancel()
+        good = (
+            not writes
+            and requests
+            and requests[0].get("streamingBehavior") == "steer"
+        )
+        ok = ok and good
+        print(f"(f) LiveKit stream iptali→ Pi açık     {str(writes)!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (g) Tur sonu compaction arka plandayken yeni kullanıcı sözü gelirse
+        # pencere kapanmış gibi yapılmaz; sahiplik aktif stream'e geçirilir.
+        takeover_client = PiRpcClient("candan", "compaction-takeover-test")
+        takeover_client.compact_begin()
+        takeover_client.defer_settle()
+        took_over = takeover_client.takeover_deferred()
+        good = (
+            took_over
+            and takeover_client._deferred == 0
+            and takeover_client._deferred_handoff
+            and takeover_client.compacting()
+            and takeover_client._settled_ev.is_set()
+        )
+        ok = ok and good
+        print(f"(g) compaction devri     → tur alınır  {str(took_over)!r:<46} {'PASS' if good else 'FAIL'}")
+
+        # (h) Biriken kısa ses parçaları tek tek ara cevap üretmesin; Pi steering
+        # modu `all` yalnız bir kez ayarlanır.
+        mode_client = PiRpcClient("candan", "steering-mode-test")
+        mode_requests: list[dict] = []
+
+        async def fake_mode_request(cmd, timeout=60.0):
+            mode_requests.append(cmd)
+            return {"success": True}
+
+        mode_client.request = fake_mode_request
+        await mode_client.ensure_steering_all()
+        await mode_client.ensure_steering_all()
+        good = mode_requests == [{"type": "set_steering_mode", "mode": "all"}]
+        ok = ok and good
+        print(f"(h) steering mode        → all/tek RPC {str(mode_requests)!r:<46} {'PASS' if good else 'FAIL'}")
         return ok
 
     ok = asyncio.run(run())
@@ -5535,24 +7337,36 @@ def _rotate_test() -> int:
     """_rotate_session_id birim testi — GEÇİCİ dizinde, gerçek sessions/'a DOKUNMAZ.
 
     Doğrular: (1) eski dosya SİLİNMEZ, yerinde kalır; (2) mesaj satırları AYNEN durur
-    (geçmiş kaybolmaz); (3) header id döner → pi artık o slug'ı bulamaz (taze oturum);
-    (4) slug'a ait dosya yoksa None (çökme yok)."""
+    (geçmiş kaybolmaz); (3) aynı slug'lı TÜM kalıntıların header id'si döner → pi
+    eski bir kopyayı diriltemez; (4) etkin/en yeni dosya seçilir; (5) slug'a ait
+    dosya yoksa None (çökme yok)."""
     import tempfile
     ok = True
     with tempfile.TemporaryDirectory() as d:
         sd = Path(d)
         p = sd / "2026-07-16T11-11-30-090Z_ayhan.jsonl"
-        hdr = {"type": "session", "version": 1, "id": "ayhan", "cwd": "/x"}
+        hdr = {
+            "type": "session", "version": 1, "id": "ayhan", "cwd": "/x",
+            "timestamp": "2026-07-16T11:11:30.090Z",
+        }
         msg = {"type": "message", "id": "m1", "role": "user", "content": "merhaba"}
         p.write_text(json.dumps(hdr) + "\n" + json.dumps(msg) + "\n", encoding="utf-8")
+        newest = sd / "2026-07-17T11-11-30-090Z_ayhan.jsonl"
+        newest_hdr = {**hdr, "timestamp": "2026-07-17T11:11:30.090Z"}
+        newest.write_text(
+            json.dumps(newest_hdr) + "\n" + json.dumps(msg) + "\n", encoding="utf-8"
+        )
 
         got = _rotate_session_id("ayhan", sd)
         lines = p.read_text(encoding="utf-8").splitlines()
         new_hdr = json.loads(lines[0])
+        newest_new_hdr = json.loads(newest.read_text(encoding="utf-8").splitlines()[0])
         checks = [
             ("dosya yerinde kalır", p.is_file()),
-            ("döndürülen dosya doğru", got == p),
+            ("döndürülen dosya en yeni", got == newest),
             ("header id değişti", new_hdr["id"] != "ayhan"),
+            ("en yeni header da değişti", newest_new_hdr["id"] != "ayhan"),
+            ("arşiv id'leri benzersiz", newest_new_hdr["id"] != new_hdr["id"]),
             ("id slug ile başlar", new_hdr["id"].startswith("ayhan-eski-")),
             ("id pi kuralına uyar", bool(re.fullmatch(
                 r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?", new_hdr["id"]))),
@@ -5656,9 +7470,9 @@ def _wake_timer_test() -> int:
 def _enroll_order_test() -> int:
     """KAYIT SIRASI: `enroll_speaker` "karar ver" değil "toplamayı başlat" demek.
 
-    GEÇİCİ speakers.db + GEÇİCİ memory kökü kullanır (kullanıcının gerçek
-    `worker/data/speakers.db`'sine ve `memory/policy.json`'a DOKUNMAZ).
-    Sherpa/onnx/model/GPU GEREKMEZ (sahte SpeakerID).
+    GEÇİCİ speaker DB + GEÇİCİ memory kökü kullanır (kullanıcının gerçek
+    `worker/data/speakers-redimnet2.db` dosyasına ve `memory/policy.json`'a DOKUNMAZ).
+    ReDimNet2/model/GPU GEREKMEZ (sahte SpeakerID).
 
     Senaryolar:
       (a) havuz BOŞken tool çağrılır → RET YOK, karar ERTELENİR, DB'ye yazılmaz
@@ -5829,8 +7643,8 @@ def _enroll_order_test() -> int:
 def _policy_test() -> int:
     """Enroll → policy.json rol yazımı + rol yükseltme birim testi.
 
-    GEÇİCİ policy dosyası + GEÇİCİ speakers.db kullanır (gerçek memory/policy.json ve
-    worker/data/speakers.db'ye DOKUNMAZ). Sherpa/onnx/model/token GEREKMEZ (sahte
+    GEÇİCİ policy dosyası + GEÇİCİ speaker DB kullanır (gerçek memory/policy.json ve
+    worker/data/speakers-redimnet2.db'ye DOKUNMAZ). ReDimNet2/model/token GEREKMEZ (sahte
     SpeakerID). Senaryolar: (a) ilk enroll=adult (b) ikinci enroll=guest
     (c) ses-benzerlik merge → yeni policy girdisi YOK (d) adult yükseltir
     (e) guest kendini yükseltemez."""
@@ -6655,7 +8469,7 @@ def _name_test() -> int:
     Canlı hata (16:53): evin annesi "Havi adım. Az önce kocam sana söyledi..."
     dedi, parser None döndü → guest → aile hafızası açılmadı. Aynı parser
     "Efendim"/"Anlamadım" gibi cevapları İSİM sanıyordu. Hem katı hem geçirgendi.
-    Sherpa/model/token GEREKMEZ — saf fonksiyon testi."""
+    ReDimNet2/model/token GEREKMEZ — saf fonksiyon testi."""
     cases: list[tuple[str, Optional[str]]] = [
         # ── isim ÇIKARILMALI (doğal konuşma) ──
         ("Havi adım", "Havi"),                       # canlı hata: "X adım" biçimi

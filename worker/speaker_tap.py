@@ -1,11 +1,11 @@
 """speaker_tap — AgentSession'dan BAĞIMSIZ paralel "speaker tap".
 
 Uzak participant'ın mikrofon track'ine ayrı bir `rtc.AudioStream` bağlar,
-~SPEAKER_MIN_SECONDS ses biriktirir, `SpeakerID.embed` + `identify` ile kişiyi
+~SPEAKER_MIN_SECONDS ses biriktirir, `SpeakerID.embed_samples` + `identify` ile kişiyi
 çözer ve paylaşılan `SpeakerState.current`'i (isim veya None) günceller. STT'ye
-DOKUNMAZ — Faz 2 pipeline'ı aynen çalışır; bu additive bir dinleyicidir.
+DOKUNMAZ; bu, LiveKit Agent'ın paralel kimlik dinleyicisidir.
 
-SPEAKER_ID_ENABLED kapalı / model yok ise agent.py bu modülü hiç kurmaz.
+SPEAKER_ID_ENABLED kapalı / ReDimNet2 yüklenemezse agent.py bu modülü kurmaz.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from log_utils import DedupeFilter
 log = logging.getLogger("worker.speaker_tap")
 log.addFilter(DedupeFilter())  # "sessiz pencere atlandı" vb. tekrarları seyreltir
 
-TAP_RATE = 16000  # sherpa 16k dışını içeride resample eder; 16k besliyoruz
+TAP_RATE = 16000  # ReDimNet2 üretim ve deney ön işlemesiyle aynı örnekleme hızı
 TAP_CHANNELS = 1
 
 
@@ -94,16 +94,16 @@ class SessionEmbLog:
     `worker/data/` altına yazılır (`.gitignore`'da), log'a/transkripte ASLA
     embedding basılmaz ve TTL süresi dolan dosyalar açılışta silinir.
 
-    ŞEMA 2 (28 Tem): akış alanları eklendi. `t_rel` (pencerenin tur başına ofseti),
+    ŞEMA 3: akış alanlarına model kimliği eklendi. `t_rel` (pencerenin tur başına ofseti),
     `track_id`, `capture_ok`, tur kararı (`turn_final_name/reason`) ve `prosody.py`
     öznitelikleri. Bunların hiçbiri ham ses SAKLANMADAN sonradan üretilemez;
     eklenmezse bugüne kadar toplanan veri akış analizi için ölüdür. Eski dosyalar
     bu alanları içermez → okuma tarafı `schema_version`'a bakmalıdır.
     """
 
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
-    def __init__(self) -> None:
+    def __init__(self, model_id: str) -> None:
         # DİKKAT (DEVIR §7, `c9d0d27`): env modül seviyesinde okunursa `.env`
         # ETKİSİZ kalır. Burası çağrı anında (SpeakerTap kurulurken, load_dotenv
         # SONRASI) okunur; hiçbiri varsayılan argümana bağlı değildir.
@@ -116,6 +116,7 @@ class SessionEmbLog:
         self.dir = base if base.is_absolute() else here / base
         self.session_id = f"{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}"
         self.path = self.dir / f"{self.session_id}.npz"
+        self.model_id = str(model_id)
         self._rows: list[tuple] = []
         # tur numarası → (karar adı, gerekçe). Pencereler tur BİTMEDEN yazıldığı
         # için karar sonradan eşlenir (bkz. `_write`). Sözlük tur başına tek satır.
@@ -215,6 +216,7 @@ class SessionEmbLog:
         empty: dict = {}
         cols = {
             "schema_version": np.array(self.SCHEMA_VERSION, dtype=np.int16),
+            "model_id": np.array(self.model_id),
             "ts": np.array([r[0] for r in rows], dtype=np.float64),
             "turn": np.array([r[1] for r in rows], dtype=np.int32),
             "emb": np.stack([r[2] for r in rows]),
@@ -280,8 +282,17 @@ class SpeakerState:
         turn_confirm_hits: int | None = None,
         turn_max_seconds: float = 8.0,
         continuity_seconds: float | None = None,
+        fast_single_enabled: bool | None = None,
+        fast_single_score: float | None = None,
+        fast_single_margin: float | None = None,
     ) -> None:
         self.current: str | None = None
+        # Konuşma bağlamı, biyometrik karar değildir. Önceki Candan cevabı bir
+        # soru/eylem sonucuysa ve hemen arkasından ses penceresi üretmeyecek kadar
+        # kısa bir yanıt gelirse UI/hitap akışı için önceki ad burada taşınabilir.
+        # Persona, hafıza, yetki ve kalıcı yazma yolları YALNIZ `current`i okur.
+        self.contextual_current: str | None = None
+        self.contextual_reason: str | None = None
         self.score: float = 0.0
         # Faz 3.1: son hesaplanan HAM embedding (normalize edilmemiş). Sesli
         # oto-enrollment onaylanınca bu ses örneği kişiye yazılır.
@@ -296,7 +307,7 @@ class SpeakerState:
         self.sticky_misses = max(1, int(sticky_misses))
         self._misses = 0  # art arda güvensiz (identify=None) pencere sayacı
         # KRİTİK: unknown → kayıtlı kişi geçişi tek pencereye güvenmez. Canlıda
-        # yabancı bir sesin tek penceresi AS-norm eşiğini geçip doğrudan Ayhan olması
+        # yabancı bir sesin tek penceresi model eşiğini geçip doğrudan Ayhan olması
         # hem yanlış selama hem de yanlış hafıza/persona bağlamına yol açıyordu.
         # Aynı isim bu kadar ARDIŞIK güvenli pencerede görülmeden `current` değişmez.
         self.confirm_hits = max(2, int(confirm_hits))
@@ -314,6 +325,19 @@ class SpeakerState:
         if continuity_seconds is None:
             continuity_seconds = _f("SPEAKER_CONTINUITY_SECONDS", 12.0)
         self.continuity_seconds = max(0.0, float(continuity_seconds))
+        # Kısa konuşmada yalnız bir pencere yetişebiliyor. ReDimNet2 o pencereyi
+        # güçlü biçimde ayırmışsa ikinci pencereyi zorlamak doğru sonucu gereksizce
+        # Bilinmeyen yapıyor. Genel identify eşiği DEĞİŞMEZ; bu yol kalibre skor
+        # tabanı + daha sıkı marj ister ve aynı turda başka isim varsa çalışmaz.
+        if fast_single_enabled is None:
+            fast_single_enabled = _b("SPEAKER_FAST_SINGLE_ENABLED", True)
+        if fast_single_score is None:
+            fast_single_score = _f("SPEAKER_FAST_SINGLE_SCORE", 0.568)
+        if fast_single_margin is None:
+            fast_single_margin = _f("SPEAKER_FAST_SINGLE_MARGIN", 0.25)
+        self.fast_single_enabled = bool(fast_single_enabled)
+        self.fast_single_score = float(fast_single_score)
+        self.fast_single_margin = max(0.0, float(fast_single_margin))
         self._last_confirmed_name: str | None = None
         self._last_confirmed_at = 0.0
         self._turn_active = False
@@ -323,9 +347,17 @@ class SpeakerState:
         # Böylece kayan pencere hiçbir zaman yeni STT dönüşünden ÖNCEKİ sesin
         # embedding'ini üretmez.
         self._turn_generation = 0
-        # (zaman, isim, skor, embedding) — embedding onay döngüsü için taşınır
+        # Embed/identify işi CPU thread'inde sürerken final STT gelebilir. Final
+        # karar bu sayaç sıfırlanmadan kapanırsa, birkaç yüz ms sonra gelen doğru
+        # pencere eski üretime ait diye çöpe gider ve UI "Bilinmeyen" yazar.
+        # Üretim başına sayaç + Event, final yolu için sınırlı bir bekleme kapısıdır.
+        self._pending_observations: dict[int, int] = {}
+        self._pending_events: dict[int, asyncio.Event] = {}
+        # (zaman, isim, skor, marj, embedding) — embedding onay döngüsü için taşınır
         # (bkz. `last_turn_candidate_windows`); yoksa None.
-        self._turn_observations: list[tuple[float, str | None, float, object | None]] = []
+        self._turn_observations: list[
+            tuple[float, str | None, float, float, object | None]
+        ] = []
         self.last_turn_decision = TurnSpeakerDecision(
             name=None,
             score=0.0,
@@ -394,6 +426,8 @@ class SpeakerState:
         self._turn_observations = []
         self.last_turn_candidate_windows = []
         self.current = None
+        self.contextual_current = None
+        self.contextual_reason = None
         self.score = 0.0
         self._candidate = None
         self._candidate_hits = 0
@@ -416,6 +450,71 @@ class SpeakerState:
     def turn_generation(self) -> int:
         """Monotonic token used by the audio tap to discard pre-turn audio."""
         return self._turn_generation
+
+    def begin_observation(self, generation: int) -> bool:
+        """Bu dönüşe ait bir embed/identify işini uçuşta olarak işaretle."""
+        if not self._turn_active or generation != self._turn_generation:
+            return False
+        self._pending_observations[generation] = (
+            self._pending_observations.get(generation, 0) + 1
+        )
+        event = self._pending_events.setdefault(generation, asyncio.Event())
+        event.clear()
+        return True
+
+    def finish_observation(self, generation: int) -> None:
+        """Uçuşta pencereyi kapat ve bekleyen final kararını uyandır."""
+        left = max(0, self._pending_observations.get(generation, 0) - 1)
+        if left:
+            self._pending_observations[generation] = left
+            return
+        self._pending_observations.pop(generation, None)
+        self._pending_events.setdefault(generation, asyncio.Event()).set()
+
+    async def wait_for_pending(
+        self, generation: int, timeout: float = 0.4
+    ) -> tuple[bool, float]:
+        """Uçuşta kimlik işi bitene dek sınırlı bekle.
+
+        Dönen ilk değer bütün işlerin yetişip yetişmediğidir; ikinci değer gerçek
+        bekleme süresidir. Timeout fail-open'dır: speaker modeli konuşmayı durdurmaz.
+        """
+        started = time.monotonic()
+        if self._pending_observations.get(generation, 0) <= 0:
+            return True, 0.0
+        event = self._pending_events.setdefault(generation, asyncio.Event())
+        try:
+            await asyncio.wait_for(event.wait(), timeout=max(0.0, timeout))
+            ready = self._pending_observations.get(generation, 0) <= 0
+        except asyncio.TimeoutError:
+            ready = False
+        return ready, time.monotonic() - started
+
+    async def resolve_turn_when_ready(
+        self, timeout: float = 0.4
+    ) -> tuple[TurnSpeakerDecision, bool, float]:
+        """Final STT ile yarışan son pencereye kısa süre tanı, sonra kararı kapat."""
+        generation = self._turn_generation
+        ready, waited = await self.wait_for_pending(generation, timeout)
+        return self.resolve_turn(), ready, waited
+
+    @property
+    def response_name(self) -> str | None:
+        """UI/hitap adı; bağlamsal ad biyometrik `current`in yerini almaz."""
+        return self.current or self.contextual_current
+
+    def assume_contextual(self, name: str, reason: str) -> bool:
+        """Kısa yanıtı yalnız konuşma akışında önceki kişiye bağla.
+
+        Gerçek ses kararı varsa hiçbir şey yapmaz. `_last_confirmed_*`, `current`
+        ve skor değişmediği için bu çağrı kimlik doğrulaması/yetki üretmez.
+        """
+        clean = (name or "").strip()
+        if self.current is not None or not clean:
+            return False
+        self.contextual_current = clean
+        self.contextual_reason = (reason or "").strip() or "kısa cevap bağlamı"
+        return True
 
     def resolve_turn(self, now: float | None = None) -> TurnSpeakerDecision:
         """Resolve only observations collected since the latest `begin_turn()`.
@@ -443,8 +542,8 @@ class SpeakerState:
             reason = "aynı dönüşte çelişen kimlik pencereleri"
         elif accepted:
             only_name = accepted[0][1]
-            best_run: list[tuple[float, str | None, float]] = []
-            run: list[tuple[float, str | None, float]] = []
+            best_run: list[tuple[float, str | None, float, float, object | None]] = []
+            run: list[tuple[float, str | None, float, float, object | None]] = []
             for item in observations:
                 if item[1] == only_name:
                     run.append(item)
@@ -478,6 +577,19 @@ class SpeakerState:
                     decision_name = only_name
                     decision_score = best_run[0][2]
                     reason = "son doğrulamayla uyumlu tek güncel pencere"
+                elif (
+                    self.fast_single_enabled
+                    and len(best_run) == 1
+                    and best_run[0][2] >= self.fast_single_score
+                    and best_run[0][3] >= self.fast_single_margin
+                    and finished_at - best_run[0][0] <= self.turn_max_seconds
+                ):
+                    decision_name = only_name
+                    decision_score = best_run[0][2]
+                    reason = (
+                        "yüksek güvenli tek güncel pencere "
+                        f"(skor={best_run[0][2]:.3f}, marj={best_run[0][3]:.3f})"
+                    )
                 else:
                     reason = f"yetersiz ardışık onay ({len(best_run)}/{self.turn_confirm_hits})"
             elif finished_at - best_run[-1][0] > self.turn_max_seconds:
@@ -512,8 +624,8 @@ class SpeakerState:
         return self.last_turn_decision
 
     def _within_ceiling(
-        self, run: list[tuple[float, str | None, float, object | None]]
-    ) -> list[tuple[float, str | None, float, object | None]]:
+        self, run: list[tuple[float, str | None, float, float, object | None]]
+    ) -> list[tuple[float, str | None, float, float, object | None]]:
         """Onay grubunun yalnız SON `turn_max_seconds` saniyelik dilimini döndür.
 
         Amaç: "ardışık onay" pencerelerinin zamanda da bitişik olmasını zorlamak.
@@ -527,15 +639,14 @@ class SpeakerState:
 
     def _candidate_of(
         self,
-        accepted: list[tuple[float, str | None, float, object | None]],
+        accepted: list[tuple[float, str | None, float, float, object | None]],
         finished_at: float,
     ) -> tuple[str | None, float, float, int]:
         """Turun kabul edilmiş pencerelerinden "sormaya değer mi" adayını çıkar.
 
-        Seçim SKOR AĞIRLIKLI: skorlar AS-norm ölçeğinde negatif olabildiği için ham
-        skor ağırlık olarak kullanılamaz (negatif ağırlık çoğunluğu ters çevirirdi);
-        turun en düşük skoruna göre kaydırılmış pozitif ağırlık (w = s - s_min + 1)
-        kullanılır — monoton, tüm skorlar eşitse saf pencere sayımına indirgenir.
+        Seçim SKOR AĞIRLIKLI: kosinüs skorları negatif olabileceği için ham skor
+        ağırlık olarak kullanılamaz (negatif ağırlık çoğunluğu ters çevirirdi);
+        turun en düşük skoruna göre kaydırılmış pozitif ağırlık kullanılır.
 
         `oran` ise BİLEREK sayım tabanlıdır: eşik ("kabul edilen pencerelerin ≥ %60'ı
         aynı adayı gösteriyor") ölçülebilir ve log'dan doğrulanabilir kalsın.
@@ -550,7 +661,7 @@ class SpeakerState:
         s_min = min(item[2] for item in accepted)
         weights: dict[str, float] = {}
         counts: dict[str, int] = {}
-        for _at, name, score, _emb in accepted:
+        for _at, name, score, _margin, _emb in accepted:
             key = str(name)
             weights[key] = weights.get(key, 0.0) + (score - s_min + 1.0)
             counts[key] = counts.get(key, 0) + 1
@@ -563,9 +674,9 @@ class SpeakerState:
         ratio = len(windows) / len(accepted)
         avg_score = sum(item[2] for item in windows) / len(windows)
         self.last_turn_candidate_windows = [
-            (item[2], item[3])
+            (item[2], item[4])
             for item in sorted(fresh, key=lambda x: x[2], reverse=True)
-            if item[3] is not None
+            if item[4] is not None
         ]
         return cand, ratio, avg_score, len(fresh)
 
@@ -574,9 +685,11 @@ class SpeakerState:
         name: str | None,
         score: float,
         *,
+        margin: float = 0.0,
         capture_ok: bool = True,
         now: float | None = None,
         embedding: object | None = None,
+        generation: int | None = None,
     ) -> bool:
         """Record one identify result only when it belongs to an active user turn.
 
@@ -589,17 +702,21 @@ class SpeakerState:
         süresi tap tarafında >= SPEAKER_MIN_SECONDS garantidir.
         """
         self.score = score
+        if generation is not None and generation != self._turn_generation:
+            return False
         if self._turn_active and capture_ok:
             observed_at = time.monotonic() if now is None else float(now)
             if observed_at >= self._turn_started_at:
-                self._turn_observations.append((observed_at, name, score, embedding))
+                self._turn_observations.append(
+                    (observed_at, name, score, float(margin), embedding)
+                )
         return False
 
 
 class SpeakerTap:
     """Room'daki her uzak mikrofon track'i için bir embed/identify döngüsü sürer."""
 
-    def __init__(self, sp: SpeakerID, state: SpeakerState, min_seconds: float = 1.0,
+    def __init__(self, sp: SpeakerID, state: SpeakerState, min_seconds: float = 1.5,
                  store=None, capture_gate: Callable[[], tuple[bool, str | None]] | None = None):
         self._sp = sp
         self._state = state
@@ -607,19 +724,16 @@ class SpeakerTap:
         # LiveKit'ten bağımsız kalır; bağlanmazsa eski güvenli varsayılan (kabul) geçer.
         self._capture_gate = capture_gate
         self._min_seconds = max(0.5, min_seconds)
-        # Embedding modelleri tek kelimelik 1 sn pencerelerde kararsız kalabiliyor.
-        # Her `min_seconds`'ta bir, güncel dönüşe ait son 1.5 sn'i değerlendiririz.
-        # İlk pencere `min_seconds`'ta çıkar (bkz. `_consume`), sonrakiler kayan
-        # 1.5 sn'dir → ~2 sn'lik doğal bir cümlede iki ayrı kanıt penceresi oluşur;
-        # tek kısa söz hâlâ tek pencereyle kimlik alamaz.
+        # Deneyle aynı 3 sn pencere / 1.5 sn adım kullanılır. İlk 1.5 sn'lik faydalı
+        # kuyruk model tarafında sıfırla tamamlanır; ikinci kanıt 3.0 sn'de gelir.
         self._window_seconds = max(
             self._min_seconds,
-            _f("SPEAKER_WINDOW_SECONDS", 1.5),
+            _f("SPEAKER_WINDOW_SECONDS", 3.0),
         )
         self._tasks: dict[str, asyncio.Task] = {}
         # Konuşma-kapısı: normalize [-1,1] RMS eşiği. Bunun altındaki (sessizlik/
         # kelime-arası) pencereler identify EDİLMEZ; current DEĞİŞMEZ.
-        self._vad_rms = _f("SPEAKER_VAD_RMS", 0.01)
+        self._vad_rms = _f("SPEAKER_VAD_RMS", 0.008)
         # Artımlı öğrenme (opsiyonel, default KAPALI): YÜKSEK güvenle tanınan
         # pencerelerden ara sıra örnek ekleyip centroid'i güçlendir. Az örnekli
         # centroid'in başka gün/mikrofonda eşiğin altına düşmesine karşı.
@@ -636,12 +750,12 @@ class SpeakerTap:
         self._learned = 0
         self._last_learn = 0.0
         # Gölge embedding kaydedici (salt gözlem, varsayılan AÇIK, .env ile kapatılır).
-        self._emb_log = SessionEmbLog()
+        self._emb_log = SessionEmbLog(sp.model_id)
         # Turlar arası akış hiç oluşmazsa (arka arkaya konuşma) tamponu boşaltacak
         # emniyet valfi. 1 pencere/sn ile bu ~8 dk kesintisiz tek tur demektir.
         self._emb_log_max_pending = _i("SPEAKER_EMB_LOG_FLUSH_EVERY", 512)
         # Prozodi hesabı ayrı kolla kapatılabilir (varsayılan AÇIK). Ölçüldü:
-        # 1.5 sn'lik pencerede ~1.0 ms — embed'in (20-40 ms) yanında görünmez.
+        # Prozodi yalnız gözlem içindir ve gömme kararına girmez.
         self._prosody_enabled = _b("SPEAKER_EMB_LOG_PROSODY", True)
         # Çok mikrofonlu odada pencereleri ayırmak için track başına küçük sayı.
         # Sonradan TÜRETİLEMEZ: npz'de track kimliği hiç yoktu.
@@ -712,13 +826,8 @@ class SpeakerTap:
         )
         hop_bytes = int(self._min_seconds * TAP_RATE) * 2  # bayt (s16le mono)
         window_bytes = int(self._window_seconds * TAP_RATE) * 2
-        # İLK pencere `min_seconds` dolar dolmaz üretilir; `window_seconds` (1.5 sn)
-        # dolmasını beklemek dönüş başına GECİKME demekti: ilk kanıt 1.5 sn'de,
-        # ikincisi 2.5 sn'de çıkıyordu → 2 onay için 2.5 sn konuşma gerekiyordu.
-        # Artık kanıtlar 1.0 / 2.0 / 3.0 sn'de çıkar (2 onay = 2.0 sn). Pencere
-        # İÇERİĞİ yine kayan 1.5 sn'ye kadar büyür; yalnız ilk pencere
-        # `min_seconds` uzunluğundadır — bu zaten yapılandırmadaki "en kısa kabul
-        # edilebilir gömme süresi". Eşik/marj ve iki-onay kuralı aynen geçerli.
+        # İlk kanıt `min_seconds` dolunca, sonraki kanıtlar aynı adımla çıkar.
+        # ReDimNet2 kısa ilk kuyruğu kendi 3 sn penceresine sıfırla tamamlar.
         first_bytes = min(window_bytes, hop_bytes)
         buf = bytearray()
         bytes_since_window = 0
@@ -771,42 +880,56 @@ class SpeakerTap:
                     # AKIŞ: pencerenin turun başlangıcına göre ofseti. EMBED'DEN
                     # ÖNCE alınır — embed'in 20-40 ms'i ofsete karışmasın.
                     window_at = time.monotonic()
-                    emb = await asyncio.to_thread(
-                        self._sp.embed_samples, samples, TAP_RATE
-                    )
+                    observation_generation = self._state.turn_generation
+                    tracked = self._state.begin_observation(observation_generation)
+                    if not tracked:
+                        continue
+                    try:
+                        emb = await asyncio.to_thread(
+                            self._sp.embed_samples, samples, TAP_RATE
+                        )
                     # Enrollment için son ham embedding'i sakla (yalnızca KONUŞMA
                     # penceresi → sessizlik yanlış-pozitif enroll tetiklemez).
-                    self._state.last_embedding = emb
-                    if self._capture_gate is None:
-                        self._state.last_embedding_capture_ok = None
-                        self._state.last_embedding_capture_reason = None
-                    else:
-                        try:
-                            ok, reason = self._capture_gate()
-                        except Exception as e:  # noqa: BLE001 — kalite bilgisi akışı bozmasın
-                            log.debug("speaker-tap capture gate hata: %s", e)
-                            ok, reason = True, None
-                        self._state.last_embedding_capture_ok = bool(ok)
-                        self._state.last_embedding_capture_reason = reason
-                    self._state.add_expression_window(chunk, emb)
-                    name, score = self._sp.identify(emb)
+                        self._state.last_embedding = emb
+                        if self._capture_gate is None:
+                            self._state.last_embedding_capture_ok = None
+                            self._state.last_embedding_capture_reason = None
+                        else:
+                            try:
+                                ok, reason = self._capture_gate()
+                            except Exception as e:  # noqa: BLE001 — kalite bilgisi akışı bozmasın
+                                log.debug("speaker-tap capture gate hata: %s", e)
+                                ok, reason = True, None
+                            self._state.last_embedding_capture_ok = bool(ok)
+                            self._state.last_embedding_capture_reason = reason
+                        self._state.add_expression_window(chunk, emb)
+                        name, score = self._sp.identify(emb)
                     # Sıralama identify'nin HEMEN ardından, arada await olmadan
                     # okunur — başka bir coroutine araya giremez.
-                    ranking = list(getattr(self._sp, "last_ranking_top2", None) or [])
+                        ranking = list(getattr(self._sp, "last_ranking_top2", None) or [])
+                        margin = (
+                            float(ranking[0][1] - ranking[1][1])
+                            if len(ranking) >= 2
+                            else 0.0
+                        )
+                        # Karar için gerekli gözlem auto-learn/prosody'den ÖNCE
+                        # yazılır; final STT yalnız bu noktayı bekler.
+                        self._state.observe(
+                            name,
+                            score,
+                            margin=margin,
+                            capture_ok=self._state.last_embedding_capture_ok is not False,
+                            embedding=emb,
+                            generation=observation_generation,
+                        )
+                    finally:
+                        self._state.finish_observation(observation_generation)
                 except Exception as e:  # noqa: BLE001
                     log.debug("speaker-tap embed/identify hata: %s", e)
                     continue
                 # Artımlı öğrenme (default kapalı): yüksek güvenli tanımada centroid'i besle.
                 if name is not None and score >= self._learn_min:
                     await self._maybe_learn(name, emb)
-                # Kimlik yalnız aktif VAD dönüşüne yazılır; agent echo penceresi
-                # veya dönüş dışındaki eski gözlem sonraki transkripte taşınamaz.
-                self._state.observe(
-                    name,
-                    score,
-                    capture_ok=self._state.last_embedding_capture_ok is not False,
-                    embedding=emb,
-                )
                 # `observe`'un GÖRDÜĞÜ değer (arada await yok) — gölge kayda aynısı.
                 capture_ok_flag = self._state.last_embedding_capture_ok
                 # GÖLGE KAYIT — salt gözlem, KARARDAN SONRA. Reddedilen (name=None)

@@ -662,6 +662,8 @@ class HiggsTTS(tts.TTS):
         token: Optional[str] = None,
         stream: bool = True,
         speed_control: bool = True,
+        default_mood: Optional[str] = None,
+        default_speed: Optional[str] = None,
     ):
         super().__init__(
             # `streaming=False` GİRDİ akışı içindir (SynthesizeStream yok, livekit
@@ -674,7 +676,11 @@ class HiggsTTS(tts.TTS):
         self._port = port
         self._voice = voice
         self._token = token
-        self._current_mood: Optional[str] = None
+        # Varsayılan ton worker tarafından açıkça seçilebilir. İçeriğin gerektirdiği
+        # `[mood:X]` etiketi yalnız o tur için bunun üstüne çıkar; sonraki tur tekrar
+        # varsayılana döner. Böylece kişi tanınması tonu değiştirmez.
+        self._default_mood = default_mood if default_mood in KNOWN_MOODS else None
+        self._current_mood: Optional[str] = self._default_mood
         # Chunked PCM ucu. Kapatınca tam-WAV yoluna dönülür (TEK SATIRLIK geri dönüş:
         # worker/.env'e `HIGGS_STREAM=0`). Sunucu ikisini de sunmaya devam ediyor.
         self._stream = stream
@@ -682,15 +688,17 @@ class HiggsTTS(tts.TTS):
         # Bayrak kapalıyken davranış BUGÜNKÜYLE bire bir aynı: `[speed:X]` işareti
         # yine metinden silinir (asla seslendirilmez) ama tempo dönüşümü YAPILMAZ.
         self._speed_control = speed_control
-        self._speed = speech_speed.DEFAULT
+        self._speed = (
+            default_speed if speech_speed.is_level(default_speed) else speech_speed.DEFAULT
+        )
 
     def reset_mood(self) -> None:
-        """Yeni tur başında nötr'e dön (agent.py agent_state 'thinking' hook'undan).
+        """Yeni tur başında yapılandırılmış varsayılan tona dön.
 
         ⚠️ HIZA DOKUNMAZ. Mood cümlelik bir renk, hız KALICI bir ayar; kullanıcının
         canlı şikâyeti tam da hızın bir sonraki turda eski hâline dönmesiydi.
         """
-        self._current_mood = None
+        self._current_mood = self._default_mood
 
     # ── Konuşma hızı ─────────────────────────────────────────────────────────
     @property

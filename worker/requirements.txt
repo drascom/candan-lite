@@ -8,6 +8,12 @@ livekit-api~=1.0   # cli_client.py: token üretimi + agent dispatch (web/api/tok
 python-dotenv
 wyoming            # Whisper STT (wyoming protokolü, .25:10300)
 numpy
-sherpa-onnx        # Faz 3: CAM++ speaker embedding (speaker-ID)
+scipy>=1.12        # ReDimNet2 öncesi 16 kHz yeniden örnekleme
+# Linux worker CPU-only: PyPI'ın genel wheel'i gereksiz ~5 GB CUDA paketi çeker.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu; sys_platform == "linux"
+torchaudio==2.11.0+cpu; sys_platform == "linux"
+torch>=2.4; sys_platform != "linux"
+torchaudio>=2.4; sys_platform != "linux"
 soundfile          # enroll.py — wav oku
 sounddevice        # enroll.py --record + cli_client.py mikrofon/hoparlör (PortAudio; Pi'de de çalışır)

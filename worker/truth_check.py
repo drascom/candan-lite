@@ -70,6 +70,11 @@ def fold(s: str) -> str:
 # Salt-okuma araçları (memory_search, reminder_list, web_search) burada YOK: onların
 # hatası kullanıcıya yanlış bir "kaydettim" olarak dönmez.
 CRITICAL_WRITE_TOOLS: frozenset[str] = frozenset({
+    # Pi'nin geliştirme modundaki yerleşik dosya araçları. Bunlar başarılıysa
+    # "dosyaya yazdım/kaydettim" iddiasının doğrudan kanıtıdır; listede yokken
+    # canlıda `write=ok` olmasına rağmen harness yanlışlıkla "kaydetmedim" dedi.
+    "write",
+    "edit",
     "memory_add",
     "memory_attribute_pending",
     "soul_add",
@@ -80,6 +85,8 @@ CRITICAL_WRITE_TOOLS: frozenset[str] = frozenset({
 
 # Araç → harness'ın kullanacağı FİİL (hata hâlinde).
 _FAIL_VERB: dict[str, str] = {
+    "write": "Dosyayı yazamadım",
+    "edit": "Dosyayı düzenleyemedim",
     "memory_add": "Kaydedemedim",
     "memory_attribute_pending": "Kaydedemedim",
     "soul_add": "Bunu kalıcı olarak kaydedemedim",
@@ -202,8 +209,6 @@ _CLAIM_RECORD_SOFT: tuple[re.Pattern[str], ...] = tuple(
         # "Notumu aldım Ayhan!" düz "not aldım" kalıbıyla KAÇIYORDU).
         r"\bnot\w* al(d[iı]m|[iı]yorum)\b",
         r"\bnot\w* ettim\b",
-        r"\bkaydett?im\b",
-        r"\bkay[iı]t ettim\b",
         # SES KAYDI iddiası (canlı 27 Tem: "Harika Çiğdem, ses kaydını aldım" —
         # oysa enroll REDDEDİLMİŞTİ). "not aldım" kalıbı bunu KAÇIRIYORDU.
         r"\bkayd[iı]n[iı]?\w*\s+ald[iı]m\b",
@@ -219,6 +224,13 @@ _CLAIM_RECORD_SOFT: tuple[re.Pattern[str], ...] = tuple(
 _CLAIM_RECORD_STRONG: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p) for p in (
         r"\bnot olarak (ald[iı]m|ekledim|yazd[iı]m)\b",
+        # "Kaydettim" günlük dilde "anladım" değildir. Eski yumuşak istisna
+        # canlıda Fenerbahçe bilgisinin araç çağırmadan kaydedilmiş gibi
+        # söylenmesine izin verdi (9 Ağustos 14:11).
+        r"\bkaydett?im\b",
+        r"\bkay[iı]t ettim\b",
+        r"\b(hemen|simdi) not\w* ald[iı]m\b",
+        r"\bhaf[iı]za\w* (kaydett?im|ekledim|yazd[iı]m)\b",
         r"\bakl[iı]mda tut(acag[iı]m|uyorum|ar[iı]m)\b",
         r"\bakl[iı]ma (yazd[iı]m|not ettim)\b",
         r"\bunutmam\b",
@@ -236,6 +248,7 @@ _CLAIM_ACTION: tuple[re.Pattern[str], ...] = tuple(
         r"\bayarlad[iı]m\b",
         r"\bgerekeni yapt[iı]m\b",
         r"\bislemi tamamlad[iı]m\b",
+        r"\beslestirdim\b",
     )
 )
 
@@ -717,14 +730,21 @@ def _truth_test() -> int:
          [], "Aslı, seni not aldım. Şimdi ses kaydınızı alacağım. "
              "Lütfen normal bir sesle: Bugün kendimi iyi hissediyorum, deyin.",
          None, False),
-        ("(g) araç YOK + 'kaydettim' (yumuşak) → müdahale YOK",
-         [], "Tamam, kaydettim.", None, False),
+        ("(g) araç YOK + 'kaydettim' → düzeltme",
+         [], "Tamam, kaydettim.", UNBACKED_LINE, False),
         ("(h) salt-okuma aracı hata + yumuşak iddia → yargıca sorulur",
          [("memory_search", "acilamadi", False)], "Not aldım.", None, True),
         ("(i) eylem iddiası + hiç araç yok → düzeltme (değişmedi)",
          [], "Durumu düzelttim.", UNVERIFIED_LINE, False),
         ("(j) hiç iddia yok, hiç araç yok → sessizlik",
          [], "Bugün hava güzel.", None, False),
+        ("(k) native write BAŞARILI + 'dosyaya kaydettim' → müdahale YOK",
+         [("write", "Successfully wrote 11175 bytes to plan.md", False)],
+         "Detaylı planı Markdown dosyasına kaydettim.", None, False),
+        ("(l) native write HATA + 'dosyaya kaydettim' → Katman 2 devralır",
+         [("write", "Permission denied", True)],
+         "Detaylı planı Markdown dosyasına kaydettim.",
+         "Dosyayı yazamadım, bir hata oldu.", False),
     ]
     results: list[tuple[str, bool, str]] = []
     for name, entries, said, want_line, want_ask in cases:
@@ -738,7 +758,7 @@ def _truth_test() -> int:
     # Mod denetimi (bağlam şartından ETKİLENMEMELİ)
     ledger = TurnLedger()
     line, ask = decide(ledger, "Artık normal moddayım.", mode="dev")
-    results.append(("(k) mod iddiası gerçekle çelişiyor → düzeltme",
+    results.append(("(m) mod iddiası gerçekle çelişiyor → düzeltme",
                     line == "Aslında hâlâ geliştirme modundayım." and not ask,
                     f"satır={line!r}"))
 
@@ -746,9 +766,9 @@ def _truth_test() -> int:
     strong_ok = (not soft_record_claim("Aklımda tutacağım.")
                  and not soft_record_claim("Hatırlatma kurdum.")
                  and soft_record_claim("Not aldım.")
-                 and soft_record_claim("Kaydettim.")
+                 and not soft_record_claim("Kaydettim.")
                  and not soft_record_claim("Bugün hava güzel."))
-    results.append(("(l) güçlü/yumuşak kalıp ayrımı", strong_ok, ""))
+    results.append(("(n) güçlü/yumuşak kalıp ayrımı", strong_ok, ""))
 
     all_ok = True
     for name, ok, detail in results:

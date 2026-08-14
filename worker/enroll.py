@@ -7,7 +7,7 @@ Kullanım:
   python enroll.py --list                    # kayıtlı kişileri listele
 
 Aynı isim varsa yeni ÖRNEK eklenir (silmez). Wav en az SPEAKER_ENROLL_MIN_SECONDS
-(varsayılan 4sn) olmalı. Model = SPEAKER_MODEL_PATH (models/campplus.onnx).
+(varsayılan 4sn) olmalı. Agent ile aynı ReDimNet2 yapılandırması kullanılır.
 """
 
 import os
@@ -22,26 +22,20 @@ load_dotenv(WORKER_DIR / ".env")
 import numpy as np  # noqa: E402
 
 from speaker_id import (  # noqa: E402
-    WORKER_DIR as _WD,
     SpeakerID,
     SpeakerStore,
+    create_speaker_id,
     emb_to_bytes,
 )
 
-MODEL_ID = os.getenv("SPEAKER_MODEL_ID", "campplus_zh_en_advanced_v1")
 ENROLL_MIN_S = float(os.getenv("SPEAKER_ENROLL_MIN_SECONDS", "4.0") or 4.0)
 
 
-def _resolve(path: str) -> str:
-    p = Path(path)
-    return str(p if p.is_absolute() else (_WD / p))
-
-
 def _build_speaker() -> SpeakerID:
-    model_path = _resolve(os.getenv("SPEAKER_MODEL_PATH", "models/campplus.onnx"))
-    if not os.path.isfile(model_path):
-        sys.exit(f"HATA: model bulunamadı: {model_path}")
-    return SpeakerID(model_path, MODEL_ID)
+    try:
+        return create_speaker_id()
+    except Exception as exc:  # noqa: BLE001
+        sys.exit(f"HATA: ReDimNet2 yüklenemedi: {exc}")
 
 
 def _read_wav(path: str) -> tuple[np.ndarray, int]:
@@ -73,7 +67,7 @@ def _enroll(name: str, samples: np.ndarray, sr: int, source: str) -> int:
     emb = sp.embed_samples(samples, sr)
     store = SpeakerStore()
     row = store.create_speaker_sync(name)
-    store.add_sample_sync(row["id"], emb_to_bytes(emb), sp.dim, MODEL_ID, source)
+    store.add_sample_sync(row["id"], emb_to_bytes(emb), sp.dim, sp.model_id, source)
     total = next((s["sample_count"] for s in store.list_speakers_sync() if s["id"] == row["id"]), "?")
     print(f"[enroll] '{name}' (id={row['id']}) kaydedildi — dim={sp.dim}, "
           f"süre={dur:.1f}sn, toplam örnek={total}, db={store.path}")

@@ -1,21 +1,19 @@
-"""Speaker-ID (voice-ID): sherpa-onnx CAM++ ile ses parmak-izinden kişi tanıma.
+"""Candan kapalı-grup konuşmacı kimliği: ReDimNet2 + kosinüs eşleştirme.
 
-`hermes-livekit/voice/speaker.py` (SpeakerID) + `voice/speaker_store.py`
-(SpeakerStore) portu — tek dosyada, candan-lite worker'ı için. Faz 2'yi
-BOZMADAN additive: sherpa-onnx kurulu değilse / model yoksa / SPEAKER_ID_ENABLED
-kapalıysa `build_speaker_id()` None döner ve çağıran taraf speaker-ID'yi atlar.
+LiveKit ses pencerelerini ``speaker_tap`` üretir. Bu modül aynı pencereleri
+ReDimNet2-B6 ile 192 boyutlu, L2-normalize gömmelere çevirir; kayıtlı ev halkı
+merkezleriyle karşılaştırır ve eşik + ikinci adaya marj koşuluyla güvenli biçimde
+isim ya da ``None`` döndürür.
 
-Embedding'ler DB'de HAM float32 little-endian BLOB olarak saklanır; normalize
-etme bellekte (centroid kurulumu + sorgu anında) yapılır.
-
-Yollar worker/ köküne göre relative (agent.py cwd = worker/): env
-SPEAKER_MODEL_PATH=models/campplus.onnx, SPEAKER_DB=data/speakers.db.
+Embedding'ler modele özel SQLite veritabanında float32 little-endian BLOB olarak
+saklanır. Eski embedding uzaylarıyla ortak veritabanı kullanılmaz.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import os
 import sqlite3
 import threading
@@ -47,17 +45,6 @@ def _l2(v: np.ndarray) -> np.ndarray:
     return v / n if n > 0 else v
 
 
-def _topk_stats(scores: np.ndarray, k: int) -> tuple[float, float]:
-    """AS-norm için: skorların EN YÜKSEK k tanesinin ort/std. std çok küçükse (aynı
-    gömme cohort'ta varsa) 0'a bölmeyi önlemek için tabana bastır. score.py'deki
-    referans uygulamayla BİRE BİR aynı (deneyde kanıtlanan davranış korunsun)."""
-    k = max(2, min(k, scores.size))
-    top = np.sort(scores)[-k:]
-    mu = float(np.mean(top))
-    sd = float(np.std(top))
-    return mu, (sd if sd > 1e-6 else 1e-6)
-
-
 def pcm_to_f32(pcm: bytes, width: int, channels: int) -> np.ndarray:
     """Ham PCM baytlarını [-1,1] float32 mono diziye çevir (s16le veya f32le)."""
     if width == 2:
@@ -82,150 +69,151 @@ def _resolve(path: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# SpeakerID — sherpa-onnx embedding + kosinüs eşleştirme (eşik + marj)
+# SpeakerID — ReDimNet2 embedding + kosinüs eşleştirme (eşik + marj)
 # ---------------------------------------------------------------------------
 class SpeakerID:
-    """Tek bir embedding modelini sarar; enroll edilmiş kişilere karşı tanır."""
+    """ReDimNet2-B6'yı sarar; kayıtlı ev halkına karşı güvenli tanıma yapar."""
 
     def __init__(
         self,
-        model_path: str,
-        model_id: str,
-        threshold: float = 0.45,
-        margin: float = 0.05,
-        num_threads: int = 1,
-        merge_low: float = 0.35,
+        *,
+        device: str = "cpu",
+        model_repo: str = "PalabraAI/redimnet2",
+        model_repo_dir: str | None = None,
+        model_name: str = "b6",
+        dataset: str = "vb2+vox2_v0",
+        train_type: str = "lm",
+        model_id: str = "redimnet2-b6-vb2+vox2_v0-lm",
+        dim: int = 192,
+        threshold: float = 0.5683009803,
+        margin: float = 0.2146433070,
+        merge_low: float = 0.50,
         enroll_weight: float = 0.7,
         drift_warn_frac: float = 0.10,
-        asnorm_enabled: bool = False,
-        asnorm_cohort_path: str | None = None,
-        asnorm_k: int = 40,
-        asnorm_threshold: float = -1.0,
-        asnorm_margin: float = 1.0,
         min_profiles_for_auto_match: int = 2,
-        shadow_thresholds: tuple[float, ...] = (),
+        window_seconds: float = 3.0,
+        hop_seconds: float = 1.5,
+        min_seconds: float = 1.5,
+        rms_threshold: float = 0.008,
+        batch_size: int = 16,
+        num_threads: int = 2,
+        model=None,
+        torch_module=None,
     ):
-        import sherpa_onnx
+        if torch_module is None:
+            import torch
 
-        cfg = sherpa_onnx.SpeakerEmbeddingExtractorConfig(
-            model=model_path, num_threads=num_threads, provider="cpu"
-        )
-        self._ex = sherpa_onnx.SpeakerEmbeddingExtractor(cfg)
-        self.dim: int = self._ex.dim
+            torch_module = torch
+        self._torch = torch_module
+        if device == "mps" and not self._torch.backends.mps.is_available():
+            raise RuntimeError("MPS istendi fakat PyTorch MPS kullanamıyor")
+        if device.startswith("cuda") and not self._torch.cuda.is_available():
+            raise RuntimeError("CUDA istendi fakat PyTorch CUDA kullanamıyor")
+        self.device = self._torch.device(device)
+        if device == "cpu" and num_threads > 0:
+            self._torch.set_num_threads(max(1, int(num_threads)))
+        if model is None:
+            load_from = _resolve(model_repo_dir) if model_repo_dir else model_repo
+            kwargs = {
+                "model_name": model_name,
+                "train_type": train_type,
+                "dataset": dataset,
+                "pretrained": True,
+            }
+            if model_repo_dir:
+                model = self._torch.hub.load(load_from, "redimnet2", source="local", **kwargs)
+            else:
+                model = self._torch.hub.load(
+                    load_from, "redimnet2", trust_repo=True, **kwargs
+                )
+        self._model = model.eval().to(self.device)
+        self.dim = max(1, int(dim))
         self.model_id = model_id
-        # Ham-kosinüs karar parametreleri (AS-norm kapalı/uyumsuz iken geri-düşüş yolu).
         self.threshold = threshold
         self.margin = margin
-        # Enroll koruması: bu skorun ALTI "gerçekten yeni kişi", arası belirsiz bant
-        # (kullanıcıya "Sen X misin?" diye sorulur), threshold üstü = zaten kayıtlı.
         self.merge_low = merge_low
-        # Centroid'de enroll grubunun payı (auto-learn grubu 1-w). Örnek sayısından
-        # bağımsız → 109 auto-learn bile enroll'ü boğamaz.
         self.enroll_weight = min(1.0, max(0.0, enroll_weight))
-        # Çapadan `threshold` kadar uzak auto-learn oranı bunu AŞARSA WARNING.
         self.drift_warn_frac = drift_warn_frac
-        self._lock = threading.Lock()  # extractor stream'i seri kullanılsın
+        self.window_seconds = max(0.5, float(window_seconds))
+        self.hop_seconds = max(0.1, float(hop_seconds))
+        self.min_seconds = max(0.5, float(min_seconds))
+        self.rms_threshold = max(0.0, float(rms_threshold))
+        self.batch_size = max(1, int(batch_size))
+        # Aynı job'da birden fazla LiveKit track'i paralel pencere üretebilir.
+        self._lock = threading.Lock()
         self._names: list[str] = []
         self._centroids = np.zeros((0, self.dim), dtype=np.float32)  # L2-normalize
         self._name_to_id: dict[str, int] = {}
-        # SALT GÖZLEM: son `identify()` çağrısının ilk iki sıralaması
-        # [(isim, skor), ...]. Karara HİÇ girmez; gölge kaydedici (speaker_tap)
-        # reddedilen pencerelerin de en-iyi/ikinci skorunu yeniden hesaplamadan
-        # yazabilsin diye burada duruyor. Çağıran, kendi `identify()` çağrısının
-        # HEMEN ardından (arada await olmadan) okumalıdır.
         self.last_ranking_top2: list[tuple[str, float]] = []
-
-        # ---- AS-norm skor kalibrasyonu (opsiyonel) ----
-        # Offline ölçümde ham-kosinüs + sabit-eşik ev sahibi ile eşini AYIRAMADI
-        # (marj +0.14, gürültüde eksiye döndü). AS-norm ile marj +2.0 oldu, çapraz-kişi
-        # belirgin NEGATİF → ayrım çalıştı. Cohort'a göre skor normalize edilir:
-        # herkese benzeyen ses cezalandırılır, kişiler-arası karşılaştırılabilir olur.
-        self.asnorm_k = int(asnorm_k)
-        self.asnorm_threshold = asnorm_threshold
-        self.asnorm_margin = asnorm_margin
-        # Tek kayıtlı kişi açık-küme tanıma değildir: her sesin "en yakını" o tek
-        # kişi olur. Canlıda telefon hoparlöründen çalınan yabancı sesler bile Ayhan
-        # diye kabul edildi. İkinci profil kaydolana kadar otomatik persona/kimlik
-        # ataması YOK; kullanıcı unknown kalır ve güvenle kayıt akışına girebilir.
         self.min_profiles_for_auto_match = max(2, int(min_profiles_for_auto_match))
-        # GÖLGE ÖLÇÜM (yalnız log, karar DEĞİŞMEZ). Canlıda profili OLMAYAN üçüncü
-        # bir kişi (Çiğdem) -0.748 skorla Havi kabul edildi; asnorm eşiği -1.00
-        # yabancıyı elemiyor. Doğru eşiği TAHMİNLE seçmek yeni hata üretir → önce
-        # dağılımı ölçüyoruz: her KABUL kararında "şu eşik olsaydı reddedilirdi"
-        # yazılır. Bir sonraki turda eşik VERİYLE seçilecek.
-        self.shadow_thresholds = tuple(float(t) for t in shadow_thresholds)
-        self._cohort: np.ndarray | None = None  # (N, dim) L2-normalize yabancı gömme
-        # Her enrolled centroid için (μ_e, σ_e) — reload/enroll'de BİR KEZ hesaplanır,
-        # her identify()'de yeniden hesaplanmaz (centroid↔cohort skorları sabit).
-        self._cent_asnorm_stats = np.zeros((0, 2), dtype=np.float32)
-        # AS-norm ancak: açık + cohort yüklendi + cohort dim == encoder dim iken aktif.
-        # Aksi halde GÜVENLİ GERİ-DÜŞÜŞ: ham-kosinüs davranışı, çökme yok.
-        self._asnorm_active = False
-        if asnorm_enabled:
-            self._load_cohort(asnorm_cohort_path)
-
-    def _load_cohort(self, path: str | None) -> None:
-        """Cohort .npy'yi yükle + L2-normalize et. Yoksa / dim uyuşmazsa AS-norm'u
-        kapat (bir kez uyar) ve ham-kosinüs geri-düşüşünde kal — mevcut sistemi BOZMA."""
-        if not path:
-            log.warning("AS-norm açık ama cohort yolu boş — ham-kosinüs geri-düşüşü")
-            return
-        cohort_path = _resolve(path)
-        if not os.path.isfile(cohort_path):
-            log.warning("AS-norm cohort yok: %s — ham-kosinüs geri-düşüşü", cohort_path)
-            return
-        try:
-            raw = np.load(cohort_path).astype(np.float32)
-        except Exception as e:  # noqa: BLE001
-            log.warning("AS-norm cohort yüklenemedi (%s) — ham-kosinüs geri-düşüşü", e)
-            return
-        if raw.ndim != 2 or raw.shape[1] != self.dim:
-            # KRİTİK: cohort WeSpeaker (256) ise ve canlı encoder CAM++ (192) ise burada
-            # yakalanır → AS-norm sessizce kapanır, sistem ham-kosinüsle çalışmaya devam eder.
-            log.warning(
-                "AS-norm cohort dim uyuşmuyor (cohort=%s, encoder dim=%d) — AS-norm KAPALI,"
-                " ham-kosinüs geri-düşüşü. Cohort ve canlı encoder AYNI model olmalı.",
-                raw.shape, self.dim,
-            )
-            return
-        # Satırları L2-normalize (zaten normal ama garanti; ham gömme gelirse de çalışsın).
-        norms = np.linalg.norm(raw, axis=1, keepdims=True)
-        norms[norms == 0] = 1.0
-        self._cohort = np.ascontiguousarray(raw / norms, dtype=np.float32)
-        self._asnorm_active = True
-        log.info(
-            "AS-norm etkin: cohort N=%d dim=%d, K=%d, eşik=%.2f, marj=%.2f",
-            self._cohort.shape[0], self._cohort.shape[1], self.asnorm_k,
-            self.asnorm_threshold, self.asnorm_margin,
-        )
-
-    def _recompute_centroid_asnorm_stats(self) -> None:
-        """Her enrolled centroid için cohort'a göre (μ_e, σ_e) önbelleğini yenile.
-        reload()/enroll SONRASI çağrılır — centroid değişince μ_e,σ_e değişir."""
-        n = self._centroids.shape[0]
-        if not self._asnorm_active or self._cohort is None or n == 0:
-            self._cent_asnorm_stats = np.zeros((0, 2), dtype=np.float32)
-            return
-        # se[i] = centroid_i ↔ tüm cohort kosinüs (ikisi de L2-norm).
-        se_all = self._centroids @ self._cohort.T  # (n_centroid, N_cohort)
-        stats = np.empty((n, 2), dtype=np.float32)
-        for i in range(n):
-            mu_e, sd_e = _topk_stats(se_all[i], self.asnorm_k)
-            stats[i, 0] = mu_e
-            stats[i, 1] = sd_e
-        self._cent_asnorm_stats = stats
 
     # ---- embedding ----
 
     def embed_samples(self, samples: np.ndarray, sample_rate: int) -> np.ndarray:
-        """float32 mono dalga → ham embedding (normalize edilmemiş). sherpa,
-        sample_rate 16k değilse içeride resample eder."""
-        samples = np.ascontiguousarray(np.asarray(samples, dtype=np.float32))
+        """Mono float32 sesi pencerele, ReDimNet2 gömmelerini normalize merkezle birleştir."""
+        return _l2(np.mean(self.embed_samples_many(samples, sample_rate), axis=0))
+
+    def embed_samples_many(self, samples: np.ndarray, sample_rate: int) -> np.ndarray:
+        """Her faydalı ReDimNet2 penceresinin normalize gömmesini ayrı döndür."""
+        windows = self._speech_windows(samples, sample_rate)
+        chunks: list[np.ndarray] = []
         with self._lock:
-            stream = self._ex.create_stream()
-            stream.accept_waveform(sample_rate=sample_rate, waveform=samples)
-            stream.input_finished()
-            return np.array(self._ex.compute(stream), dtype=np.float32)
+            for start in range(0, len(windows), self.batch_size):
+                batch_np = np.stack(windows[start : start + self.batch_size])
+                batch = self._torch.from_numpy(batch_np).to(self.device)
+                with self._torch.inference_mode():
+                    output = self._model(batch)
+                if isinstance(output, (tuple, list)):
+                    output = output[0]
+                values = output.detach().float().cpu().numpy().astype(np.float32)
+                if values.ndim == 1:
+                    values = values[None, :]
+                chunks.extend(_l2(row) for row in values)
+        if not chunks:
+            raise ValueError("konuşma içeren yeterli ses penceresi bulunamadı")
+        if chunks[0].shape[0] != self.dim:
+            raise ValueError(
+                f"ReDimNet2 gömme boyutu uyumsuz: {chunks[0].shape[0]} != {self.dim}"
+            )
+        return np.stack(chunks)
+
+    def _speech_windows(self, samples: np.ndarray, sample_rate: int) -> list[np.ndarray]:
+        samples = np.asarray(samples, dtype=np.float32)
+        if samples.ndim > 1:
+            samples = samples.mean(axis=-1)
+        samples = np.ascontiguousarray(np.clip(samples.reshape(-1), -1.0, 1.0))
+        if sample_rate <= 0:
+            raise ValueError(f"geçersiz örnekleme hızı: {sample_rate}")
+        if sample_rate != 16000:
+            from scipy.signal import resample_poly
+
+            divisor = math.gcd(int(sample_rate), 16000)
+            samples = np.ascontiguousarray(
+                resample_poly(samples, 16000 // divisor, int(sample_rate) // divisor),
+                dtype=np.float32,
+            )
+        window = max(1, round(self.window_seconds * 16000))
+        hop = max(1, round(self.hop_seconds * 16000))
+        minimum = max(1, round(self.min_seconds * 16000))
+        if samples.size < minimum:
+            raise ValueError(
+                f"ses çok kısa ({samples.size / 16000:.2f}sn < {self.min_seconds:.2f}sn)"
+            )
+        starts = range(0, max(1, samples.size - minimum + 1), hop)
+        windows: list[np.ndarray] = []
+        for start in starts:
+            chunk = samples[start : start + window]
+            if chunk.size < minimum:
+                continue
+            rms = float(np.sqrt(np.mean(chunk.astype(np.float64) ** 2)))
+            if rms < self.rms_threshold:
+                continue
+            if chunk.size < window:
+                chunk = np.pad(chunk, (0, window - chunk.size))
+            windows.append(np.ascontiguousarray(chunk, dtype=np.float32))
+        if not windows:
+            raise ValueError("konuşma içeren yeterli ses penceresi bulunamadı")
+        return windows
 
     def embed_pcm(self, pcm: bytes, sample_rate: int, width: int, channels: int) -> np.ndarray:
         return self.embed_samples(pcm_to_f32(pcm, width, channels), sample_rate)
@@ -248,60 +236,24 @@ class SpeakerID:
             )
             return None, 0.0
         q = _l2(np.asarray(emb, dtype=np.float32))
-        raw_sims = self._centroids @ q  # ham kosinüs (centroid'ler L2-normalize)
-        if self._asnorm_active and self._cohort is not None:
-            # AS-norm: her identify()'de SADECE test gömmenin cohort istatistiği
-            # hesaplanır (N nokta-çarpım, ucuz); centroid'lerin (μ_e,σ_e) önbellekten.
-            # s_norm = 0.5*((s-μ_t)/σ_t + (s-μ_e)/σ_e) — deneyde kanıtlanan simetrik form.
-            st = self._cohort @ q  # test ↔ cohort
-            mu_t, sd_t = _topk_stats(st, self.asnorm_k)
-            mu_e = self._cent_asnorm_stats[:, 0]
-            sd_e = self._cent_asnorm_stats[:, 1]
-            scores = 0.5 * ((raw_sims - mu_t) / sd_t + (raw_sims - mu_e) / sd_e)
-            thr, margin, scale = self.asnorm_threshold, self.asnorm_margin, "asnorm"
-        else:
-            # Geri-düşüş: ham kosinüs + eski eşik/marj (mevcut davranış).
-            scores = raw_sims
-            thr, margin, scale = self.threshold, self.margin, "ham"
+        scores = self._centroids @ q
         order = np.argsort(scores)[::-1]
         ranking = [(self._names[i], float(scores[i])) for i in order]
         self.last_ranking_top2 = ranking[:2]
         best = ranking[0][1]
         second = ranking[1][1] if len(ranking) > 1 else -1e9
-        # Her çağrıda (saniyede bir) INFO basmak log'u boğuyordu; skor dökümü
-        # sadece hata ayıklarken lazım, o yüzden unknown'da DEBUG'a indi.
-        # NOT: dönen skor `scale`'e göre (asnorm ölçeği ham 0-1 DEĞİL, ~[-14,+8]).
-        if best < thr or (best - second) < margin:
+        if best < self.threshold or (best - second) < self.margin:
             log.debug(
-                "speaker-ID skorlar [%s]: %s (eşik=%.2f marj=%.2f)",
-                scale, ", ".join(f"{n}={s:.3f}" for n, s in ranking), thr, margin,
+                "speaker-ID skorlar: %s (eşik=%.3f marj=%.3f)",
+                ", ".join(f"{n}={s:.3f}" for n, s in ranking),
+                self.threshold, self.margin,
             )
             return None, best
-        log.info("speaker-ID tanındı [%s]: %s (skor=%.3f)", scale, ranking[0][0], best)
-        self._log_shadow(scale, ranking[0][0], best, second, thr)
+        log.info(
+            "speaker-ID tanındı: %s (skor=%.3f, marj=%.3f)",
+            ranking[0][0], best, best - second,
+        )
         return ranking[0][0], best
-
-    def _log_shadow(
-        self, scale: str, name: str, best: float, second: float, thr: float
-    ) -> None:
-        """Kabul kararını DEĞİŞTİRMEDEN "daha sıkı eşik ne yapardı"yı yaz.
-
-        Hiçbir dönüş değeri yok, hiçbir alan güncellenmiyor: bu satır sadece bir
-        sonraki turda eşiği veriyle seçebilmek için dağılım biriktirir."""
-        if not self.shadow_thresholds:
-            return
-        try:
-            verdicts = ", ".join(
-                f"{t:+.2f}→{'KABUL' if best >= t else 'RED'}"
-                for t in self.shadow_thresholds
-            )
-            log.info(
-                "gölge ölçüm [%s]: KABUL %s skor=%.3f (2.=%.3f, marj=%.3f, canlı eşik=%.2f)"
-                " | %s — karar DEĞİŞMEDİ",
-                scale, name, best, second, best - second, thr, verdicts,
-            )
-        except Exception:  # noqa: BLE001 — ölçüm ASLA tanımayı bozmasın
-            pass
 
     def best_match(self, emb: np.ndarray) -> tuple[str | None, float]:
         """HAM en-yakın centroid (eşik/marj UYGULANMAZ). Enroll öncesi "bu ses
@@ -398,9 +350,6 @@ class SpeakerID:
         self._centroids = (
             np.stack(cents) if cents else np.zeros((0, self.dim), dtype=np.float32)
         )
-        # Centroid'ler değişti → AS-norm (μ_e,σ_e) önbelleğini yenile. enroll/auto-learn
-        # de reload() üzerinden geçtiği için önbellek otomatik güncel kalır.
-        self._recompute_centroid_asnorm_stats()
         log.info("speaker-ID: %d kişi yüklendi (%s)", len(names), ", ".join(names) or "—")
 
 
@@ -441,7 +390,13 @@ CREATE INDEX IF NOT EXISTS idx_expression_speaker ON speaker_expression_samples(
 
 
 def _default_db_path() -> str:
-    return _resolve(os.getenv("SPEAKER_DB", "data/speakers.db"))
+    raw = os.getenv("SPEAKER_DB", "data/speakers-redimnet2.db")
+    if Path(raw).name == "speakers.db":
+        raise RuntimeError(
+            "eski speakers.db ReDimNet2 ile kullanılamaz; "
+            "SPEAKER_DB=data/speakers-redimnet2.db ayarlayın"
+        )
+    return _resolve(raw)
 
 
 def name_key(name: str) -> str:
@@ -503,6 +458,7 @@ class SpeakerStore:
         now = time.time()
         conn = self._connect()
         try:
+            self._validate_sample(conn, speaker_id, embedding, dim, model_id)
             cur = conn.execute(
                 "INSERT INTO speaker_samples (speaker_id, embedding, source, created_at)"
                 " VALUES (?, ?, ?, ?)",
@@ -511,8 +467,8 @@ class SpeakerStore:
             conn.execute(
                 "UPDATE speakers SET"
                 "  sample_count = (SELECT COUNT(*) FROM speaker_samples WHERE speaker_id = ?),"
-                "  dim = COALESCE(dim, ?),"
-                "  model_id = COALESCE(model_id, ?),"
+                "  dim = ?,"
+                "  model_id = ?,"
                 "  updated_at = ?"
                 " WHERE id = ?",
                 (speaker_id, dim, model_id, now, speaker_id),
@@ -521,6 +477,33 @@ class SpeakerStore:
             return cur.lastrowid
         finally:
             conn.close()
+
+    @staticmethod
+    def _validate_sample(
+        conn: sqlite3.Connection,
+        speaker_id: int,
+        embedding: bytes,
+        dim: int,
+        model_id: str,
+    ) -> None:
+        """Farklı embedding uzaylarının aynı profile karışmasını engelle."""
+        row = conn.execute(
+            "SELECT dim, model_id FROM speakers WHERE id = ?", (speaker_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"konuşmacı bulunamadı: {speaker_id}")
+        if dim <= 0 or len(embedding) != dim * 4:
+            raise ValueError(
+                f"geçersiz embedding: {len(embedding)} bayt, beklenen {dim * 4}"
+            )
+        if row["dim"] is not None and int(row["dim"]) != int(dim):
+            raise ValueError(
+                f"embedding boyutu profile uymuyor: {dim} != {row['dim']}"
+            )
+        if row["model_id"] and str(row["model_id"]) != str(model_id):
+            raise ValueError(
+                f"embedding modeli profile uymuyor: {model_id} != {row['model_id']}"
+            )
 
     def _list_speakers(self) -> list[dict]:
         conn = self._connect()
@@ -551,6 +534,7 @@ class SpeakerStore:
         conn = self._connect()
         try:
             with conn:  # tek transaction: insert + budama atomik
+                self._validate_sample(conn, speaker_id, embedding, dim, model_id)
                 cur = conn.execute(
                     "INSERT INTO speaker_samples (speaker_id, embedding, source, created_at)"
                     " VALUES (?, ?, 'auto-learn', ?)",
@@ -570,8 +554,8 @@ class SpeakerStore:
                 conn.execute(
                     "UPDATE speakers SET"
                     "  sample_count = (SELECT COUNT(*) FROM speaker_samples WHERE speaker_id = ?),"
-                    "  dim = COALESCE(dim, ?),"
-                    "  model_id = COALESCE(model_id, ?),"
+                    "  dim = ?,"
+                    "  model_id = ?,"
                     "  updated_at = ?"
                     " WHERE id = ?",
                     (speaker_id, dim, model_id, now, speaker_id),
@@ -588,6 +572,17 @@ class SpeakerStore:
                 (speaker_id,),
             )
             return [(r["embedding"], r["source"]) for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+    def _has_sample_source(self, speaker_id: int, source: str) -> bool:
+        conn = self._connect()
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM speaker_samples WHERE speaker_id = ? AND source = ? LIMIT 1",
+                (speaker_id, source),
+            ).fetchone()
+            return row is not None
         finally:
             conn.close()
 
@@ -644,6 +639,9 @@ class SpeakerStore:
     def all_speaker_embeddings_sync(self) -> list[dict]:
         return self._all_with_embeddings()
 
+    def has_sample_source_sync(self, speaker_id: int, source: str) -> bool:
+        return self._has_sample_source(speaker_id, source)
+
     # ---- async sarmalayıcı (worker event loop'unu bloklamaz) ----
 
     async def create_speaker(self, name: str, user_id: int | None = None) -> dict:
@@ -697,55 +695,62 @@ def _f(name: str, default: float) -> float:
         return default
 
 
-def _shadow_thresholds() -> tuple[float, ...]:
-    """SPEAKER_SHADOW_THRESHOLDS="-0.5,0.0,0.5" → (-0.5, 0.0, 0.5). Boş = kapalı."""
-    raw = os.getenv("SPEAKER_SHADOW_THRESHOLDS")
-    if raw is None:
-        raw = "-0.5,0.0,0.5"
-    out: list[float] = []
-    for part in raw.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        try:
-            out.append(float(part))
-        except ValueError:
-            log.warning("SPEAKER_SHADOW_THRESHOLDS geçersiz parça: %r — atlandı", part)
-    return tuple(out)
+def _i(name: str, default: int) -> int:
+    try:
+        return int(float(os.getenv(name, "") or default))
+    except (TypeError, ValueError):
+        return default
+
+
+def create_speaker_id() -> SpeakerID:
+    """Ortak ReDimNet2 yapılandırmasını CLI ve LiveKit Agent için kur."""
+    model_id = os.getenv(
+        "SPEAKER_MODEL_ID", "redimnet2-b6-vb2+vox2_v0-lm"
+    )
+    if not model_id.startswith("redimnet2-"):
+        raise RuntimeError(
+            f"eski/uyumsuz SPEAKER_MODEL_ID={model_id!r}; ReDimNet2 profili gerekli"
+        )
+    return SpeakerID(
+        device=os.getenv("SPEAKER_DEVICE", "cpu"),
+        model_repo=os.getenv("SPEAKER_MODEL_REPO", "PalabraAI/redimnet2"),
+        model_repo_dir=(os.getenv("SPEAKER_MODEL_REPO_DIR") or None),
+        model_name=os.getenv("SPEAKER_MODEL_NAME", "b6"),
+        dataset=os.getenv("SPEAKER_MODEL_DATASET", "vb2+vox2_v0"),
+        train_type=os.getenv("SPEAKER_MODEL_TRAIN_TYPE", "lm"),
+        model_id=model_id,
+        dim=_i("SPEAKER_EMBEDDING_DIM", 192),
+        threshold=_f("SPEAKER_THRESHOLD", 0.5683009803),
+        margin=_f("SPEAKER_MARGIN", 0.2146433070),
+        merge_low=_f("SPEAKER_MERGE_LOW", 0.50),
+        enroll_weight=_f("SPEAKER_ENROLL_WEIGHT", 0.7),
+        drift_warn_frac=_f("SPEAKER_DRIFT_WARN_FRAC", 0.10),
+        min_profiles_for_auto_match=_i("SPEAKER_MIN_PROFILES_FOR_AUTO_MATCH", 2),
+        window_seconds=_f("SPEAKER_WINDOW_SECONDS", 3.0),
+        hop_seconds=_f("SPEAKER_MIN_SECONDS", 1.5),
+        min_seconds=_f("SPEAKER_MIN_SECONDS", 1.5),
+        rms_threshold=_f("SPEAKER_VAD_RMS", 0.008),
+        batch_size=_i("SPEAKER_BATCH_SIZE", 16),
+        num_threads=_i("SPEAKER_NUM_THREADS", 2),
+    )
 
 
 def build_speaker_id() -> "SpeakerID | None":
-    """Env'e göre SpeakerID kur; SPEAKER_ID_ENABLED kapalı / model yok /
-    sherpa-onnx yok ise None döner (Faz 2 aynen çalışsın)."""
+    """Etkinse ReDimNet2'yi kur; hata halinde Agent'ı speaker-ID'siz bırak."""
     if not _b("SPEAKER_ID_ENABLED", False):
         return None
-    model_path = _resolve(os.getenv("SPEAKER_MODEL_PATH", "models/campplus.onnx"))
-    if not os.path.isfile(model_path):
-        log.warning("SPEAKER_ID_ENABLED açık ama model yok: %s — kapalı", model_path)
-        return None
-    model_id = os.getenv("SPEAKER_MODEL_ID", "campplus_zh_en_advanced_v1")
     try:
-        sp = SpeakerID(
-            model_path,
-            model_id,
-            _f("SPEAKER_THRESHOLD", 0.45),
-            _f("SPEAKER_MARGIN", 0.05),
-            merge_low=_f("SPEAKER_MERGE_LOW", 0.35),
-            enroll_weight=_f("SPEAKER_ENROLL_WEIGHT", 0.7),
-            drift_warn_frac=_f("SPEAKER_DRIFT_WARN_FRAC", 0.10),
-            asnorm_enabled=_b("SPEAKER_ASNORM_ENABLED", True),
-            asnorm_cohort_path=os.getenv("SPEAKER_ASNORM_COHORT", "models/asnorm_cohort.npy"),
-            asnorm_k=int(_f("SPEAKER_ASNORM_K", 40)),
-            asnorm_threshold=_f("SPEAKER_ASNORM_THRESHOLD", -1.0),
-            asnorm_margin=_f("SPEAKER_ASNORM_MARGIN", 1.0),
-            min_profiles_for_auto_match=int(_f("SPEAKER_MIN_PROFILES_FOR_AUTO_MATCH", 2)),
-            shadow_thresholds=_shadow_thresholds(),
-        )
+        sp = create_speaker_id()
         log.info(
-            "speaker-ID etkin: %s (dim=%d, eşik=%.2f, marj=%.2f, merge_low=%.2f,"
-            " enroll_w=%.2f, drift_warn_frac=%.2f, asnorm=%s, auto_min_profiles=%d)",
-            model_path, sp.dim, sp.threshold, sp.margin, sp.merge_low,
-            sp.enroll_weight, sp.drift_warn_frac, sp._asnorm_active,
+            "speaker-ID etkin: %s/%s (cihaz=%s, dim=%d, eşik=%.3f, marj=%.3f,"
+            " merge_low=%.2f, auto_min_profiles=%d)",
+            os.getenv("SPEAKER_MODEL_REPO", "PalabraAI/redimnet2"),
+            sp.model_id,
+            sp.device,
+            sp.dim,
+            sp.threshold,
+            sp.margin,
+            sp.merge_low,
             sp.min_profiles_for_auto_match,
         )
         return sp

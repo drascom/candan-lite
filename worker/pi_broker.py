@@ -30,13 +30,21 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-# Broker da agent gibi worker/.env'i bizzat yükler. systemd EnvironmentFile
-# kullanılmıyor; boşluk içeren Türkçe değerler için güvenilir yol bu.
-load_dotenv(Path(__file__).resolve().parent / ".env")
+# Normal broker agent ile aynı worker/.env'i yükler. Dev broker ise ayrı OS
+# kullanıcısıdır ve LiveKit/üretim sırlarını görmemelidir; systemd ona yalnız
+# seçilmiş Pi ayarlarını içeren ayrı bir dosya verir.
+_broker_env_file = os.environ.get("PI_BROKER_ENV_FILE")
+load_dotenv(
+    Path(_broker_env_file)
+    if _broker_env_file
+    else Path(__file__).resolve().parent / ".env"
+)
 
 from pi_brain import (
     DEV_WORKTREE,
     PI_BROKER_SOCKET,
+    PI_DEV_SESSION_DIR,
+    PI_RPC_STREAM_LIMIT,
     PI_SESSION_DIR,
     REPO_ROOT,
     _build_pi_args,
@@ -93,10 +101,70 @@ def _warmup_interval() -> float:
     return float(raw) if raw not in (None, "") else 900.0
 
 
+def _probe_timeout() -> float:
+    """Kiralamadan önce Pi RPC sağlık sorgusuna verilecek kısa süre."""
+    try:
+        return max(0.5, float(os.environ.get("PI_BROKER_PROBE_TIMEOUT") or 3.0))
+    except ValueError:
+        return 3.0
+
+
 def _session_dir() -> Path:
     """Normal (dev olmayan) oturumların jsonl dizini — `_build_pi_args` ile aynı kural."""
     path = Path(PI_SESSION_DIR)
     return path if path.is_absolute() else REPO_ROOT / path
+
+
+def _session_entries(
+    session_id: str,
+    session_dir: Path,
+    since: Optional[str] = None,
+) -> tuple[list[dict], Optional[str]]:
+    """Pi'nin append-only JSONL'inden etkin dalı ve leaf cursor'ını oku.
+
+    Bazı eski/uzun oturumlarda Pi'nin kendi `get_entries` RPC komutu süresiz
+    bekleyebiliyor. Broker aynı dosyaya zaten salt-okunur eriştiği için cursor
+    sorgusunu model sürecine sokmadan burada cevaplar. Son yazılan entry etkin
+    leaf'tir; parentId zincirini geriye izlemek dallanmış geçmişte yalnız etkin
+    dalı döndürür.
+    """
+    path = _find_session_file(session_id, session_dir)
+    if path is None:
+        return [], None
+    ordered: list[dict] = []
+    by_id: dict[str, dict] = {}
+    with path.open("r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(entry, dict) or not entry.get("id"):
+                continue
+            entry_id = str(entry["id"])
+            ordered.append(entry)
+            by_id[entry_id] = entry
+    if not ordered:
+        return [], None
+    leaf = str(ordered[-1]["id"])
+    branch_rev: list[dict] = []
+    seen: set[str] = set()
+    cursor: Optional[str] = leaf
+    while cursor and cursor not in seen:
+        seen.add(cursor)
+        entry = by_id.get(cursor)
+        if entry is None:
+            break
+        branch_rev.append(entry)
+        parent = entry.get("parentId")
+        cursor = str(parent) if parent else None
+    branch = list(reversed(branch_rev))
+    if since is not None:
+        for index, entry in enumerate(branch):
+            if str(entry.get("id") or "") == since:
+                return branch[index + 1 :], leaf
+        raise RuntimeError(f"Entry not found: {since}")
+    return branch, leaf
 
 
 @dataclass(frozen=True)
@@ -190,6 +258,8 @@ class PiProcess:
         self._warm_q: Optional[asyncio.Queue] = None
         self._warm_lock = asyncio.Lock()
         self._warm_cancel: Optional[asyncio.Event] = None
+        self.generation = 0
+        self._planned_pids: set[int] = set()
 
     @property
     def running(self) -> bool:
@@ -215,10 +285,14 @@ class PiProcess:
                 dev=self.key.dev,
                 mem_user=mem_user,
             )
+            # Pi session header'ı cwd'yi proje kimliğinin parçası sayar. Normal
+            # süreci başka dizinde başlatmak mevcut `candan` geçmişini bulamaz;
+            # `--no-approve` proje ayar/paketlerini zaten kapattığı için burada
+            # repo cwd'sini korumak güvenli ve geçmiş uyumluluğu için zorunludur.
             cwd = DEV_WORKTREE if self.key.dev else REPO_ROOT
             # Dev modundaki çalışma dizini _build_pi_args tarafından session için
             # sabitlenir; burada da mevcut işlevdeki varsayılanı koruyoruz.
-            self.proc = await asyncio.create_subprocess_exec(
+            proc = await asyncio.create_subprocess_exec(
                 *args,
                 cwd=str(cwd),
                 env={
@@ -228,10 +302,20 @@ class PiProcess:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=PI_RPC_STREAM_LIMIT,
             )
-            self._stdout_task = asyncio.create_task(self._pump_stdout())
-            self._stderr_task = asyncio.create_task(self._pump_stderr())
-            log.info("pi açıldı: %s (pid=%s)", self.key.label, self.proc.pid)
+            self.proc = proc
+            self.generation += 1
+            # Pump görevleri süreci yerel değişkende taşır. `self.proc` yeniden
+            # spawn sırasında değişirse eski görev yeni sürecin pipe'ına atlamaz.
+            self._stdout_task = asyncio.create_task(self._pump_stdout(proc))
+            self._stderr_task = asyncio.create_task(self._pump_stderr(proc))
+            log.info(
+                "pi açıldı: %s (pid=%s generation=%d)",
+                self.key.label,
+                proc.pid,
+                self.generation,
+            )
 
     async def attach(self, writer: asyncio.StreamWriter) -> bool:
         async with self._state_lock:
@@ -252,10 +336,48 @@ class PiProcess:
         proc.stdin.write(raw)
         await proc.stdin.drain()
 
-    async def _pump_stdout(self) -> None:
-        assert self.proc is not None and self.proc.stdout is not None
+    async def probe(self, timeout: float) -> bool:
+        """Model çağırmadan Pi RPC döngüsünün stdin/stdout yanıt verdiğini sınar.
+
+        Uzun süre boşta kalan bir Node/Pi süreci işletim sistemi açısından canlı
+        kalabildiği hâlde RPC komutlarını tüketmeyi bırakabiliyor. Böyle bir süreci
+        gerçek kullanıcıya kiralamak her turu cursor zaman aşımına sokar. Client henüz
+        bağlı değilken `get_state` gönderip eşleşen response'u beklemek bu yarı-canlı
+        durumu ucuz ve yan etkisiz biçimde yakalar.
+        """
+        if self.busy:
+            return False
+        request_id = f"broker-probe-{os.urandom(8).hex()}"
+        q: asyncio.Queue = asyncio.Queue()
+        self._warm_q = q
+        deadline = asyncio.get_running_loop().time() + timeout
         try:
-            while line := await self.proc.stdout.readline():
+            await self.send_raw(
+                (json.dumps({"type": "get_state", "id": request_id}) + "\n").encode()
+            )
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time()
+                if remaining <= 0:
+                    return False
+                try:
+                    line = await asyncio.wait_for(q.get(), timeout=remaining)
+                except asyncio.TimeoutError:
+                    return False
+                try:
+                    obj = json.loads(line)
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                if obj.get("type") == "response" and obj.get("id") == request_id:
+                    return bool(obj.get("success"))
+        except Exception:  # noqa: BLE001 — çağıran taze süreçle yeniden deneyecek
+            return False
+        finally:
+            self._warm_q = None
+
+    async def _pump_stdout(self, proc: asyncio.subprocess.Process) -> None:
+        assert proc.stdout is not None
+        try:
+            while line := await proc.stdout.readline():
                 client = self._client
                 if client is None or client.is_closing():
                     # Kullanıcı ayrılmış olabilir; satırı tüket ama Pi'yi öldürme.
@@ -269,12 +391,29 @@ class PiProcess:
                 except (ConnectionError, OSError):
                     await self.detach(client)
         finally:
-            client = self._client
-            if client is not None and not client.is_closing():
-                with contextlib.suppress(Exception):
-                    client.write(b'{"type":"broker_error","error":"pi process exited"}\n')
-                    await client.drain()
-            log.warning("pi kapandı: %s", self.key.label)
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            current = self.proc is proc
+            # Eski sürecin geç kalan finally'si, yeni spawn'a bağlı client'ı
+            # düşürmesin. Yalnız hâlâ güncel süreç buysa hata gönder.
+            if current:
+                client = self._client
+                if client is not None and not client.is_closing():
+                    with contextlib.suppress(Exception):
+                        client.write(
+                            (json.dumps({
+                                "type": "broker_error",
+                                "error": f"pi process exited (code={proc.returncode})",
+                            }) + "\n").encode()
+                        )
+                        await client.drain()
+            planned = proc.pid in self._planned_pids
+            self._planned_pids.discard(proc.pid)
+            log_fn = log.info if planned else log.warning
+            log_fn(
+                "pi kapandı: %s (pid=%s code=%s current=%s planned=%s)",
+                self.key.label, proc.pid, proc.returncode, current, planned,
+            )
 
     async def warm(self, prompt: str, timeout: float, cancel: asyncio.Event) -> bool:
         """Tek ısıtma turu: prompt gönder, `agent_settled`'a kadar çıktıyı YUT.
@@ -324,11 +463,29 @@ class PiProcess:
         async with self._warm_lock:
             return
 
-    async def _pump_stderr(self) -> None:
-        assert self.proc is not None and self.proc.stderr is not None
-        while line := await self.proc.stderr.readline():
+    async def _pump_stderr(self, proc: asyncio.subprocess.Process) -> None:
+        assert proc.stderr is not None
+        while line := await proc.stderr.readline():
             text = line.decode(errors="replace").strip()
-            if text:
+            if not text:
+                continue
+            low = text.casefold()
+            routine = (
+                "packages are looking for funding",
+                "run `npm fund`",
+                "found 0 vulnerabilities",
+                "npm notice",
+                "npm warn deprecated",
+                "added ",
+                "audited ",
+                "startup session lookup, project settings",
+                "runtime creation, project settings",
+            )
+            if any(token in low for token in routine):
+                log.debug("pi[%s]: %s", self.key.session_id, text)
+            elif low.startswith("error:"):
+                log.warning("pi[%s]: %s", self.key.session_id, text)
+            else:
                 log.info("pi[%s]: %s", self.key.session_id, text)
 
     async def stop(self, *, reloaded: bool = False) -> None:
@@ -343,6 +500,8 @@ class PiProcess:
                     await client.drain()
             if proc is None:
                 return
+            if proc.pid is not None:
+                self._planned_pids.add(proc.pid)
             with contextlib.suppress(ProcessLookupError):
                 proc.terminate()
             try:
@@ -357,8 +516,9 @@ class PiProcess:
 
 
 class PiBroker:
-    def __init__(self, socket_path: Path):
+    def __init__(self, socket_path: Path, allowed_mode: str = "all"):
         self.socket_path = socket_path
+        self.allowed_mode = allowed_mode
         self._processes: dict[BrokerKey, PiProcess] = {}
         self._lock = asyncio.Lock()
         self._server: Optional[asyncio.AbstractServer] = None
@@ -400,6 +560,9 @@ class PiBroker:
 
     async def prewarm_defaults(self) -> None:
         """Servis açılışı/reload sonrası varsayılan Pi süreçlerini tekrar sıcak tut."""
+        if self.allowed_mode == "dev":
+            log.info("dev broker: normal persona prewarm atlandı")
+            return
         for key in _prewarm_specs():
             try:
                 process = await self.process_for(key)
@@ -449,6 +612,9 @@ class PiBroker:
 
     async def keepalive_loop(self) -> None:
         """Periyodik hafif ısıtma. Aktif konuşma sırasında ÇALIŞMAZ (tek slot)."""
+        if self.allowed_mode == "dev":
+            log.info("dev broker: keepalive ısıtması kapalı")
+            return
         interval = _warmup_interval()
         if not _warmup_enabled() or interval <= 0:
             log.info("keepalive ısıtması kapalı")
@@ -481,12 +647,35 @@ class PiBroker:
                 await writer.drain()
                 return
             key = _key_from_hello(hello)
+            if self.allowed_mode == "normal" and key.dev:
+                raise RuntimeError("dev oturumu normal broker'da reddedildi")
+            if self.allowed_mode == "dev" and not key.dev:
+                raise RuntimeError("normal oturum dev broker'da reddedildi")
             process = await self.process_for(key)
             # Gerçek kullanıcı ısıtmayı ezer: süren ısıtma kesilir, geçmişi geri
             # alınır, süreç temiz doğar. Sonra kiralama yapılır.
             await process.yield_warm()
-            await process.start()  # ısıtma süreci yeniden doğurmuş olabilir (idempotent)
-            if not await process.attach(writer):
+            attached = False
+            async with process._warm_lock:
+                # Aynı key için eşzamanlı ikinci client geldiyse mevcut kiralamaya
+                # dokunma; sağlık probe'u yanıtını ilk client'a kaçırırdı.
+                if not process.busy:
+                    await process.start()  # ısıtma süreci yeniden doğurmuş olabilir
+                    if not await process.probe(_probe_timeout()):
+                        stale_pid = process.proc.pid if process.proc is not None else None
+                        log.warning(
+                            "pi RPC sağlık sorgusu yanıtsız → süreç yenileniyor: %s "
+                            "(pid=%s generation=%d)",
+                            key.label,
+                            stale_pid,
+                            process.generation,
+                        )
+                        await process.stop()
+                        await process.start()
+                        if not await process.probe(_probe_timeout()):
+                            raise RuntimeError("pi RPC sağlık sorgusu taze süreçte de başarısız")
+                    attached = await process.attach(writer)
+            if not attached:
                 writer.write(
                     json.dumps(
                         {"type": "broker_error", "error": "pi oturumu zaten kullanımda"}
@@ -495,7 +684,12 @@ class PiBroker:
                 )
                 await writer.drain()
                 return
-            writer.write((json.dumps({"type": "broker_ready", "key": key.label}) + "\n").encode())
+            writer.write((json.dumps({
+                "type": "broker_ready",
+                "key": key.label,
+                "pid": process.proc.pid if process.proc is not None else None,
+                "generation": process.generation,
+            }) + "\n").encode())
             await writer.drain()
             while raw := await reader.readline():
                 try:
@@ -510,6 +704,50 @@ class PiBroker:
                     # ile bir sonraki bağlantı onu güncel session dosyasından taze açar.
                     await process.stop()
                     break
+                if msg.get("type") == "get_entries":
+                    # Cursor/yeniden-bağlanma güvenliği için gereken bu okuma Pi
+                    # sürecine gönderilmez. Eski Candan session'ında Pi RPC burada
+                    # takılıp prompt'u da arkasında bloke ediyordu.
+                    request_id = msg.get("id")
+                    try:
+                        session_dir = PI_DEV_SESSION_DIR if key.dev else _session_dir()
+                        entries, leaf = await asyncio.to_thread(
+                            _session_entries,
+                            key.session_id,
+                            session_dir,
+                            str(msg["since"]) if msg.get("since") else None,
+                        )
+                        # Cursor güvenliği için içerik metni/tool payload'ı gerekmez;
+                        # yalnız id, entry tipi ve message rolü kullanılır. Uzun session
+                        # metnini Unix socket'te her tur yeniden taşımayız.
+                        compact_entries: list[dict] = []
+                        for entry in entries:
+                            compact: dict = {
+                                "id": entry.get("id"),
+                                "type": entry.get("type"),
+                            }
+                            message = entry.get("message")
+                            if isinstance(message, dict):
+                                compact["message"] = {"role": message.get("role")}
+                            compact_entries.append(compact)
+                        response = {
+                            "id": request_id,
+                            "type": "response",
+                            "command": "get_entries",
+                            "success": True,
+                            "data": {"entries": compact_entries, "leafId": leaf},
+                        }
+                    except Exception as exc:  # noqa: BLE001 — Pi RPC biçiminde hata
+                        response = {
+                            "id": request_id,
+                            "type": "response",
+                            "command": "get_entries",
+                            "success": False,
+                            "error": str(exc),
+                        }
+                    writer.write((json.dumps(response) + "\n").encode())
+                    await writer.drain()
+                    continue
                 await process.send_raw(raw)
         except Exception as exc:  # noqa: BLE001 — broker tek client hatasıyla ölmesin
             log.warning("broker client hatası: %s", exc)
@@ -570,8 +808,8 @@ def _prewarm_specs() -> list[BrokerKey]:
     return out
 
 
-async def _run(socket_path: Path) -> None:
-    broker = PiBroker(socket_path)
+async def _run(socket_path: Path, allowed_mode: str = "all") -> None:
+    broker = PiBroker(socket_path, allowed_mode=allowed_mode)
     await broker.start()
     await broker.prewarm_defaults()
     keepalive = asyncio.create_task(broker.keepalive_loop())
@@ -609,6 +847,10 @@ async def _request_reload(socket_path: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--socket", default=PI_BROKER_SOCKET or "/run/candan/pi-broker.sock")
+    parser.add_argument(
+        "--allow-mode", choices=("normal", "dev", "all"), default="all",
+        help="bu broker'ın kabul edeceği Pi oturum türü",
+    )
     parser.add_argument("--reload", action="store_true", help="yaşayan Pi süreçlerini yenile")
     args = parser.parse_args()
     logging.basicConfig(level=os.environ.get("PI_BROKER_LOG_LEVEL", "INFO"))
@@ -616,7 +858,7 @@ def main() -> int:
     if args.reload:
         return asyncio.run(_request_reload(socket_path))
     try:
-        asyncio.run(_run(socket_path))
+        asyncio.run(_run(socket_path, args.allow_mode))
     except KeyboardInterrupt:
         pass
     return 0

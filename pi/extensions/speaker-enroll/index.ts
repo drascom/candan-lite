@@ -9,10 +9,10 @@
  * Sesli worker (Python, worker/pi_brain.py) pi'nin stdout event akışındaki toolCall'ı
  * görür (_detect_enroll_signal) ve turun sonunda _enroll_tool'u çalıştırır.
  *
- * NEDEN kayıt burada değil: ses embedding'leri (campplus pencereleri) worker'ın
+ * NEDEN kayıt burada değil: ses embedding'leri (ReDimNet2 pencereleri) worker'ın
  * BELLEĞİNDE yaşıyor — bu Node süreci onlara erişemez. Kaydın deterministik denetimi
  * (isim tek kelime mi, örnekler tutarlı mı, ses zaten kayıtlı birine mi ait) ve
- * speakers.db'ye yazma bu yüzden Python tarafında. Sonucu da KULLANICIYA WORKER söyler:
+ * speakers-redimnet2.db'ye yazma bu yüzden Python tarafında. Sonucu da KULLANICIYA WORKER söyler:
  * modelin "kaydettim" deyip geçmesi bu repo'da ÖLÇÜLMÜŞ bir hata sınıfı, o yüzden son
  * söz koda ait. Model bu tool'un dönüş metnini tekrar etmemeli.
  *
