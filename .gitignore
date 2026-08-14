@@ -51,6 +51,17 @@ worker/data/
 # testler: kullanıcı kararı — ne git'te ne sunucuda dursun.
 worker/tests/
 
+# 2026-08-14 kullanıcı kararı: repo ÇALIŞAN KODA indirildi.
+# Aşağıdaki dizinler artık git'te izlenmiyor. Dosyalar Mac'te DURUYOR ve eski
+# git geçmişinde de duruyor — sadece bundan sonrası takip edilmiyor.
+# Geri getirmek gerekirse: git checkout <commit> -- <yol>
+/experiments/
+/web/
+/handoff/
+/bench/
+/docs/
+/assets/
+
 # os / editor
 .DS_Store
 *.log

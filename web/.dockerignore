@@ -1,5 +1,0 @@
-.git
-.next
-node_modules
-.env*
-pnpm-debug.log*
