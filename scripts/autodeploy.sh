@@ -24,6 +24,8 @@
 #     kullanıcıyı yarıda keser; bir tur beklemek (60 sn) bedava.
 #
 # Kayıt: worker/logs/deploy.jsonl (satır başına bir JSON). logs/ gitignore'da.
+#
+# Uçtan uca ilk doğrulama: 2026-08-14, bu yorum satırının push'u ile yapıldı.
 set -euo pipefail
 
 KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
