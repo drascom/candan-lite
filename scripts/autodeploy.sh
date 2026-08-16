@@ -2,13 +2,32 @@
 # Otomatik deploy — `origin/main`'e her push, sunucuda canlıya iner.
 #
 # NEREDE KOŞAR: sunucu (root@192.168.0.25), `candan-autodeploy.timer` ile 60 sn'de bir.
-# NE YAPAR: origin/main ilerlemişse kapıda statik kontrol koşar, temizse
-#           `git reset --hard` + `systemctl restart candan-worker`, sonra sağlık bakar.
+# NE YAPAR: origin/main ilerlemişse önce ALTYAPI ÖN KONTROLÜ, sonra kapıda statik
+#           kontrol, temizse `git reset --hard` + `systemctl restart candan-worker`,
+#           sonra sağlık bakar. Tutmazsa geri alır, üst üste 3 kez tutmazsa kendini kapatır.
 #
 # NEDEN VAR: 2026-08-14'e kadar deploy scp ile dosya kopyalıyordu (bkz.
 #   deploy-turn-identity.sh). Git'i atladığı için sunucu 3 HAFTA commit'i olmayan kod
 #   çalıştırdı; "sunucuda ne var" sorusunun cevabı kayboldu. Artık tek doğru kaynak
 #   `origin/main`: sunucu ondan başka bir şey çalıştıramaz.
+#
+# ── 2026-08-14 KAZASI (bu script 11 dakika canlıyı düşürdü) ───────────────────
+# Zincir: repo temizliğinde `handoff/` sunucudan silindi → `candan-worker.service`
+# içinde `ReadWritePaths=/opt/candan-lite/handoff` var ve `ProtectSystem=strict` ile
+# o dizinin VAR OLMASI zorunlu → çalışan süreç namespace'ini çoktan kurmuştu, silme
+# anında hiçbir şey olmadı; bomba İLK RESTART'ta patladı (`status=226/NAMESPACE`).
+# O restart'ı bu script'in uçtan uca testi tetikledi. Sağlık kontrolü doğru çalıştı
+# (kayıt yok → geri aldı) ama geri alma da AYNI sebepten tutmadı → `kritik`.
+# Ve timer 2 dakikada bir aynı şeyi baştan denedi. Worker 130 kez açılmayı denedi.
+#
+# Ders: sağlık/geri alma mantığı doğruydu; eksik olan iki şey vardı, ikisi de artık
+# burada:
+#   1. ÖN KONTROL (onkontrol) — restart'a gitmeden önce systemd'nin ihtiyaç duyduğu
+#      yollar dosya sisteminde gerçekten var mı diye bak. Bu bir GİT sorusu değil,
+#      DOSYA SİSTEMİ sorusu: yeni commit'in ağacına değil, sunucunun o anki haline
+#      bakılır. Yol eksikse deploy hiç başlamaz.
+#   2. DEVRE KESİCİ — art arda 3 başarısız tur olursa timer'ı kapat. Kırılmış bir
+#      ortamda sonsuz tekrar, hasarı onarmaz; büyütür.
 #
 # TASARIM KARARLARI (bilerek, tartışıldı):
 #   • Tetikleyici = her push. VERSION dosyası / sürüm karşılaştırması YOK; origin/main
@@ -22,22 +41,47 @@
 #     eski sürüm kesintisiz çalışmaya devam eder.
 #   • Aktif oturum varsa deploy ERTELENİR. Konuşmanın ortasında worker restart etmek
 #     kullanıcıyı yarıda keser; bir tur beklemek (60 sn) bedava.
+#   • Kırmızı bir commit TEKRAR DENENMEZ. Kapıdan geçemeyen kod 60 sn'de bir yeniden
+#     denense sonuç değişmez, sadece kayıt dosyası şişer. Commit değişince tekrar bakar.
+#
+# KULLANIM:
+#   scripts/autodeploy.sh              → normal tur (sunucuda timer bunu çağırır)
+#   scripts/autodeploy.sh --dry-run    → fetch + ön kontrol + ruff + py_compile koşar,
+#                                        reset/restart YAPMAZ, kayıt dosyasına YAZMAZ.
+#                                        Ön kontrolü ve kapıyı canlıyı kırmadan sınamak için.
+#
+# TEST KANCASI: AUTODEPLOY_TEST_EXTRA_PATH=/olmayan/yol ile ön kontrol listesine
+#   sahte bir yol eklenir. Ön kontrolün gerçekten durdurduğunu, gerçek dizinleri
+#   SİLMEDEN göstermek için var. Sadece sınama amaçlı; timer bunu asla set etmez.
 #
 # Kayıt: worker/logs/deploy.jsonl (satır başına bir JSON). logs/ gitignore'da.
+# Durum: worker/logs/.autodeploy-state.json (ardışık hata sayacı + son kırmızı commit).
 #
 # Uçtan uca ilk doğrulama: 2026-08-14, bu yorum satırının push'u ile yapıldı.
 set -euo pipefail
 
 KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SERVIS="${CANDAN_WORKER_SERVICE:-candan-worker}"
+TIMER="${CANDAN_AUTODEPLOY_TIMER:-candan-autodeploy.timer}"
 VENV="$KOK/worker/.venv/bin"
 KAYIT="$KOK/worker/logs/deploy.jsonl"
+DURUM="$KOK/worker/logs/.autodeploy-state.json"
 CALISMA="/tmp/candan-check"
 KILIT="/var/lock/candan-autodeploy.lock"
 SAGLIK_SANIYE="${AUTODEPLOY_SAGLIK_SANIYE:-60}"
+# Art arda kaç başarısız tur (kritik / geri_alindi) sonra timer kendini kapatsın.
+HATA_SINIRI="${AUTODEPLOY_HATA_SINIRI:-3}"
 # Son bu kadar saniye içinde job logu varsa "oturum açık" sayılır. Yanlış pozitifin
 # bedeli sadece 60 sn gecikme; yanlış negatifin bedeli kesilmiş konuşma. Cömert tut.
 OTURUM_PENCERE="${AUTODEPLOY_OTURUM_PENCERE:-180}"
+
+KURU=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run|-n) KURU=1 ;;
+    *) echo "bilinmeyen argüman: $arg" >&2; exit 64 ;;
+  esac
+done
 
 # ── Aynı anda iki kopya çalışmasın ────────────────────────────────────────────
 # Timer 60 sn'de bir tetikliyor; yavaş bir deploy (restart + 60 sn sağlık bekleme)
@@ -49,14 +93,65 @@ fi
 
 BASLANGIC=$SECONDS
 
-# JSON kaydı yaz. Alanlar görev tanımından: zaman, commit, onceki_commit, ruff,
-# py_compile, sonuc, sure_sn, not.
+# Kuru turda ne olup bittiğini anlat; normal turda tamamen sessiz.
+# NOT: `(( KURU )) && echo` YAZMA — KURU=0 iken fonksiyon 1 döner ve `set -e`
+# script'i öldürür. Bu dosyada aynı tuzağa birkaç yerde daha dikkat edildi.
+anlat() { if (( KURU )); then echo "[kuru] $*"; fi; }
+
+# ── Durum dosyası ─────────────────────────────────────────────────────────────
+# Tek satır JSON. jq sunucuda garanti değil; alanlar sabit ve düz olduğu için
+# sed ile okumak yeterli. Alanlar:
+#   ardisik_hata        : üst üste kaç kritik/geri_alindi turu oldu (başarı sıfırlar)
+#   son_kirmizi_commit  : kapıdan geçemeyen son commit — o commit tekrar denenmez
+#   son_onkontrol       : son ön kontrol hatasının metni — aynı hata her turda
+#                         kayda tekrar yazılmasın diye (60 sn'de bir aynı satır = gürültü)
+DURUM_ARDISIK=0
+DURUM_KIRMIZI=""
+DURUM_ONKONTROL=""
+
+durum_al() {
+  local anahtar="$1"
+  [[ -f "$DURUM" ]] || return 0
+  sed -n "s/.*\"$anahtar\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$DURUM" | head -n1
+}
+durum_al_sayi() {
+  local anahtar="$1"
+  [[ -f "$DURUM" ]] || return 0
+  sed -n "s/.*\"$anahtar\"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p" "$DURUM" | head -n1
+}
+
+durum_yukle() {
+  DURUM_ARDISIK="$(durum_al_sayi ardisik_hata)"; DURUM_ARDISIK="${DURUM_ARDISIK:-0}"
+  DURUM_KIRMIZI="$(durum_al son_kirmizi_commit)"
+  DURUM_ONKONTROL="$(durum_al son_onkontrol)"
+}
+
+durum_yaz() {
+  local ardisik="$1" kirmizi="$2" onkontrol="$3"
+  if (( KURU )); then
+    echo "[kuru] DURUM YAZILMADI → ardisik_hata=$ardisik son_kirmizi_commit=${kirmizi:0:7}"
+    return 0
+  fi
+  [[ "$ardisik" =~ ^[0-9]+$ ]] || ardisik=0
+  mkdir -p "$(dirname "$DURUM")"
+  printf '{"ardisik_hata":%d,"son_kirmizi_commit":"%s","son_onkontrol":"%s","son_guncelleme":"%s"}\n' \
+    "$ardisik" "$kirmizi" "${onkontrol//\"/\'}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DURUM"
+}
+
+# JSON kaydı yaz. Alanlar: zaman, commit, onceki_commit, ruff, py_compile, sonuc,
+# sure_sn, ardisik_hata, not.  Kuru turda hiçbir şey yazılmaz — kayıt dosyası
+# gerçekten olan biteni anlatsın, denemeleri değil.
 kaydet() {
-  local sonuc="$1" ruff="$2" pyc="$3" commit="$4" onceki="$5" aciklama="$6"
+  local sonuc="$1" ruff="$2" pyc="$3" commit="$4" onceki="$5" aciklama="$6" ardisik="${7:-$DURUM_ARDISIK}"
+  [[ "$ardisik" =~ ^[0-9]+$ ]] || ardisik=0
+  if (( KURU )); then
+    echo "[kuru] KAYIT YAZILMADI → sonuc=$sonuc ruff=$ruff py_compile=$pyc ardisik_hata=$ardisik not=$aciklama"
+    return 0
+  fi
   mkdir -p "$(dirname "$KAYIT")"
-  printf '{"zaman":"%s","commit":"%s","onceki_commit":"%s","ruff":"%s","py_compile":"%s","sonuc":"%s","sure_sn":%d,"not":"%s"}\n' \
+  printf '{"zaman":"%s","commit":"%s","onceki_commit":"%s","ruff":"%s","py_compile":"%s","sonuc":"%s","sure_sn":%d,"ardisik_hata":%d,"not":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$onceki" "$ruff" "$pyc" "$sonuc" \
-    "$((SECONDS - BASLANGIC))" "${aciklama//\"/\'}" >> "$KAYIT"
+    "$((SECONDS - BASLANGIC))" "$ardisik" "${aciklama//\"/\'}" >> "$KAYIT"
 }
 
 temizle() {
@@ -66,17 +161,104 @@ temizle() {
   git -C "$KOK" worktree prune >/dev/null 2>&1 || true
 }
 
+# ── ÖN KONTROL ────────────────────────────────────────────────────────────────
+# 2026-08-14 kazasının panzehiri. `ProtectSystem=strict` + `ReadWritePaths=` olan bir
+# unit, listedeki yollardan biri yoksa mount namespace'ini kuramaz ve servis
+# `status=226/NAMESPACE` ile açılmaz. Bu hata ÇALIŞAN sürece çarpmaz — namespace
+# zaten kurulmuştur — sadece bir sonraki restart'ta patlar. Yani restart'ı tetikleyen
+# taraf (biz) bunu önceden kontrol etmezse, mayına kendi ayağıyla basar.
+#
+# systemctl show drop-in'leri de birleştirilmiş halde verir; ayrıca .d/ okumaya
+# gerek yok.  Kontrol edilen: ReadWritePaths, WorkingDirectory, ExecStart yorumlayıcısı.
+onkontrol() {
+  local eksik="" yol rwp exec_yol calisma
+
+  rwp="$(systemctl show "$SERVIS" -p ReadWritePaths --value 2>/dev/null || true)"
+  for yol in $rwp; do
+    # systemd yol öneki: '-' (yoksa görmezden gel), '+' (root'a göre), '!' / '!!'.
+    # '-' önekli yolun VAR OLMASI zorunlu değil — systemd de atlar, biz de atlarız.
+    if [[ "$yol" == -* ]]; then continue; fi
+    while [[ "$yol" == "+"* || "$yol" == "!"* ]]; do yol="${yol#?}"; done
+    [[ -e "$yol" ]] || eksik="${eksik:+$eksik, }ReadWritePaths:$yol"
+  done
+
+  calisma="$(systemctl show "$SERVIS" -p WorkingDirectory --value 2>/dev/null || true)"
+  calisma="${calisma#-}"
+  if [[ -n "$calisma" && "$calisma" != "~" ]]; then
+    [[ -d "$calisma" ]] || eksik="${eksik:+$eksik, }WorkingDirectory:$calisma"
+  fi
+
+  # ExecStart `{ path=... ; argv[]=... }` biçiminde gelir; bizi ilgilendiren
+  # yorumlayıcı, yani path=. Venv silinmiş/bozulmuşsa servis yine açılmaz.
+  exec_yol="$(systemctl show "$SERVIS" -p ExecStart --value 2>/dev/null \
+    | sed -n 's/.*[{;] *path=\([^ ;]*\).*/\1/p' | head -n1)"
+  if [[ -n "$exec_yol" ]]; then
+    [[ -x "$exec_yol" ]] || eksik="${eksik:+$eksik, }ExecStart:$exec_yol"
+  else
+    eksik="${eksik:+$eksik, }ExecStart:okunamadi"
+  fi
+
+  # Sınama kancası — bkz. başlıktaki TEST KANCASI notu.
+  if [[ -n "${AUTODEPLOY_TEST_EXTRA_PATH:-}" ]]; then
+    [[ -e "$AUTODEPLOY_TEST_EXTRA_PATH" ]] \
+      || eksik="${eksik:+$eksik, }TEST:$AUTODEPLOY_TEST_EXTRA_PATH"
+  fi
+
+  printf '%s' "$eksik"
+}
+
 cd "$KOK"
+durum_yukle
+
+# ── 0. Devre kesik mi? ────────────────────────────────────────────────────────
+# Timer disable edilmiş olsa bile elle çağrılabilir; sayaç doluysa uyar ama engelleme
+# (elle çalıştırmak bilinçli bir eylemdir). Kuru turda da sadece bilgi.
+if (( DURUM_ARDISIK >= HATA_SINIRI )); then
+  anlat "UYARI: ardisik_hata=$DURUM_ARDISIK (sinir $HATA_SINIRI) — devre kesilmis durumda."
+fi
 
 # ── 1. Yeni commit var mı? ────────────────────────────────────────────────────
 # Repo anonim okunabiliyor; kimlik/token gerekmiyor. Ağ yoksa sessizce çık:
 # her dakika koşan bir timer'ın geçici ağ hatası için gürültü üretmesi anlamsız.
-git fetch --quiet origin main || exit 0
+if ! git fetch --quiet origin main; then
+  anlat "git fetch basarisiz (ag?) — normal turda sessizce cikilir"
+  exit 0
+fi
 HEDEF="$(git rev-parse origin/main)"
 MEVCUT="$(git rev-parse HEAD)"
-[[ "$HEDEF" == "$MEVCUT" ]] && exit 0
+anlat "HEAD=$MEVCUT  origin/main=$HEDEF"
 
-# ── 2. Kontrol için ayrı worktree ─────────────────────────────────────────────
+if [[ "$HEDEF" == "$MEVCUT" ]]; then
+  # Kuru turda yeni commit olmaması testi engellemesin: ön kontrol ve kapı yine
+  # koşsun, sadece deploy edilecek bir şey olmadığını söylesin.
+  if (( ! KURU )); then exit 0; fi
+  anlat "yeni commit yok — kontroller yine de kosuluyor"
+fi
+
+# ── 2. ÖN KONTROL: sistem deploy'u kaldırabilir mi? ───────────────────────────
+EKSIK="$(onkontrol)"
+if [[ -n "$EKSIK" ]]; then
+  anlat "ON KONTROL KIRMIZI → deploy YOK. Eksik: $EKSIK"
+  if [[ "$EKSIK" != "$DURUM_ONKONTROL" ]]; then
+    kaydet "onkontrol_hatasi" "atlandi" "atlandi" "$HEDEF" "$MEVCUT" "sistem yolu eksik: $EKSIK"
+    durum_yaz "$DURUM_ARDISIK" "$DURUM_KIRMIZI" "$EKSIK"
+  fi
+  exit 1
+fi
+anlat "on kontrol YESIL (ReadWritePaths + WorkingDirectory + ExecStart yerinde)"
+# Ön kontrol düzeldiyse hatırayı temizle ki bir dahaki bozulma yeniden kayda geçsin.
+if [[ -n "$DURUM_ONKONTROL" ]]; then
+  durum_yaz "$DURUM_ARDISIK" "$DURUM_KIRMIZI" ""
+  DURUM_ONKONTROL=""
+fi
+
+# ── 3. Bu commit zaten kırmızı aldı mı? ───────────────────────────────────────
+if [[ "$HEDEF" == "$DURUM_KIRMIZI" && "$HEDEF" != "$MEVCUT" ]]; then
+  anlat "bu commit daha once kapidan gecemedi — tekrar denenmiyor"
+  exit 1
+fi
+
+# ── 4. Kontrol için ayrı worktree ─────────────────────────────────────────────
 # sparse-checkout cone worktree'ye de uygulanır (yalnız worker/pi/server/scripts/tools
 # iner) — bu kasıtlı, kontrol edilen küme canlıda duran kümeyle aynı olsun.
 temizle
@@ -85,7 +267,7 @@ if ! git worktree add --detach "$CALISMA" "$HEDEF" >/dev/null 2>&1; then
   exit 1
 fi
 
-# ── 3. Kapıdaki statik kontroller ─────────────────────────────────────────────
+# ── 5. Kapıdaki statik kontroller ─────────────────────────────────────────────
 RUFF_SONUC="temiz"; PYC_SONUC="temiz"; HATA=""
 
 if ! RUFF_CIKTI="$(cd "$CALISMA" && "$VENV/ruff" check worker pi 2>&1)"; then
@@ -98,37 +280,52 @@ if ! PYC_CIKTI="$(cd "$CALISMA" && "$VENV/python" -m py_compile worker/*.py 2>&1
   PYC_SONUC="kirmizi"
   HATA="${HATA:+$HATA | }py_compile: $(printf '%s' "$PYC_CIKTI" | tail -n 1)"
 fi
+anlat "kapi: ruff=$RUFF_SONUC py_compile=$PYC_SONUC"
 
 if [[ "$RUFF_SONUC" != "temiz" || "$PYC_SONUC" != "temiz" ]]; then
   # Kırmızı → hiçbir şeye dokunma. Eski sürüm çalışmaya devam eder; bir sonraki
-  # push düzeltirse tur kendiliğinden yeşile döner.
+  # push düzeltirse tur kendiliğinden yeşile döner. Aynı commit tekrar denenmez.
   temizle
   kaydet "kirmizi" "$RUFF_SONUC" "$PYC_SONUC" "$HEDEF" "$MEVCUT" "$HATA"
+  durum_yaz "$DURUM_ARDISIK" "$HEDEF" ""
   exit 1
 fi
 
 temizle
 
-# ── 4. Aktif oturum var mı? ───────────────────────────────────────────────────
+# ── 6. Aktif oturum var mı? ───────────────────────────────────────────────────
 # Tespit: worker journal'ında son OTURUM_PENCERE saniyede "job_id" geçen satır.
 # Boşta duran worker job logu ÜRETMEZ; iş süreci (livekit job) her satıra job_id
 # ekler. pgrep'ten daha güvenilir: job alt-süreci spawn_main ile açılıyor,
 # komut satırında job_id GEÇMİYOR.
 if journalctl -u "$SERVIS" --since "-${OTURUM_PENCERE}s" --no-pager 2>/dev/null \
      | grep -q '"job_id"'; then
+  anlat "aktif oturum var — normal turda deploy ERTELENIR"
   kaydet "ertelendi" "temiz" "temiz" "$HEDEF" "$MEVCUT" "aktif oturum: son ${OTURUM_PENCERE}s icinde job logu var"
   exit 0
 fi
 
-# ── 5. Deploy ─────────────────────────────────────────────────────────────────
+# ── 7. Deploy ─────────────────────────────────────────────────────────────────
 # .env / memory/ / worker/data/ / worker/logs/ ya gitignore'da ya takipsiz →
 # reset --hard onlara DOKUNMAZ. Bu bilinçli; bozma.
+if (( KURU )); then
+  if [[ "$HEDEF" == "$MEVCUT" ]]; then
+    anlat "SONUC: her sey yesil, deploy edilecek yeni commit yok."
+  else
+    anlat "SONUC: her sey yesil. Normal turda simdi yapilacakti:"
+    anlat "  git reset --hard $HEDEF"
+    anlat "  systemctl restart $SERVIS  (+ ${SAGLIK_SANIYE}s 'registered worker' beklemesi)"
+  fi
+  anlat "reset/restart YAPILMADI, kayit YAZILMADI."
+  exit 0
+fi
+
 ONCEKI="$MEVCUT"
 ISARET="$(date '+%Y-%m-%d %H:%M:%S')"
 git reset --hard --quiet "$HEDEF"
 systemctl restart "$SERVIS"
 
-# ── 6. Sağlık: worker LiveKit'e kaydolabildi mi? ──────────────────────────────
+# ── 8. Sağlık: worker LiveKit'e kaydolabildi mi? ──────────────────────────────
 # "registered worker" = agent gerçekten çalışıyor. `is-active` yetmez: import
 # hatasında systemd Restart=always ile döngüye girer ve arada "active" görünür.
 SAGLIKLI=0
@@ -142,24 +339,45 @@ for ((i = 0; i < SAGLIK_SANIYE; i++)); do
 done
 
 if (( SAGLIKLI )); then
-  kaydet "basarili" "temiz" "temiz" "$HEDEF" "$ONCEKI" "kayit ${i}s icinde geldi"
+  # Başarı ardışık hata sayacını sıfırlar: devre kesici "art arda" içindir,
+  # aylara yayılmış tekil hataları biriktirmemeli.
+  durum_yaz 0 "" ""
+  kaydet "basarili" "temiz" "temiz" "$HEDEF" "$ONCEKI" "kayit ${i}s icinde geldi" 0
   exit 0
 fi
 
-# ── 7. Geri alma ──────────────────────────────────────────────────────────────
+# ── 9. Geri alma ──────────────────────────────────────────────────────────────
+ARDISIK=$(( DURUM_ARDISIK + 1 ))
 GERI_ISARET="$(date '+%Y-%m-%d %H:%M:%S')"
 git reset --hard --quiet "$ONCEKI"
 systemctl restart "$SERVIS"
+SONUC="kritik"
+NOT="geri alma sonrasi da kayit yok - ELLE BAK"
+CIKIS=2
 for ((i = 0; i < SAGLIK_SANIYE; i++)); do
   if journalctl -u "$SERVIS" --since "$GERI_ISARET" --no-pager 2>/dev/null \
        | grep -q "registered worker"; then
-    kaydet "geri_alindi" "temiz" "temiz" "$HEDEF" "$ONCEKI" "yeni commit kaydolamadi, eski surume donuldu"
-    exit 1
+    SONUC="geri_alindi"
+    NOT="yeni commit kaydolamadi, eski surume donuldu"
+    CIKIS=1
+    break
   fi
   sleep 1
 done
 
-# Geri alma da kaldıramadı → sorun deploy'da değil, ortamda (broker, ağ, LiveKit).
-# Elle bakılması gerekiyor.
-kaydet "kritik" "temiz" "temiz" "$HEDEF" "$ONCEKI" "geri alma sonrasi da kayit yok - ELLE BAK"
-exit 2
+# Geri alma da kaldıramadıysa (kritik) sorun deploy'da değil, ortamda. Elle bakılmalı.
+durum_yaz "$ARDISIK" "$DURUM_KIRMIZI" ""
+kaydet "$SONUC" "temiz" "temiz" "$HEDEF" "$ONCEKI" "$NOT" "$ARDISIK"
+
+# ── 10. Devre kesici ──────────────────────────────────────────────────────────
+# 2026-08-14: script her 2 dakikada bir aynı ölü deploy'u yeniden denedi ve worker'ı
+# 130 kez restart etti. Tekrar, kırık bir ortamı onarmaz. Art arda HATA_SINIRI kadar
+# başarısız turda timer kapanır; insan bakıp `systemctl enable --now` ile açar.
+if (( ARDISIK >= HATA_SINIRI )); then
+  systemctl disable --now "$TIMER" >/dev/null 2>&1 || true
+  kaydet "devre_kesildi" "temiz" "temiz" "$HEDEF" "$ONCEKI" \
+    "art arda $ARDISIK basarisiz tur - $TIMER kapatildi; elle bak, duzelince: systemctl enable --now $TIMER" \
+    "$ARDISIK"
+fi
+
+exit "$CIKIS"
