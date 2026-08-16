@@ -88,6 +88,23 @@ def _h4(word: str) -> str:
     return {"a": "ı", "ı": "ı", "e": "i", "i": "i", "o": "u", "u": "u", "ö": "ü", "ü": "ü"}[v]
 
 
+def ordinal_to_words(n: int) -> str:
+    """Tam sayı → Türkçe sıra sayısı. 1 → 'birinci', 3 → 'üçüncü', 100 → 'yüzüncü'.
+
+    NEDEN: `1. sırada` şimdiye kadar "bir. sırada" diye okunuyordu (açık #4).
+    Ek yalnız SON kelimeye gelir: 21 → "yirmi birinci".
+    Kural: ünsüzle biten → (h4)+"nc"+(h4)  ·  ünlüyle biten → "nc"+(h4)
+    (ünlüden sonra baştaki uyum ünlüsü düşer: "iki" + "nci" → ikinci).
+    """
+    head, _, base = number_to_words(n).rpartition(" ")
+    # tek istisna: dört → dördüncü (t→d yumuşaması); kural üretimi "dörtüncü" derdi
+    if base == "dört":
+        base = "dörd"
+    i = _h4(base)
+    form = ("nc" + i) if base[-1] in _VOWELS else (i + "nc" + i)
+    return f"{head} {base}{form}" if head else base + form
+
+
 # Ham ek → ek tipi. Sayıdan sonra en sık gelenler.
 _SUFFIX_TYPES = {
     **dict.fromkeys(["da", "de", "ta", "te"], "LOC"),
@@ -133,6 +150,11 @@ _MONTHS = ["", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
 
 _CURRENCY = {"TL": "lira", "₺": "lira", "$": "dolar", "€": "euro", "£": "sterlin", "USD": "dolar", "EUR": "euro"}
 
+# Sayının ÖNÜNDE yazılan para simgeleri (₺1.250, $99, €5,50). Türkçede simge sözlü
+# formda sayının ARKASINA geçer ("bin iki yüz elli lira"), o yüzden normalizasyonun
+# en başında yer değiştirtiyoruz (açık #1: ₺ önde kalınca hiç çevrilmiyordu).
+_PREFIX_CURRENCY = "₺$€£"
+
 # Yalnız NET olanlar. "m" gibi belirsizler bilerek YOK (İngilizce kelimeyle çakışır).
 _UNITS = {
     "kg": "kilogram", "gr": "gram", "cm": "santimetre", "mm": "milimetre",
@@ -155,6 +177,23 @@ def _spoken(n: int, suffix: str | None) -> str:
     return attach_suffix(w, suffix) if suffix else w
 
 
+def _frac_words(frac: str) -> str:
+    """Ondalık kısmı sözlü forma çevir. TEK YER — yüzde ve ondalık yolu bunu paylaşır.
+
+    NEDEN: `2.658,75 TL` "virgül yedi beş" diye okunuyordu (açık #3); Türkçede iki
+    basamaklı kesir tam sayı gibi okunur → "virgül yetmiş beş".
+    • 2 basamak, başında 0 YOK → tam sayı gibi ("75" → "yetmiş beş", "90" → "doksan")
+    • diğer her durum → basamak basamak ("05" → "sıfır beş", "14159" → "bir dört ...")
+      Baştaki 0'ı tam sayı okumak bilgi kaybı olurdu ("2,05" → "iki virgül beş").
+    NOT (kullanıcı kararı bekliyor): para bağlamında "virgül yetmiş beş" yerine
+    "yetmiş beş kuruş" daha doğal olurdu; bu daha büyük bir davranış değişikliği
+    olduğu için şimdilik yapılmadı.
+    """
+    if len(frac) == 2 and frac[0] != "0":
+        return number_to_words(int(frac))
+    return " ".join(number_to_words(int(c)) for c in frac)
+
+
 def normalize_tr(text: str) -> str:
     """Türkçe metni TTS'e verilebilir sözlü forma çevir.
 
@@ -174,6 +213,12 @@ def normalize_tr(text: str) -> str:
         return chr(0xE000 + len(saved) - 1)
 
     text = _PROTECT_RE.sub(_stash, text)
+
+    # 1b) Öne yazılan para simgesini sayının ARKASINA al: "₺1.250'den" → "1.250 ₺'den".
+    #     Böylece aşağıdaki sayı kuralları ile 8. adımdaki simge/ek mantığı olduğu gibi
+    #     çalışır — simge işleme mantığı tek yerde kalır.
+    text = re.sub(rf"(?<!\w)([{re.escape(_PREFIX_CURRENCY)}])\s?(\d[\d.,]*\d|\d)",
+                  r"\2 \1", text)
 
     # 2) Tarih  12.03.2026 → "on iki Mart iki bin yirmi altı"   (binlik ayıraçtan ÖNCE!)
     def _date(m: re.Match) -> str:
@@ -196,18 +241,31 @@ def normalize_tr(text: str) -> str:
 
     text = re.sub(rf"\b(\d{{1,2}}):(\d{{2}})\b{_SUF}", _time, text)
 
+    # 3b) Noktalı sıra sayısı  "1. sırada" → "birinci sırada"
+    #     Cümle sonu noktasıyla karışmasın diye DAR kural: noktadan sonra boşluk +
+    #     KÜÇÜK harf gelmeli. "Geldim. Sonra" (büyük harf) ve "3.500" (rakam) etkilenmez.
+    #     Kesme ekli biçim ("3'üncü") zaten doğruydu, ona dokunulmuyor.
+    text = re.sub(r"\b(\d+)\.(?=\s+[a-zçğıöşü])",
+                  lambda m: ordinal_to_words(int(m.group(1))), text)
+
     # 4) Yüzde  %25 → "yüzde yirmi beş"  (Türkçede "yüzde" sayıdan ÖNCE)
+    #    Ondalıklı yüzde de BURADA yakalanır (%7,5): eskiden yalnız tam kısım alınıyor,
+    #    ",5" arta kalıp "yüzde yedi,beş" çıkıyordu (açık #2). Artık aynı ondalık
+    #    işleyicisi kullanılıyor.
     def _pct(m: re.Match) -> str:
         num = m.group(1).replace(".", "")
-        return "yüzde " + _spoken(int(num), m.group(2))
+        spoken = number_to_words(int(num))
+        if m.group(2):
+            spoken += " virgül " + _frac_words(m.group(2))
+        return "yüzde " + (attach_suffix(spoken, m.group(3)) if m.group(3) else spoken)
 
-    text = re.sub(rf"%\s?(\d{{1,3}}(?:\.\d{{3}})*|\d+){_SUF}", _pct, text)
+    text = re.sub(rf"%\s?(\d{{1,3}}(?:\.\d{{3}})*|\d+)(?:,(\d+))?{_SUF}", _pct, text)
 
-    # 5) Ondalık  2,5 → "iki virgül beş"  (kesirli kısım basamak basamak)
+    # 5) Ondalık  2,5 → "iki virgül beş" · 2,75 → "iki virgül yetmiş beş" (bkz. _frac_words)
     def _dec(m: re.Match) -> str:
         whole, frac = m.group(1).replace(".", ""), m.group(2)
-        frac_w = " ".join(number_to_words(int(c)) for c in frac)
-        return attach_suffix(f"{number_to_words(int(whole))} virgül {frac_w}", m.group(3) or "")
+        spoken = f"{number_to_words(int(whole))} virgül {_frac_words(frac)}"
+        return attach_suffix(spoken, m.group(3) or "")
 
     text = re.sub(rf"\b(\d{{1,3}}(?:\.\d{{3}})*|\d+),(\d+)\b{_SUF}", _dec, text)
 
@@ -216,7 +274,17 @@ def normalize_tr(text: str) -> str:
                   lambda m: _spoken(int(m.group(1).replace(".", "")), m.group(2)), text)
 
     # 7) Çıplak tam sayı  1994 → "bin dokuz yüz doksan dört"
-    text = re.sub(rf"\b(\d+)\b{_SUF}", lambda m: _spoken(int(m.group(1)), m.group(2)), text)
+    #    Baştaki sıfır KORUNUR: "0532" → "sıfır beş yüz otuz iki" (açık #5 — int()'e
+    #    verilince sıfır düşüyor, telefon numarası yanlış okunuyordu).
+    def _int(m: re.Match) -> str:
+        digits = m.group(1)
+        rest = digits.lstrip("0")
+        zeros = "sıfır " * (len(digits) - len(rest))
+        if not rest:  # "00" gibi: hepsi sıfır
+            return attach_suffix(zeros.strip(), m.group(2)) if m.group(2) else zeros.strip()
+        return zeros + _spoken(int(rest), m.group(2))
+
+    text = re.sub(rf"\b(\d+)\b{_SUF}", _int, text)
 
     # 8) Para birimi ve birimler (artık sayı yazıya döndü, simge tek başına kaldı).
     #    Kesme işaretli ek SİMGEYE de gelebilir: "4.750 TL'den" → "... liradan".
@@ -273,6 +341,15 @@ _CASES: list[tuple[str, str]] = [
     ("Merhaba [laughter] nasılsın", "Merhaba [laughter] nasılsın"),
     ("Bak [mood:excited] geldim", "Bak [mood:excited] geldim"),
     ("link'e tıkla, download et", "link'e tıkla, download et"),
+    # ── Supertonic testinde bulunan 5 açık (regresyon koruması) ──────────────────────
+    ("Fiyat ₺1.250", "Fiyat bin iki yüz elli lira"),           # #1 öne yazılan simge
+    ("%7,5 faiz", "yüzde yedi virgül beş faiz"),               # #2 ondalıklı yüzde
+    ("2.658,75 TL", "iki bin altı yüz elli sekiz virgül yetmiş beş lira"),  # #3 iki basamak
+    ("1. sırada", "birinci sırada"),                           # #4 noktalı sıra sayısı
+    ("0532 123 45 67", "sıfır beş yüz otuz iki yüz yirmi üç kırk beş altmış yedi"),  # #5
+    # #4'ün karışmaması gereken komşuları
+    ("Geldim. Sonra gittim", "Geldim. Sonra gittim"),
+    ("3'üncü kez", "üçüncü kez"),  # kesme ekli biçim zaten doğruydu — bozulmadı
     # kısaltma
     ("Dr. Ahmet geldi", "Doktor Ahmet geldi"),
     ("kalem, defter vs. aldım", "kalem, defter vesaire aldım"),
