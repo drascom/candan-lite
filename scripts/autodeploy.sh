@@ -53,6 +53,24 @@
 # TEST KANCASI: AUTODEPLOY_TEST_EXTRA_PATH=/olmayan/yol ile ön kontrol listesine
 #   sahte bir yol eklenir. Ön kontrolün gerçekten durdurduğunu, gerçek dizinleri
 #   SİLMEDEN göstermek için var. Sadece sınama amaçlı; timer bunu asla set etmez.
+#   AUTODEPLOY_UNIT_HEDEF=/tmp/sahte-etc ile unit senkronu gerçek /etc/systemd/system
+#   yerine sahte bir dizine bakar — senkronu canlıyı kırmadan sınamak için.
+#
+# ── UNIT SENKRONU (2026-08-16) ────────────────────────────────────────────────
+# Bu script kodu deploy ediyordu ama systemd unit dosyalarını TAŞIMIYORDU. Repo'daki
+# worker/systemd/ ile sunucudaki /etc/systemd/system/ sessizce ayrışıyordu: units
+# elle scp'leniyor, kimse unutunca "sunucuda hangi unit koşuyor" sorusu yine
+# cevapsız kalıyordu — git'i tek doğru kaynak yapmanın yarım kalmış tarafı.
+# Artık `git reset --hard`tan SONRA worker/systemd/ altındaki *.service / *.timer ve
+# *.service.d/*.conf hedefle içerik olarak karşılaştırılır, farklı olan kopyalanır,
+# en az bir dosya değiştiyse `daemon-reload` yapılır — worker restart'ından ÖNCE,
+# ki yeni tanımla açılsın. Geri alma yolunda da aynısı koşar: kod eski sürüme
+# dönerken unit yeni kalırsa ikisi uyumsuz olur.
+#
+# DİKKAT — kendi unit'ini güncelleme tuzağı: candan-autodeploy.service/.timer
+# değişirse daemon-reload yapılır ama timer RESTART EDİLMEZ; o an koşan tur (yani
+# bu süreç) kendini öldürür. Yeni tanım bir sonraki turda zaten geçerli olur.
+# candan-worker.service değişirse restart adımı zaten var, ek bir şey gerekmez.
 #
 # Kayıt: worker/logs/deploy.jsonl (satır başına bir JSON). logs/ gitignore'da.
 # Durum: worker/logs/.autodeploy-state.json (ardışık hata sayacı + son kırmızı commit).
@@ -74,6 +92,11 @@ HATA_SINIRI="${AUTODEPLOY_HATA_SINIRI:-3}"
 # Son bu kadar saniye içinde job logu varsa "oturum açık" sayılır. Yanlış pozitifin
 # bedeli sadece 60 sn gecikme; yanlış negatifin bedeli kesilmiş konuşma. Cömert tut.
 OTURUM_PENCERE="${AUTODEPLOY_OTURUM_PENCERE:-180}"
+# Unit senkronu: kaynak repo'daki dizin, hedef systemd'nin okuduğu dizin.
+UNIT_KAYNAK="$KOK/worker/systemd"
+UNIT_HEDEF="${AUTODEPLOY_UNIT_HEDEF:-/etc/systemd/system}"
+# Kayda geçecek liste; unit_senkron dolduruyor. kaydet() her satıra bunu yazar.
+UNIT_DEGISEN="yok"
 
 KURU=0
 for arg in "$@"; do
@@ -139,19 +162,92 @@ durum_yaz() {
 }
 
 # JSON kaydı yaz. Alanlar: zaman, commit, onceki_commit, ruff, py_compile, sonuc,
-# sure_sn, ardisik_hata, not.  Kuru turda hiçbir şey yazılmaz — kayıt dosyası
-# gerçekten olan biteni anlatsın, denemeleri değil.
+# sure_sn, ardisik_hata, unit_senkron, not.  Kuru turda hiçbir şey yazılmaz — kayıt
+# dosyası gerçekten olan biteni anlatsın, denemeleri değil.
+# unit_senkron global $UNIT_DEGISEN'den gelir ("yok" ya da virgüllü dosya listesi):
+# çağıran taraf her yerde aynı şeyi tekrar etmesin diye parametre değil.
 kaydet() {
   local sonuc="$1" ruff="$2" pyc="$3" commit="$4" onceki="$5" aciklama="$6" ardisik="${7:-$DURUM_ARDISIK}"
   [[ "$ardisik" =~ ^[0-9]+$ ]] || ardisik=0
   if (( KURU )); then
-    echo "[kuru] KAYIT YAZILMADI → sonuc=$sonuc ruff=$ruff py_compile=$pyc ardisik_hata=$ardisik not=$aciklama"
+    echo "[kuru] KAYIT YAZILMADI → sonuc=$sonuc ruff=$ruff py_compile=$pyc ardisik_hata=$ardisik unit_senkron=$UNIT_DEGISEN not=$aciklama"
     return 0
   fi
   mkdir -p "$(dirname "$KAYIT")"
-  printf '{"zaman":"%s","commit":"%s","onceki_commit":"%s","ruff":"%s","py_compile":"%s","sonuc":"%s","sure_sn":%d,"ardisik_hata":%d,"not":"%s"}\n' \
+  printf '{"zaman":"%s","commit":"%s","onceki_commit":"%s","ruff":"%s","py_compile":"%s","sonuc":"%s","sure_sn":%d,"ardisik_hata":%d,"unit_senkron":"%s","not":"%s"}\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$commit" "$onceki" "$ruff" "$pyc" "$sonuc" \
-    "$((SECONDS - BASLANGIC))" "$ardisik" "${aciklama//\"/\'}" >> "$KAYIT"
+    "$((SECONDS - BASLANGIC))" "$ardisik" "${UNIT_DEGISEN//\"/\'}" "${aciklama//\"/\'}" >> "$KAYIT"
+}
+
+# ── UNIT SENKRONU ─────────────────────────────────────────────────────────────
+# worker/systemd/ → $UNIT_HEDEF. Sadece İÇERİĞİ farklı olan dosya kopyalanır:
+# her turda körlemesine kopyalamak mtime'ı değiştirir, gereksiz daemon-reload
+# doğurur ve "ne zaman gerçekten değişti" bilgisini yok eder.
+# Repo'da olmayan unit'lere DOKUNULMAZ (candan-brain, candan-dashboard gibi
+# sunucuda elle duran şeyler var); bu tek yönlü bir kopyalama, ayna değil.
+# Kopyalananların listesini stdout'a virgüllü yazar; hiçbiri değişmediyse boş.
+unit_senkron() {
+  local kopyalanan="" src ad hedef dizin unit
+  [[ -d "$UNIT_KAYNAK" ]] || { printf ''; return 0; }
+
+  local eski_nullglob=0
+  if shopt -q nullglob; then eski_nullglob=1; fi
+  shopt -s nullglob
+
+  for src in "$UNIT_KAYNAK"/*.service "$UNIT_KAYNAK"/*.timer; do
+    ad="$(basename "$src")"
+    hedef="$UNIT_HEDEF/$ad"
+    if cmp -s "$src" "$hedef"; then continue; fi
+    kopyalanan="${kopyalanan:+$kopyalanan,}$ad"
+    if (( KURU )); then
+      anlat "  unit FARKLI (kopyalanmadi): $ad" >&2
+    else
+      install -m 0644 "$src" "$hedef"
+    fi
+  done
+
+  # Drop-in'ler: worker/systemd/<unit>.service.d/*.conf → $UNIT_HEDEF/<unit>.service.d/
+  for dizin in "$UNIT_KAYNAK"/*.service.d; do
+    unit="$(basename "$dizin")"
+    for src in "$dizin"/*.conf; do
+      ad="$unit/$(basename "$src")"
+      hedef="$UNIT_HEDEF/$ad"
+      if cmp -s "$src" "$hedef"; then continue; fi
+      kopyalanan="${kopyalanan:+$kopyalanan,}$ad"
+      if (( KURU )); then
+        anlat "  unit FARKLI (kopyalanmadi): $ad" >&2
+      else
+        mkdir -p "$UNIT_HEDEF/$unit"
+        install -m 0644 "$src" "$hedef"
+      fi
+    done
+  done
+
+  if (( ! eski_nullglob )); then shopt -u nullglob; fi
+  printf '%s' "$kopyalanan"
+}
+
+# Senkronu koştur, sonucu $UNIT_DEGISEN'e yaz, gerekiyorsa daemon-reload et.
+# Kendi timer'ını RESTART ETMEZ — bkz. başlıktaki "kendi unit'ini güncelleme tuzağı".
+unit_senkron_uygula() {
+  local liste
+  liste="$(unit_senkron)"
+  if [[ -z "$liste" ]]; then
+    UNIT_DEGISEN="yok"
+    anlat "unit senkronu: fark yok"
+    return 0
+  fi
+  UNIT_DEGISEN="$liste"
+  if (( KURU )); then
+    anlat "unit senkronu: FARKLI dosyalar var → $liste (normal turda kopyalanip daemon-reload yapilirdi)"
+    return 0
+  fi
+  systemctl daemon-reload
+  case "$liste" in
+    *candan-autodeploy*)
+      # Kayda düş ama timer'a dokunma: restart bu süreci öldürür.
+      UNIT_DEGISEN="$liste (kendi timer'i degisti - restart YOK, sonraki tur gecerli)" ;;
+  esac
 }
 
 temizle() {
@@ -316,13 +412,19 @@ if (( KURU )); then
     anlat "  git reset --hard $HEDEF"
     anlat "  systemctl restart $SERVIS  (+ ${SAGLIK_SANIYE}s 'registered worker' beklemesi)"
   fi
-  anlat "reset/restart YAPILMADI, kayit YAZILMADI."
+  # Kuru turda henüz reset yapılmadığı için karşılaştırma ÇALIŞMA AĞACINDAKİ
+  # unit'lerle olur; yine de "repo ile /etc ayrışmış mı" sorusunu cevaplar.
+  unit_senkron_uygula
+  anlat "reset/restart/unit kopyalama YAPILMADI, kayit YAZILMADI."
   exit 0
 fi
 
 ONCEKI="$MEVCUT"
 ISARET="$(date '+%Y-%m-%d %H:%M:%S')"
 git reset --hard --quiet "$HEDEF"
+# Unit'ler reset'ten SONRA, restart'tan ÖNCE: yeni commit'in unit dosyaları diske
+# inmiş olur ve worker yeni tanımla açılır.
+unit_senkron_uygula
 systemctl restart "$SERVIS"
 
 # ── 8. Sağlık: worker LiveKit'e kaydolabildi mi? ──────────────────────────────
@@ -350,6 +452,13 @@ fi
 ARDISIK=$(( DURUM_ARDISIK + 1 ))
 GERI_ISARET="$(date '+%Y-%m-%d %H:%M:%S')"
 git reset --hard --quiet "$ONCEKI"
+# Geri alınan commit'in unit'leri de geri gelsin: kod eski, unit yeni kalırsa
+# ikisi uyumsuz olur ve geri alma tam olarak eski çalışan hâle dönmez.
+ILERI_UNIT="$UNIT_DEGISEN"
+unit_senkron_uygula
+# Kayıt hem ileri hem geri turda ne kopyalandığını göstersin; geri alma turunda
+# "yok" yazıp ileri turda kopyalananları gizlemek yanıltıcı olur.
+UNIT_DEGISEN="ileri: $ILERI_UNIT / geri: $UNIT_DEGISEN"
 systemctl restart "$SERVIS"
 SONUC="kritik"
 NOT="geri alma sonrasi da kayit yok - ELLE BAK"

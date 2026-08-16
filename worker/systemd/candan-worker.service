@@ -1,4 +1,6 @@
 [Unit]
+# 2026-08-16: bu dosya artik autodeploy tarafindan /etc/systemd/system'e senkronlaniyor;
+# unit'i elle scp'lemek gerekmiyor, repo tek dogru kaynak.
 Description=candan-lite LiveKit voice worker
 After=network-online.target candan-brain.service pi-service.service pi-dev.service
 Wants=network-online.target pi-dev.service

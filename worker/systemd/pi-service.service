@@ -5,16 +5,46 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=candan
+Group=candan-agents
 WorkingDirectory=/opt/candan-lite/worker
 # agent.py ve pi_broker.py worker/.env'i kendileri yükler; EnvironmentFile burada
 # kullanılmaz çünkü PI_COLD_NOTICE_TEXT gibi boşluklu Türkçe değerler systemd ayrıştırmasını bozar.
 RuntimeDirectory=candan
 RuntimeDirectoryMode=0750
-ExecStart=/opt/candan-lite/worker/.venv/bin/python pi_broker.py --socket /run/candan/pi-broker.sock
+StateDirectory=candan
+StateDirectoryMode=0750
+Environment=HOME=/var/lib/candan
+Environment=PI_BROKER_ENV_FILE=/etc/candan/pi-normal.env
+Environment=PI_NPM_DIR=/opt/candan-pi/npm/node_modules
+Environment=PI_BROKER_SOCKET=/run/candan/pi-broker.sock
+ExecStart=/opt/candan-lite/worker/.venv/bin/python pi_broker.py --socket /run/candan/pi-broker.sock --allow-mode normal
 ExecReload=/opt/candan-lite/worker/.venv/bin/python pi_broker.py --socket /run/candan/pi-broker.sock --reload
 Restart=always
 RestartSec=3
 StartLimitBurst=10
+UMask=0007
+
+# Pi'nin kendi sandbox'ı yoktur. Normal mod OS seviyesinde yalnız operasyonel
+# Candan verisine yazabilir; repo kodu ve sistem salt okunurdur.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Normal konuşma broker'ı dev kod alanını, dev broker socket'ini veya dev'in
+# OpenAI oturum HOME'unu göremez. Başındaki '-' ilk kurulumda yol yoksa hatayı önler.
+InaccessiblePaths=-/run/candan-dev -/opt/candan-lite-selfdev -/var/lib/candan-dev
+ReadWritePaths=/opt/candan-lite/memory
+ReadWritePaths=/opt/candan-lite/sessions
+ReadWritePaths=/opt/candan-lite/worker/data
+ReadWritePaths=/opt/candan-lite/worker/logs
+ReadWritePaths=/opt/candan-lite/handoff
 
 [Install]
 WantedBy=multi-user.target
