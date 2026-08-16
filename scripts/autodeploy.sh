@@ -117,7 +117,7 @@ durum_al() {
 durum_al_sayi() {
   local anahtar="$1"
   [[ -f "$DURUM" ]] || return 0
-  sed -n "s/.*\"$anahtar\"[[:space:]]*:[[:space:]]*\([0-9]\+\).*/\1/p" "$DURUM" | head -n1
+  sed -n "s/.*\"$anahtar\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$DURUM" | head -n1
 }
 
 durum_yukle() {
