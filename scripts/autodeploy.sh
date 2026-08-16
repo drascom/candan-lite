@@ -76,6 +76,7 @@
 # Durum: worker/logs/.autodeploy-state.json (ardışık hata sayacı + son kırmızı commit).
 #
 # Uçtan uca ilk doğrulama: 2026-08-14, bu yorum satırının push'u ile yapıldı.
+# Unit senkronunun uçtan uca doğrulaması: 2026-08-16, bu satırın push'u ile.
 set -euo pipefail
 
 KOK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
