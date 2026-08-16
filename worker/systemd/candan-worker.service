@@ -1,0 +1,92 @@
+[Unit]
+Description=candan-lite LiveKit voice worker
+After=network-online.target candan-brain.service pi-service.service pi-dev.service
+Wants=network-online.target pi-dev.service
+Requires=pi-service.service
+
+[Service]
+Type=simple
+User=candan
+Group=candan-agents
+WorkingDirectory=/opt/candan-lite/worker
+StateDirectory=candan
+StateDirectoryMode=0750
+Environment=HOME=/var/lib/candan
+Environment=TORCH_HOME=/var/lib/candan/.cache/torch
+Environment=HF_HOME=/var/lib/candan/.cache/huggingface
+Environment=PI_NPM_DIR=/opt/candan-pi/npm/node_modules
+Environment=PI_BROKER_SOCKET=/run/candan/pi-broker.sock
+Environment=PI_DEV_BROKER_SOCKET=/run/candan-dev/pi-broker.sock
+Environment=WORKER_VERBOSE_LOGS=false
+Environment=WORKER_LOG_LEVEL=INFO
+# NEDEN `dev` (üretimde bile) — 2026-08-16'da livekit-agents 1.6.5 kaynağından
+# doğrulandı, `dev`/`start` farkı ölçüldü:
+#   • `dev` ARTIK alt süreç/hot-reload KURMUYOR. cli/_legacy.py:1770 "in-process
+#     auto-reload has been removed from the Python CLI" uyarısını basar ve
+#     `start` ile AYNI `_run_worker`'a gider. Tek süreç. Yani SIGTERM sorununun
+#     sebebi `dev` DEĞİLDİ.
+#   • `start`'ın tek gerçek farkı kapanışta `server.drain()` çağırması ve
+#     drain_timeout VARSAYILANININ 3600 sn (worker.py:64) olması. Aktif oturumda
+#     `start`, systemd'yi 1 saat bekletmeye çalışır → kapanma sorunu BÜYÜR.
+#     Geçilecekse `agent.py start --drain-timeout 15` gibi bir değerle geçilmeli.
+#   • `start` ayrıca num_idle_processes'i 0'dan 3'e çıkarır (sıcak süreç başına
+#     birkaç yüz MB–1 GB; bu kutuda 19 GB RAM var). Ayrı bir karar, ayrı ölçüm.
+ExecStart=/opt/candan-lite/worker/.venv/bin/python agent.py dev
+Restart=always
+RestartSec=5
+StartLimitBurst=10
+UMask=0007
+
+# ── Kapanış (2026-08-16'da ölçülerek eklendi) ────────────────────────────────
+# SORUN: her `systemctl restart` 90 sn sürüyordu; log:
+#   "State 'stop-sigterm' timed out. Killing." → SIGKILL → status=9/KILL.
+# Temizlik kodu (agent.py'deki oturum kapanışı, hafıza finalize, transkript
+# yazımı) HİÇ çalışmıyordu.
+#
+# KÖK SEBEP (ölçüldü): `KillMode` VARSAYILANI `control-group` — systemd SIGTERM'i
+# cgroup'taki HER sürece aynı anda yollar: ana süreç + multiprocessing
+# forkserver + resource_tracker + inference alt süreci. Alt süreçler ölünce ana
+# süreç "process exited with non-zero exit code 255 {inference: true}" işlemeye
+# başlıyor; livekit'in SIGTERM işleyicisi (cli/cli.py:_handle_exit) sinyal
+# içinden `_ExitCli` FIRLATIYOR — bu istisna o an ana thread nerede duruyorsa
+# orada doğar. Alt süreç ölümünün tetiklediği asyncio task'ının içine düşerse
+# istisna o task'a yutulur, `run_until_complete` hiç dönmez → süreç asılı kalır.
+# KANIT (aynı sunucu, aynı sürüm):
+#   • asılan kapanışta (22:03:59) "shutting down worker" satırı HİÇ YOK,
+#     yalnız alt sürecin 255 hatası var → sinyal yutuldu.
+#   • temiz kapanışta (18:11:49) "shutting down worker" satırı alt süreç
+#     ölümünden ÖNCE düştü → yarış diğer yönde sonuçlandı, 1 sn'de kapandı.
+#   • YALNIZ ana PID'e `kill -TERM` → "shutting down worker" + temiz çıkış, <1 sn.
+#     Yani worker SIGTERM'i yok saymıyor; toplu SIGTERM onu kilitliyor.
+#
+# ÇÖZÜM: `mixed` → SIGTERM yalnız ANA sürece gider (yukarıdaki yarış oluşmaz),
+# alt süreçleri ana süreç kendi düzenli kapanışında indirir; artakalan olursa
+# TimeoutStopSec sonunda cgroup'a SIGKILL gider.
+KillMode=mixed
+# 90 sn (systemd varsayılanı) beklemenin anlamı yok: temiz kapanış ~1 sn sürüyor.
+# `dev` modunda drain YAPILMIYOR, dolayısıyla uzun kuyruk beklemesi de yok.
+# 30 sn hem cömert bir tavan hem de takılırsa deploy'u 90 sn tutmayan bir sınır.
+TimeoutStopSec=30
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# DİKKAT: ProtectSystem=strict ile bu yolların dosya sisteminde VAR OLMASI
+# zorunlu; biri silinirse ilk restart 226/NAMESPACE ile patlar (2026-08-14 kazası,
+# bkz. scripts/autodeploy.sh başlığı — ön kontrol tam bunu bekçiliyor).
+ReadWritePaths=/opt/candan-lite/memory
+ReadWritePaths=/opt/candan-lite/sessions
+ReadWritePaths=/opt/candan-lite/worker/data
+ReadWritePaths=/opt/candan-lite/worker/logs
+ReadWritePaths=/opt/candan-lite/handoff
+ReadWritePaths=/opt/candan-lite/voice
+
+[Install]
+WantedBy=multi-user.target
