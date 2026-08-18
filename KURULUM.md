@@ -135,7 +135,16 @@ Tümü sunucuda koşar (doğrulanmadı):
 python3 tools/dashboard.py        # http://<host>:8765
 ```
 
-Salt-okunur, bağımlılık yok (yalnız stdlib). Pano **sunucuda** koşuyor (baktığı veri
-orada): varsayılan bind `0.0.0.0`, yani `http://192.168.0.25:8765`. Mac'te yerel
-çalıştırmak için `DASHBOARD_HOST=127.0.0.1 python3 tools/dashboard.py`; port meşguldeyse
+Salt-okunur, bağımlılık yok (yalnız stdlib). **Sürekli çalışan bir servis DEĞİL** —
+systemd birimi yok, elle başlatılır ve kapatılınca durur (2026-08-17'de doğrulandı:
+sunucuda 8765 dinlenmiyor).
+
+Baktığı veri (`sessions/`, `memory/`, `worker/data/speakers*.db`) sunucuda olduğu için
+orada çalıştırmak mantıklı: `ssh root@192.168.0.25` → `cd /opt/candan-lite` →
+`python3 tools/dashboard.py` → `http://192.168.0.25:8765`.
+
+Varsayılan bind **`0.0.0.0`** ve **kimlik doğrulama YOK** — bu bilinçli bir karar
+(`tools/dashboard.py:27`: "ev LAN'ı ... kullanıcı böyle İSTEDİ"), kaza değil. Yani pano
+açıkken ev ağındaki herkes oturum transkriptlerini ve hafızayı okuyabilir. İşin bitince
+kapat. Yalnız yerele bağlamak için `DASHBOARD_HOST=127.0.0.1`; port meşguldeyse
 `DASHBOARD_PORT=8766`.
