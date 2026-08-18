@@ -136,7 +136,7 @@ python3 tools/dashboard.py        # http://<host>:8765
 ```
 
 Salt-okunur, bağımlılık yok (yalnız stdlib). **Sürekli çalışan bir servis DEĞİL** —
-systemd birimi yok, elle başlatılır ve kapatılınca durur (2026-08-17'de doğrulandı:
+systemd birimi yok, elle başlatılır ve kapatılınca durur (2026-08-18'de doğrulandı:
 sunucuda 8765 dinlenmiyor).
 
 Baktığı veri (`sessions/`, `memory/`, `worker/data/speakers*.db`) sunucuda olduğu için
