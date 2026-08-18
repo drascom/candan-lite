@@ -1,0 +1,11 @@
+# Mac/İSTEMCİ bağımlılıkları — yalnız cli_client.py (./go.sh) içindir.
+# Sunucudaki worker için requirements.txt kullanılır (livekit-agents, turn-detector,
+# wyoming, scipy, torch/torchaudio...). İKİSİNİ KARIŞTIRMA: bu dosya bilerek yalın,
+# Mac'e boşuna ~2 GB torch indirmemek için ağır paketleri İÇERMEZ.
+livekit~=1.0       # rtc SDK — cli_client.py odaya KATILIR (agents değil, ham istemci)
+livekit-api~=1.0   # token üretimi + agent dispatch (web/api/token yerine)
+python-dotenv      # cli_client.py kendi load_dotenv() çağrısıyla worker/.env'i okur
+sounddevice        # mikrofon/hoparlör (PortAudio) — geç yüklenir, --list-devices de bunu kullanır
+# audioop 3.13'te stdlib'den KALDIRILDI; cli_client.py --dump-audio açıkken import eder.
+# Bu paket olmadan yalnız --dump-audio çöker, normal oturum etkilenmez.
+audioop-lts; python_version >= "3.13"
