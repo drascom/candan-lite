@@ -1,5 +1,7 @@
 # candan-lite
 
+> Sıfırdan kurulum (Mac istemcisi, git'te olmayan dosyalar, sunucu/deploy): **[KURULUM.md](KURULUM.md)**
+
 Candan asistanının **hafif** yeniden yapımı. Ağır Hermes+plugin yığını donduruldu;
 beyin artık **pi.dev agent** (OpenAI-uyumlu `/chat`), ses boru hattı **livekit-agents**
 framework'ü üstünde ince bir worker.
